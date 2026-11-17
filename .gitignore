@@ -1,0 +1,78 @@
+# VanaCore's .gitignore. Complete on its own: VanaCore's repository may be just this folder.
+
+# ---- Build output and Visual Studio
+/build/
+.vs/
+*.user
+*.suo
+*.aps
+*.VC.db
+*.VC.opendb
+ipch/
+
+# ---- The launcher repository's .gitignore ignores every x86/ folder; AsmJit's x86 back end is source
+!/third_party/asmjit/asmjit/x86/
+
+# ---- NVIDIA's DLSS SDK: its licence allows it only inside an application, never in a source repository.
+# third_party/dlss/fetch-dlss.ps1 downloads it from NVIDIA's own repository (the build runs it when it's missing).
+/third_party/dlss/*
+!/third_party/dlss/README.md
+!/third_party/dlss/fetch-dlss.ps1
+# NVIDIA's DLLs, wherever a copy lands (DLSS 5's nvngx_dlssnr.dll included: a player supplies it)
+nvngx_*.dll
+
+# ---- AMD's FSR SDK: its headers and licence are in the repository (MIT); its signed DLLs (28 MB) aren't.
+# third_party/fsr/fetch-fsr.ps1 downloads them from AMD's own repository (the build runs it when they're missing).
+/third_party/fsr/bin/
+amd_fidelityfx_*.dll
+
+# ---- Plugins a distribution of VanaCore adds (plugins/vanacore/): their makers', not VanaCore's source
+/plugins/vanacore/*
+!/plugins/vanacore/README.md
+
+# ---- A player's settings, logs and crash dumps (a VanaCore run from this folder)
+/vanacore.ini
+/vanacore.*.ini
+!/vanacore.example.ini
+/logs/
+/config/
+*.log
+*.dmp
+
+# ---- AI assistant files, and research and survey tools that building VanaCore doesn't use
+CLAUDE.md
+AGENTS.md
+.claude/
+.cursor/
+/tools/addon_install_paths.py
+/tools/apidump/
+/tools/ashita_coverage.py
+/tools/ashita_deps.py
+/tools/ashita_probe.py
+/tools/ashita_survey.lua
+/tools/ashita_survey_report.py
+/tools/luatest/
+/tools/windower_coverage.py
+/tools/windower_dump.lua
+/research/emissive-hdr.md
+/research/multi-client-settings.md
+/research/roadmap.md
+/research/shelved/
+/research/windower-coverage.md
+/fonts/game/
+/pivot/
+/zipup.bat
+/vanacore.zip
+*.zip
+
+# ---- Python
+__pycache__/
+*.pyc
+
+# ---- Editors and the operating system
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store
