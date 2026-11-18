@@ -20,11 +20,10 @@ AI tools (Claude, Copilot, ChatGPT, Cursor and the like) are fine to use. You ar
    in the pull request. "The AI says it works" is not testing.
 3. **Write the pull request yourself, or check it line by line.** An AI-written description often claims things the
    code doesn't do, or lists files and checks that never happened. Everything in yours must be true.
-4. **Say that you used AI**, and for what, in the pull request (the template asks).
-5. **Watch for what AI tends to add:** code nobody calls, duplicates of functions VanaCore already has, made-up APIs,
+4. **Watch for what AI tends to add:** code nobody calls, duplicates of functions VanaCore already has, made-up APIs,
    needless comments, wide rewrites for a small fix, and changed tests that should have stayed the same. Remove it
    before sending.
-6. **Don't commit the AI's own files**, such as `CLAUDE.md`, `AGENTS.md`, `.claude/`, `.cursor/`, chat logs or
+5. **Don't commit the AI's own files**, such as `CLAUDE.md`, `AGENTS.md`, `.claude/`, `.cursor/`, chat logs or
    scratch scripts.
 
 ## Pull requests
@@ -43,7 +42,6 @@ The [template](.github/pull_request_template.md) fills in when you open a pull r
 - **How:** the approach, and the files that matter, for a reviewer to start from.
 - **How it was tested:** what you ran and what you saw, with the renderer (Direct3D 12 or 11), the GPU, and Windows,
   Wine or Proton. Screenshots or a clip for anything you can see in game.
-- **AI use:** none, or which tools and for what.
 
 ### Commits
 
