@@ -1,0 +1,287 @@
+name: VanaCore Release
+
+# Builds VanaCore as build-release.bat does (x86 Release, packaged as a player's VanaCore folder), signs it, pushes
+# it to the vanacore build on R2, then zips the whole folder and attaches it to a GitHub release: everything a player
+# needs, unzipped as the game's VanaCore folder.
+#
+#   version  reads src/shared/vanacore/version.hpp: the release is <version>.<run number>, tagged v<that>
+#   build    build-release.bat, signing, and the package (and its debug symbols) as a workflow artifact
+#   deploy   pushes the package to R2 the way D:\catseyexi_builds\release-vanacore.bat does
+#            (.github/scripts/push_build.py): "dry run" lists what would go up, "push" uploads it
+#   release  after the push (or with deploy "none"), zips the package and its symbols and makes the GitHub release,
+#            with what reached the branch since the last release. A failed push stops it: a release is never made
+#            of a build R2 didn't take
+#
+# A push never leaves an unsigned build: without the signing secrets it stops.
+#
+# Signing is release-vanacore.bat's: every .exe and .dll in the package that has no signature, with the Vekien Ltd
+# certificate in Azure Key Vault (AzureSignTool), then every one must have a valid signature.
+#
+# Secrets (set in this repository's Settings > Secrets and variables > Actions):
+#   signing  AZURE_KEY_VAULT_URL, AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET, AZURE_CERT_NAME
+#            (sign.bat's KVU, KVI, KVT, KVS, KVC)
+#   R2       R2_S3_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, CLOUDFLARE_ZONE_ID,
+#            CLOUDFLARE_API_TOKEN
+#
+# plugins\vanacore's cexidats/cexislots (CatsEyeXI's) are released from their own repositories: the push neither
+# uploads nor deletes them (push_build.py's DEPLOY_IGNORE), so R2 keeps whatever those put there. They aren't in the
+# GitHub release's zip either.
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Make a GitHub release (unticked, build only, as a workflow artifact)
+        type: boolean
+        default: true
+      prerelease:
+        description: Mark it a pre-release (a pre-release is never the "latest" the README's Download button opens)
+        type: boolean
+        default: false
+      deploy:
+        description: Push to the vanacore build on R2 (dry run lists what would go up)
+        type: choice
+        options: [none, dry run, push]
+        default: push
+      deletes:
+        description: With push, also remove files from R2 the package no longer has
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  # The version, ahead of the build, so the jobs are named with it in the run's job list and the run's summary
+  # says it. (A run's own title can't: it's set before anything is read from the repository.)
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout version.hpp
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: src/shared/vanacore/version.hpp
+          sparse-checkout-cone-mode: false
+
+      - name: Read the version
+        id: version
+        shell: pwsh
+        run: |
+          $source = Get-Content src/shared/vanacore/version.hpp -Raw
+          $base = [regex]::Match($source, 'kVersion\[\] = L"([^"]+)"').Groups[1].Value
+          if (-not $base) { throw 'No kVersion in src/shared/vanacore/version.hpp' }
+          $version = "$base.${{ github.run_number }}"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "## VanaCore $version" >> $env:GITHUB_STEP_SUMMARY
+
+  build:
+    name: Build ${{ needs.version.outputs.version }}
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ needs.version.outputs.version }}
+
+    steps:
+      # Line ends as on the machine that releases (CRLF): the push compares file hashes with what's on R2,
+      # and an LF checkout would make every text file in the build look changed.
+      - name: Line ends
+        run: git config --global core.autocrlf true
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Build and package
+        shell: cmd
+        run: build-release.bat
+
+      - name: Sign
+        shell: pwsh
+        env:
+          KVU: ${{ secrets.AZURE_KEY_VAULT_URL }}
+          KVI: ${{ secrets.AZURE_CLIENT_ID }}
+          KVT: ${{ secrets.AZURE_TENANT_ID }}
+          KVS: ${{ secrets.AZURE_CLIENT_SECRET }}
+          KVC: ${{ secrets.AZURE_CERT_NAME }}
+          PUSH: ${{ inputs.deploy == 'push' }}
+        run: |
+          if (-not ($env:KVU -and $env:KVI -and $env:KVT -and $env:KVS -and $env:KVC)) {
+            if ($env:PUSH -eq 'true') { throw 'The AZURE_* signing secrets are missing: an unsigned build is never pushed' }
+            '::warning::The AZURE_* signing secrets are missing: the package is unsigned'
+            exit 0
+          }
+          $tools = Join-Path $env:RUNNER_TEMP tools
+          dotnet tool install AzureSignTool --version 7.0.1 --tool-path $tools
+          if ($LASTEXITCODE) { throw 'Could not install AzureSignTool' }
+          $package = Resolve-Path build/package/VanaCore
+          $binaries = { Get-ChildItem -LiteralPath $package -Recurse -File | Where-Object Extension -in '.exe', '.dll' }
+          # NVIDIA's DLLs and Microsoft's C++ runtime are signed already and left as they are
+          $unsigned = @(& $binaries | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -eq 'NotSigned' } | ForEach-Object FullName)
+          $unsigned | ForEach-Object { "Signing $_" }
+          if ($unsigned) {
+            & (Join-Path $tools azuresigntool.exe) sign -kvu $env:KVU -kvi $env:KVI -kvt $env:KVT -kvs $env:KVS -kvc $env:KVC `
+              -tr http://timestamp.digicert.com -td sha256 -fd sha256 @unsigned
+            if ($LASTEXITCODE) { throw 'Signing failed' }
+          }
+          $bad = @(& $binaries | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' })
+          $bad | ForEach-Object { "::error::No valid signature: $($_.FullName)" }
+          if ($bad) { exit 1 }
+
+      # The signed package and its symbols, for the deploy and release jobs (and to download from the run). Kept a
+      # week: the GitHub release holds the zips for good.
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: VanaCore-${{ needs.version.outputs.version }}
+          path: build/package/VanaCore
+          retention-days: 7
+
+      - name: Upload the symbols
+        uses: actions/upload-artifact@v7
+        with:
+          name: VanaCore-${{ needs.version.outputs.version }}-symbols
+          path: build/package/symbols
+          retention-days: 7
+
+  deploy:
+    name: Push ${{ needs.build.outputs.version }} to R2
+    needs: build
+    if: inputs.deploy != 'none'
+    # push_build.py compares the build's paths as Windows ones, as the Manager and the launcher do
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # One writer of launcher.json and the build states at a time. Never cancelled in progress: a half-finished
+    # publish is worse than a queued one. (A concurrency group is per repository: CatsAndBoats/launcher's addon
+    # updater, which also writes launcher.json, isn't held back by this one.)
+    concurrency:
+      group: r2-publish
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Download the package
+        uses: actions/download-artifact@v8
+        with:
+          name: VanaCore-${{ needs.build.outputs.version }}
+          path: ${{ runner.temp }}/VanaCore
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Push
+        shell: pwsh
+        env:
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          $flags = @()
+          if ('${{ inputs.deploy }}' -ne 'push') { $flags += '--dry-run' }
+          if ('${{ inputs.deletes }}' -eq 'true') { $flags += '--deletes' }
+          python .github/scripts/push_build.py vanacore --folder "$env:RUNNER_TEMP/VanaCore" @flags
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+  release:
+    name: Release ${{ needs.build.outputs.version }}
+    needs: [build, deploy]
+    # after the push, or straight after the build with deploy "none" (deploy skipped); never after a failed push
+    if: always() && inputs.release && needs.build.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the release notes read the history back to the last release's tag
+          sparse-checkout: .github
+          filter: blob:none
+
+      - name: Download the package
+        uses: actions/download-artifact@v8
+        with:
+          name: VanaCore-${{ needs.build.outputs.version }}
+          path: ${{ runner.temp }}/package/VanaCore
+
+      - name: Download the symbols
+        uses: actions/download-artifact@v8
+        with:
+          name: VanaCore-${{ needs.build.outputs.version }}-symbols
+          path: ${{ runner.temp }}/package/symbols
+
+      # The zip holds VanaCore\ at its top: unzipped into the game's folder (or anywhere), it's the whole install
+      - name: Zip
+        shell: pwsh
+        run: |
+          $version = '${{ needs.build.outputs.version }}'
+          $package = Join-Path $env:RUNNER_TEMP package
+          if (-not (Test-Path "$package/VanaCore/VanaCore.exe")) { throw 'The package has no VanaCore.exe' }
+          if (-not (Test-Path "$package/VanaCore/VanaCore.Core.dll")) { throw 'The package has no VanaCore.Core.dll' }
+          Compress-Archive -Path "$package/VanaCore" -DestinationPath "$package/VanaCore-$version.zip"
+          Compress-Archive -Path "$package/symbols/*" -DestinationPath "$package/VanaCore-$version-symbols.zip"
+
+      - name: Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ needs.build.outputs.version }}'
+          $package = Join-Path $env:RUNNER_TEMP package
+          $tag = "v$version"
+          # Everything that reached the branch since the last release (or its last 30 commits before the first),
+          # read along the branch's own line (--first-parent): a merged pull request is one line with its number
+          # and title, a commit pushed straight to the branch is one line of its own, and the commits inside a
+          # pull request aren't listed again. Any other merge (the branch brought up to date with another) is
+          # replaced by the commits it brought in.
+          $previous = git tag --list 'v*' --sort=-creatordate | Select-Object -First 1
+          # @( ) around the whole if: a one-item array comes out of it as a bare string, and splatting a string
+          # (git log @range) passes its characters
+          $range = @(if ($previous) { "$previous..HEAD" } else { '-n', '30', 'HEAD' })
+          $commits = @()
+          $rs = [char]0x1e
+          $us = [char]0x01
+          $log = (git log @range --first-parent --pretty="format:%h$us%p$us%s$us%b$rs") -join "`n"
+          foreach ($entry in $log.Split($rs) | Where-Object { $_.Trim() }) {
+            $hash, $parents, $subject, $body = $entry.Trim().Split($us)
+            $parents = @($parents -split ' ' | Where-Object { $_ })
+            if ($parents.Count -lt 2) {
+              $commits += "- $subject ($hash)"
+            } elseif ($subject -match '^Merge pull request #(\d+) from ') {
+              # the pull request's title is the first line of the merge commit's message body
+              $title = ($body -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+              if (-not $title) { $title = $subject }
+              $commits += "- $($title.Trim()) (#$($Matches[1]), $hash)"
+            } else {
+              $commits += @(git log "$($parents[0])..$($parents[1])" --no-merges --pretty=format:'- %s (%h)')
+            }
+          }
+          $notes = @(
+            "VanaCore $version, x86.",
+            '',
+            "**Install:** download VanaCore-$version.zip and unzip it. The VanaCore folder inside has everything it needs:",
+            'copy `vanacore.example.ini` to `vanacore.ini`, set your server and game folders in it, and run `VanaCore.exe`.',
+            'See the README''s [Running it](https://github.com/${{ github.repository }}#running-it) for the details.',
+            '',
+            $(if ($previous) { "Changes since $($previous -replace '^v', ''):" } else { 'Recent changes:' })
+          )
+          $notes += $(if ($commits.Count -gt 0) { $commits } else { '- (none)' })
+          $notes += @('', "VanaCore-$version-symbols.zip holds the debug symbols, for reading crash dumps (logs\crash-*.dmp).")
+          $notes | Set-Content -Path "$package/notes.md" -Encoding utf8
+          $flags = @()
+          if ('${{ inputs.prerelease }}' -eq 'true') { $flags += '--prerelease' } else { $flags += '--latest' }
+          gh release create $tag "$package/VanaCore-$version.zip" "$package/VanaCore-$version-symbols.zip" `
+            --target $env:GITHUB_SHA --title "VanaCore $version" --notes-file "$package/notes.md" @flags
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
