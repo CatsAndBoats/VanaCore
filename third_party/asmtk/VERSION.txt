@@ -1,0 +1,1 @@
+AsmTK (https://github.com/asmjit/asmtk) at commit 1261a46fabb0b353be1f52ff77b0245aa9c170f4 (2025-12-28), its src/asmtk/ folder as it is.

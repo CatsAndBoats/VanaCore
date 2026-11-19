@@ -1,0 +1,312 @@
+diff --git a/src/lj_lex.c b/src/lj_lex.c
+index 4bbe183..11d3ced 100644
+--- a/src/lj_lex.c
++++ b/src/lj_lex.c
+@@ -261,7 +261,7 @@ static void lex_string(LexState *ls, TValue *tv)
+       case LEX_EOF: continue;
+       default:
+ 	if (!lj_char_isdigit(c))
+-	  goto err_xesc;
++	  break;  /* VanaCore: an unknown escape is the character itself, as in Lua 5.1 (Windower's addons rely on it). */
+ 	c -= '0';  /* Decimal escape '\ddd'. */
+ 	if (lj_char_isdigit(lex_next(ls))) {
+ 	  c = c*10 + (ls->c - '0');
+diff --git a/src/lj_parse.c b/src/lj_parse.c
+index 00a6438..09c5243 100644
+--- a/src/lj_parse.c
++++ b/src/lj_parse.c
+@@ -2076,7 +2076,7 @@ static void parse_args(LexState *ls, ExpDesc *e)
+   BCReg base;
+   BCLine line = ls->linenumber;
+   if (ls->tok == '(') {
+-#if !LJ_52
++#if 0  /* VanaCore: a '(' on a new line continues the call, as in Lua 5.2 and Ashita's moonjit (5.1 refused it). */
+     if (line != ls->lastline)
+       err_syntax(ls, LJ_ERR_XAMBIG);
+ #endif
+@@ -2114,11 +2114,11 @@ static void parse_args(LexState *ls, ExpDesc *e)
+   fs->freereg = base+1;  /* Leave one result by default. */
+ }
+ 
++static BCPos expr_suffixes(LexState *ls, ExpDesc *v, int eflags);
++
+ /* Parse primary expression with safe navigation. */
+ static BCPos expr_primary_nav(LexState *ls, ExpDesc *v, int eflags)
+ {
+-  FuncState *fs = ls->fs;
+-  BCPos xpc = NO_JMP;
+   /* Parse prefix expression. */
+   if (ls->tok == '(') {
+     BCLine line = ls->linenumber;
+@@ -2131,13 +2131,20 @@ static BCPos expr_primary_nav(LexState *ls, ExpDesc *v, int eflags)
+     GCstr *name = lex_str(ls);
+     if (!(eflags & EXPR_F_NORES) && ls->tok == TK_arrow) {
+       parse_shortfunc(ls, v, name, eflags, line);
+-      return xpc;
++      return NO_JMP;
+     }
+     var_lookup(ls, v, name);
+   } else {
+-  err:
+     err_syntax(ls, LJ_ERR_XSYMBOL);
+   }
++  return expr_suffixes(ls, v, eflags);
++}
++
++/* Parse the suffixes of a primary expression: .name [exp] :name(args) (args). */
++static BCPos expr_suffixes(LexState *ls, ExpDesc *v, int eflags)
++{
++  FuncState *fs = ls->fs;
++  BCPos xpc = NO_JMP;
+   for (;;) {  /* Parse multiple expression suffixes. */
+     int nav = 0;
+     if (!(eflags & EXPR_F_NONAV) && lex_opt(ls, TK_nav)) {
+@@ -2154,7 +2161,7 @@ static BCPos expr_primary_nav(LexState *ls, ExpDesc *v, int eflags)
+     } else if (ls->tok == ':') {
+       ExpDesc key;
+       if ((eflags & EXPR_F_NOCOLON)) {
+-	if (nav) goto err;
++	if (nav) err_syntax(ls, LJ_ERR_XSYMBOL);
+ 	break;
+       }
+       lj_lex_next(ls);  /* Skip ':'. */
+@@ -2189,10 +2196,9 @@ static BCPos expr_primary_nav(LexState *ls, ExpDesc *v, int eflags)
+   return xpc;
+ }
+ 
+-/* Parse primary expression. */
+-static void expr_primary(LexState *ls, ExpDesc *v, int eflags)
++/* Finish a primary expression whose suffixes may have used safe navigation. */
++static void expr_primary_end(LexState *ls, ExpDesc *v, BCPos xpc)
+ {
+-  BCPos xpc = expr_primary_nav(ls, v, eflags);
+   if (xpc != NO_JMP) {
+     FuncState *fs = ls->fs;
+     BCPos around;
+@@ -2208,6 +2214,29 @@ static void expr_primary(LexState *ls, ExpDesc *v, int eflags)
+   }
+ }
+ 
++/* Parse primary expression. */
++static void expr_primary(LexState *ls, ExpDesc *v, int eflags)
++{
++  expr_primary_end(ls, v, expr_primary_nav(ls, v, eflags));
++}
++
++/* VanaCore: Windower's Lua lets a literal (nil, true, false, ..., a number, string, table
++** constructor or function) go on like a name does, with suffixes: 'x':upper(), {a, b}[i],
++** function() ... end(), ...:lower(), 127'text'. All of these are syntax errors in standard Lua.
++** A '(' only counts on the literal's own line, as a call's does anywhere.
++*/
++static int literal_suffix(LexState *ls)
++{
++  return ls->tok == '.' || ls->tok == '[' || ls->tok == ':' || ls->tok == TK_string ||
++	 ls->tok == '{' || (ls->tok == '(' && ls->linenumber == ls->lastline);
++}
++
++static void expr_literal_suffixes(LexState *ls, ExpDesc *v, int eflags)
++{
++  if (literal_suffix(ls))
++    expr_primary_end(ls, v, expr_suffixes(ls, v, eflags));
++}
++
+ /* Parse simple expression. */
+ static void expr_simple(LexState *ls, ExpDesc *v, int eflags)
+ {
+@@ -2215,20 +2244,30 @@ static void expr_simple(LexState *ls, ExpDesc *v, int eflags)
+   case TK_number:
+     expr_init(v, (LJ_HASFFI && tviscdata(&ls->tokval)) ? VKCDATA : VKNUM, 0);
+     copyTV(ls->L, &v->u.nval, &ls->tokval);
+-    break;
++    lj_lex_next(ls);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
++    return;
+   case TK_string:
+     expr_init(v, VKSTR, 0);
+     v->u.sval = strV(&ls->tokval);
+-    break;
++    lj_lex_next(ls);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
++    return;
+   case TK_nil:
+     expr_init(v, VKNIL, 0);
+-    break;
++    lj_lex_next(ls);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
++    return;
+   case TK_true:
+     expr_init(v, VKTRUE, 0);
+-    break;
++    lj_lex_next(ls);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
++    return;
+   case TK_false:
+     expr_init(v, VKFALSE, 0);
+-    break;
++    lj_lex_next(ls);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
++    return;
+   case TK_dots: {  /* Vararg. */
+     FuncState *fs = ls->fs;
+     BCReg base;
+@@ -2237,14 +2276,18 @@ static void expr_simple(LexState *ls, ExpDesc *v, int eflags)
+     base = fs->freereg-1;
+     expr_init(v, VCALL, bcemit_ABC(fs, BC_VARG, base, 2, fs->numparams));
+     v->u.s.aux = base;
+-    break;
++    lj_lex_next(ls);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
++    return;
+   }
+   case '{':  /* Table constructor. */
+     expr_table(ls, v);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
+     return;
+   case TK_function:
+     lj_lex_next(ls);
+     parse_body(ls, v, 0, ls->linenumber);
++    expr_literal_suffixes(ls, v, eflags);  /* VanaCore */
+     return;
+   case '|': case TK_or_:
+     parse_shortfunc(ls, v, NULL, eflags, ls->linenumber);
+@@ -2327,6 +2370,10 @@ static void expr_unop(LexState *ls, ExpDesc *v, int eflags)
+     op = BC_LEN;
+   } else if (ls->tok == '~') {
+     op = BC_BNOT;
++  } else if (ls->tok == '+') {  /* VanaCore: unary plus, as Windower's Lua has it: no operation. */
++    lj_lex_next(ls);
++    expr_binop(ls, v, UNARY_PRIORITY, eflags);
++    return;
+   } else {
+     expr_simple(ls, v, eflags);
+     return;
+@@ -2746,7 +2793,7 @@ static void parse_label(LexState *ls)
+       synlevel_begin(ls);
+       parse_label(ls);
+       synlevel_end(ls);
+-    } else if (LJ_52 && ls->tok == ';') {
++    } else if (ls->tok == ';') {  /* VanaCore: empty statements in Lua 5.1 mode too. */
+       lj_lex_next(ls);
+     } else {
+       break;
+@@ -3038,11 +3085,9 @@ static int parse_stmt(LexState *ls)
+     lj_lex_next(ls);
+     parse_continue(ls);
+     return 1;  /* Must be last. */
+-#if LJ_52
+-  case ';':
++  case ';':  /* VanaCore: empty statements in Lua 5.1 mode too, which addons use. */
+     lj_lex_next(ls);
+     break;
+-#endif
+   case TK_label:
+     parse_label(ls);
+     break;
+diff --git a/src/lj_clib.c b/src/lj_clib.c
+--- a/src/lj_clib.c
++++ b/src/lj_clib.c
+@@ -165,6 +165,7 @@
+   CLIB_HANDLE_KERNEL32,
+   CLIB_HANDLE_USER32,
+   CLIB_HANDLE_GDI32,
++  CLIB_HANDLE_MSVCRT,  /* VanaCore: the C runtime's functions (strlen, memcpy, ...) with a static one */
+ #endif
+   CLIB_HANDLE_MAX
+ };
+@@ -264,6 +265,10 @@
+ 	case CLIB_HANDLE_KERNEL32: h = LJ_WIN_LOADLIBA("kernel32.dll"); break;
+ 	case CLIB_HANDLE_USER32: h = LJ_WIN_LOADLIBA("user32.dll"); break;
+ 	case CLIB_HANDLE_GDI32: h = LJ_WIN_LOADLIBA("gdi32.dll"); break;
++	/* VanaCore: built with the static C runtime (/MT), the CRT handle is VanaCore's own DLL, which exports
++	   none of it: Windows' msvcrt.dll, for addons' ffi.C.strlen, ffi.C.memcpy and the like (Ashita's
++	   lua51.dll is linked to a C runtime DLL, where ffi.C finds them). */
++	case CLIB_HANDLE_MSVCRT: h = LJ_WIN_LOADLIBA("msvcrt.dll"); break;
+ 	}
+ 	if (!h) continue;
+ #endif
+diff --git a/src/lj_ccall.c b/src/lj_ccall.c
+--- a/src/lj_ccall.c
++++ b/src/lj_ccall.c
+@@ -1244,6 +1244,17 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
+       tv.u64 = ((uintptr_t)(void *)cc.func >> 2) | U64x(800000000, 00000000);
+       setboolV(lj_tab_set(L, cts->miscmap, &tv), 1);
+     }
++#if LJ_TARGET_X86 && LJ_ABI_WIN
++    /* VanaCore: a function that cleans up a different amount of stack than its declaration passes (declared with
++    ** fewer parameters than it has: LuAshitacast's WideCharToMultiByte) can't run in compiled code, which readjusts
++    ** the stack by the declared amount. Keep it to the interpreter, which restores the stack whatever it pops. */
++    if (cc.spadj && (MSize)(-(int32_t)cc.spadj) != (MSize)cc.nsp) {
++      TValue tv;
++      tv.u64 = ((uintptr_t)(void *)cc.func >> 2) | U64x(800000000, 00000000);
++      setboolV(lj_tab_set(L, cts->miscmap, &tv), 1);
++      lj_trace_abort(G(L));
++    }
++#endif
+     ct = ctype_get(cts, id);  /* Table may have been reallocated. */
+     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);
+ #if LJ_TARGET_X86 && LJ_ABI_WIN
+diff --git a/src/vm_x86.dasc b/src/vm_x86.dasc
+--- a/src/vm_x86.dasc
++++ b/src/vm_x86.dasc
+@@ -3498,6 +3498,17 @@ static void build_subroutines(BuildCtx *ctx)
+   |.else
+   |  sub esp, CCSTATE->spadj
+   |.if WIN
++  |  // VanaCore: zero the area the arguments go into, so a C function declared with fewer parameters than it
++  |  // has reads 0 (NULL) for the rest rather than what an earlier call left there (LuAshitacast declares
++  |  // WideCharToMultiByte with 7 of its 8: Windows writes through the 8th, lpUsedDefaultChar).
++  |  mov ecx, CCSTATE->spadj
++  |  xor eax, eax
++  |3:
++  |  sub ecx, 4
++  |  js >4
++  |  mov [esp+ecx], eax
++  |  jmp <3
++  |4:
+   |  mov CCSTATE->spadj, esp
+   |.endif
+   |.endif
+diff --git a/src/lj_str.c b/src/lj_str.c
+index 2ece8ee..c731542 100644
+--- a/src/lj_str.c
++++ b/src/lj_str.c
+@@ -262,15 +262,6 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
+ }
+ #endif
+ 
+-/* Reseed String ID from PRNG after random interval < 2^bits. */
+-#if LUAJIT_SECURITY_STRID == 1
+-#define STRID_RESEED_INTERVAL	8
+-#elif LUAJIT_SECURITY_STRID == 2
+-#define STRID_RESEED_INTERVAL	4
+-#elif LUAJIT_SECURITY_STRID >= 3
+-#define STRID_RESEED_INTERVAL	0
+-#endif
+-
+ /* Allocate a new string and add to string interning table. */
+ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
+ 			   StrHash hash, int hashalg)
+@@ -282,18 +273,11 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
+   s->gct = ~LJ_TSTR;
+   s->len = len;
+   s->hash = hash;
+-#ifndef STRID_RESEED_INTERVAL
+-  s->sid = g->str.id++;
+-#elif STRID_RESEED_INTERVAL
+-  if (!g->str.idreseed--) {
+-    uint64_t r = lj_prng_u64(&g->prng);
+-    g->str.id = (StrID)r;
+-    g->str.idreseed = (uint8_t)(r >> (64 - STRID_RESEED_INTERVAL));
+-  }
+-  s->sid = g->str.id++;
+-#else
+-  s->sid = (StrID)lj_prng_u64(&g->prng);
+-#endif
++  /* VanaCore: the String ID (a string key's table slot) is moonjit's unseeded hash,
++  ** so pairs() walks string keys in Ashita's order, the same every load. The
++  ** PRNG-reseeded counter shuffled it per load (XIUI's module draw order).
++  */
++  s->sid = hash_sparse(0, str, len);
+   s->reserved = 0;
+   s->hashalg = (uint8_t)hashalg;
+   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */
