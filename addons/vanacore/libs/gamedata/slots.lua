@@ -1,0 +1,20 @@
+-- VanaCore game data: slots. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the slot names (ROM/175/33): don't edit,
+-- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
+return {
+[0]={id=0,name="main",display="main",bit=1},
+[1]={id=1,name="sub",display="sub",bit=2},
+[2]={id=2,name="range",display="range",bit=4},
+[3]={id=3,name="ammo",display="ammo",bit=8},
+[4]={id=4,name="head",display="head",bit=16},
+[5]={id=5,name="body",display="neck",bit=32},
+[6]={id=6,name="hands",display="l.ear",bit=64},
+[7]={id=7,name="legs",display="r.ear",bit=128},
+[8]={id=8,name="feet",display="body",bit=256},
+[9]={id=9,name="neck",display="hands",bit=512},
+[10]={id=10,name="waist",display="l.ring",bit=1024},
+[11]={id=11,name="left_ear",display="r.ring",bit=2048},
+[12]={id=12,name="right_ear",display="back",bit=4096},
+[13]={id=13,name="left_ring",display="waist",bit=8192},
+[14]={id=14,name="right_ring",display="legs",bit=16384},
+[15]={id=15,name="back",display="feet",bit=32768},
+}

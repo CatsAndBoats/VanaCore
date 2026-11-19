@@ -1,0 +1,14 @@
+# Names for FFXiMain.dll's functions in /vana stats' sampled view (Record Stats Report).
+#
+# One per line: the function's address as the Ghidra export names it (FUN_10086020 is 10086020), hexadecimal, then what it
+# does, and ` | group` after it to put it under a heading with the others of that group. # starts a comment. A function
+# that isn't here is listed as FUN_<address>.
+#
+#   10086020 Nameplates, the names routine | Interface
+#
+# Addresses are for the build in the launcher's client; a function in another build is somewhere else.
+
+10086020 Nameplates (the names routine) | Interface
+100d0260 Nameplates (per-actor name filter) | Interface
+101ab0f0 Chat line parser (auto-translate) | Interface
+10187be0 Zone LOD, draw distance and fog | World
