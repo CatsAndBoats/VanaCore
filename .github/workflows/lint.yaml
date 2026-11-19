@@ -1,0 +1,84 @@
+name: Lint C++
+
+# lint.bat's checks (tools/lint/lint.py): cppcheck, lizard, jscpd and file length over src.
+# They fail a run only for a finding that is new or has grown past its allowance over tools/lint/baseline.json
+# (lint.py's ALLOWANCE: a long file or function may grow a little; growth within it shows as a warning). After fixing
+# things, run lint.bat --update-baseline and commit the baseline.
+# And d3d11fx (tools/lint/d3d11_fx.py), which any problem fails: Direct3D 11's scene effects are Direct3D 12's HLSL
+# rewritten (gfx_d3d11.c fx_source) and compiled with Windows' d3dcompiler_47.dll; one that doesn't rewrite or compile
+# leaves Direct3D 11 without its effects (0.8.142 to 0.8.152 shipped that way).
+# The reports (build/lint) are uploaded as a workflow artifact, kept 1 day.
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tools/lint/**
+      - lint.bat
+      - .github/workflows/lint.yaml
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - tools/lint/**
+      - lint.bat
+      - .github/workflows/lint.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Pinned to the version baseline.json was written with: another cppcheck reports other findings. choco's
+      # package is older (2.14), so the release installer is used. Bumping it = new baseline (lint.bat --update-baseline).
+      - name: Install cppcheck
+        shell: pwsh
+        env:
+          CPPCHECK_VERSION: '2.22.0'
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download $env:CPPCHECK_VERSION --repo danmar/cppcheck --pattern "cppcheck-$env:CPPCHECK_VERSION-x64-Setup.msi" --dir $env:RUNNER_TEMP
+          $p = Start-Process msiexec.exe -ArgumentList "/i `"$env:RUNNER_TEMP\cppcheck-$env:CPPCHECK_VERSION-x64-Setup.msi`" /qn /norestart" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "cppcheck installer exited $($p.ExitCode)" }
+          & "$env:ProgramFiles\Cppcheck\cppcheck.exe" --version
+          "CPPCHECK=$env:ProgramFiles\Cppcheck\cppcheck.exe" >> $env:GITHUB_ENV
+
+      - name: Install lizard
+        run: python -m pip install lizard==1.24.3
+
+      # lint.py runs the cppcheck named by CPPCHECK (set above): the runner image has an older one on PATH.
+      # jscpd comes from npx.
+      - name: Lint
+        run: python tools/lint/lint.py --strict
+
+      # The lint step says pass or fail; a report that can't be uploaded doesn't fail the run.
+      - name: Upload reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: build/lint
+          if-no-files-found: ignore
+          retention-days: 1 # read from the run's page soon after, if at all
