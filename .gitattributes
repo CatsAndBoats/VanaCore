@@ -1,0 +1,3 @@
+# cmd reads batch files' labels reliably only with CRLF line ends, whatever a clone's core.autocrlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
