@@ -225,7 +225,6 @@ grown past its allowance in `tools\lint\baseline.json`.
 | `src/shared/` | Headers both use (the version, what the launcher hands the core) |
 | `addons/vanacore/` | VanaCore's own Lua addons, the /vana window among them |
 | `docs/` | The reference, and the addon and plugin docs (see [Documentation](#documentation)) |
-| `research/` | Notes from reverse-engineering the client and designing features |
 | `tools/` | Code generators (the Ashita ABI and Lua bindings, game data, docs), lint, and test programs |
 | `third_party/` | LuaJIT, Dear ImGui, AsmJit, LuaSocket, the Ashita SDK's headers, FSR's headers, the DLSS fetch script |
 | `fonts/`, `assets/`, `scripts/` | Fonts and images loaded into the game, and the default `boot.txt` |
