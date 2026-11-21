@@ -1,4 +1,4 @@
--- VanaCore game data: status_effects. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/status_effects.sql, the status names (ROM/180/102): don't edit,
+-- VanaCore game data: status_effects. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/status_effects.sql, the status names (ROM/180/102): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={id=0,name="KO",adjective="KO'd",server_name="ko",flags=0,flag_names={},type=0,negative_id=0,overwrite=0,block_id=0,remove_id=0,element="none",min_duration=0,sort_key=0},

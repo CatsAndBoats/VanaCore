@@ -1,4 +1,4 @@
--- VanaCore game data: slots. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the slot names (ROM/175/33): don't edit,
+-- VanaCore game data: slots. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the slot names (ROM/175/33): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={id=0,name="main",display="main",bit=1},

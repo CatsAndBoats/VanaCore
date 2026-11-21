@@ -1,4 +1,4 @@
--- VanaCore game data: monster_families. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/mob_family_system.sql, the family names (ROM/188/38): don't edit,
+-- VanaCore game data: monster_families. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/mob_family_system.sql, the family names (ROM/188/38): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [1]={id=1,name="crab",plural="crabs",server_name="Acrolith",super_family="Acrolith",ecosystem="Arcana",speed=40,hp=90,mp=90,stats={str=1,dex=3,vit=4,agi=3,int=6,mnd=6,chr=5},attack=1,defense=3,accuracy=1,evasion=3,element=0,detects=34,charmable=0},

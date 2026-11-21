@@ -1,4 +1,4 @@
--- VanaCore game data: augments. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the augment texts (ROM/220/58): don't edit,
+-- VanaCore game data: augments. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the augment texts (ROM/220/58): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [1]={id=1,format="{FIR}%+d "},

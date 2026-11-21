@@ -1,4 +1,4 @@
--- VanaCore game data: skill_ranks. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/skill_ranks.sql (each job's rank in a skill, 0 for none): don't edit,
+-- VanaCore game data: skill_ranks. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/skill_ranks.sql (each job's rank in a skill, 0 for none): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [1]={id=1,name="hand2hand",jobs={[1]=9,[2]=1,[6]=10,[13]=10,[18]=1,[19]=9}},

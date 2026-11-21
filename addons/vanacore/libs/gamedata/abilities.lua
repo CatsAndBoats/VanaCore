@@ -1,4 +1,4 @@
--- VanaCore game data: abilities. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/abilities.sql, the command records and names (ROM/118/114, ROM/181/72, ROM/181/74): don't edit,
+-- VanaCore game data: abilities. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/abilities.sql, the command records and names (ROM/118/114, ROM/181/72, ROM/181/74): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [16]={id=16,name="Mighty Strikes",description="Turns all melee attacks into critical hits.",job=1,job_name="WAR",level=0,recast=3600,recast_id=0,targets=1,target_names={"self"},range=0,aoe=0,radius=0,cast_time=0,action_type=6,add_type=0,add_type_names={},merit_mod=0,ce=1,ve=300,animation=33,animation_time=2000,message=0,message2=0,charges=0,tp=65535,icon=40},

@@ -1,4 +1,4 @@
--- VanaCore game data: items (ids 0 to 4095). Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
+-- VanaCore game data: items (ids 0 to 4095). Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [1]={id=1,name="Chocobo Bedding",log_name="pile of chocobo bedding",log_plural="piles of chocobo bedding",article=0,description="Furnishing:\nExtremely popular among San d'Orian\nchildren, this hay is so soft that it is\nused in mattresses across the kingdom.",category="general",type=10,flags=24660,flag_names={"mystery_box","mail2account","noauction","nodelivery","ex"},stack=1,targets=0,resource_id=65000,server_name="pile_of_chocobo_bedding",sort_name="chocobo_bedding",server_type=3,ah=0,ah_name="none",base_sell=198},

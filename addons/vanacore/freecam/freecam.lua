@@ -1307,7 +1307,7 @@ local function draw_toolbar(dl, x, y, w, ctx)
             say('Space is already one of your own binds, so it is left as it is.')
         end
     end
-    -- (Far scenery and Grass follows are on View & Effects' View now: asked for, Josh)
+    -- (Far scenery and Grass follows are on View & Effects' View now: asked for)
 
     -- the right: into the free camera, only while it's off (the window opened by /freecam window). On, the title's X is the
     -- way out of it
@@ -1474,7 +1474,7 @@ local GFX_ROWS = {
       tip = 'Ambient occlusion: how dark corners and creases get. Adds depth.' },
     { key = 'sun', label = 'Shadows', icon = 'half', default = 0.6, on = 0.6, min = 0.05, max = 1, step = 0.05,
       tip = "Shadows: how dark VanaCore's sun shadows are. The game's own stay off while these are on." },
-    -- (/vana's Lighting > Sun strength, asked for, Josh: off by default, 1 when it's turned on, up to 3; its slider goes
+    -- (/vana's Lighting > Sun strength, asked for: off by default, 1 when it's turned on, up to 3; its slider goes
     -- down to 0, which is off, as /vana's does: the others stop at 0.05)
     { key = 'day_bright', label = 'Sun strength', icon = 'sun', default = 0, on = 1, min = 0, max = 3, step = 0.05,
       tip = 'Sun strength: a stronger sun outdoors by day. What faces it is lit brighter; the shade stays as it is.' },
@@ -1509,7 +1509,7 @@ local function fx_turn(sw, on)
 end
 
 local ext = {} -- (the helpers below: the main chunk can't hold more than 200 locals)
--- Depth of field's Focus (asked for, Josh: "Focus Player" and "Free Focus"). /vana's 0 ("You") is the nearest thing just below
+-- Depth of field's Focus (asked for: "Focus Player" and "Free Focus"). /vana's 0 ("You") is the nearest thing just below
 -- the screen's middle, where the game's own camera keeps the character: under the free camera that isn't the character at all.
 --   Player  your character, wherever it is in the view ([graphics.effects] dof_player 1: the renderer measures how far into the
 --           view the character stands; a VanaCore.Core.dll from before it focuses on the middle)
@@ -1639,7 +1639,7 @@ local function fx_row(dl, x, cy, w, row, sw, enabled, on)
     end
 end
 
--- Animation (asked for, Josh: the race's animations by category as XI Model Viewer lists them, played, paused and moved by the
+-- Animation (asked for: the race's animations by category as XI Model Viewer lists them, played, paused and moved by the
 -- frame, to set up a photo). Category, then the Animation in it (an emote's, a weapon skill's or a stance's files, loaded onto
 -- your character as it's picked: freecam\anim.lua), then the Clip to play from those; Frame scrubs it, in thirtieths of a
 -- second as the model viewer counts them, and pauses it; Speed. In the heading: play or pause, Loop and Stop. Basic is the
@@ -1820,7 +1820,7 @@ local function draw_anim(dl, x, y, w, title, now_clock)
     end
 end
 
--- View & Effects is a page: a list of its sections down the left (asked for, Josh), the one picked in the panel beside it, as
+-- View & Effects is a page: a list of its sections down the left (asked for), the one picked in the panel beside it, as
 -- /vana's pages are. Each section: its name and icon in the list (a dot while its effect is on), and in the panel its heading
 -- (with the effect's switch) and its rows. The page is as tall as its tallest section, so picking another doesn't move the window.
 local VIEW_NAMES = { 'FOV', 'Weather', 'Time', 'Facing', 'Nameplates', 'Far scenery', 'Grass follows' }

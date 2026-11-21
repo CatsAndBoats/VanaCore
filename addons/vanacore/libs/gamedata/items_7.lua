@@ -1,4 +1,4 @@
--- VanaCore game data: items (ids 28672 to 32767). Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
+-- VanaCore game data: items (ids 28672 to 32767). Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [28672]={id=28672,name="Maze Tabula M01",log_name="Maze Tabula M01",log_plural="Maze Tabulae M01",article=0,description="A tablet with numerous square notches\ndesigned to hold runes.\nA must-have for adventurers looking\nto design their own maze with Moblin\nMaze Mongers.",category="maze",type=22,flags=61504,flag_names={"noauction","nosale","nodelivery","ex","rare"},stack=1,targets=1,resource_id=7000,server_name="maze_tabula_m01",sort_name="maze_tabula_m01",server_type=1,ah=0,ah_name="none",base_sell=0},

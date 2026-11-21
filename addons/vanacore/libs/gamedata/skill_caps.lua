@@ -1,4 +1,4 @@
--- VanaCore game data: skill_caps. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/skill_caps.sql (a level's cap by skill rank, A+ first): don't edit,
+-- VanaCore game data: skill_caps. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/skill_caps.sql (a level's cap by skill rank, A+ first): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={level=0,ranks={0,0,0,0,0,0,0,0,0,0,0,0,0,0}},

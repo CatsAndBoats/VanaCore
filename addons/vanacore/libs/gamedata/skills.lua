@@ -1,4 +1,4 @@
--- VanaCore game data: skills. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from src/map/entities/battleentity.h SKILLTYPE: don't edit,
+-- VanaCore game data: skills. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from src/map/entities/battleentity.h SKILLTYPE: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={id=0,name="none",display="None",kind="combat"},

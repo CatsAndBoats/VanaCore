@@ -1,4 +1,4 @@
--- VanaCore game data: items (ids 8192 to 12287). Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
+-- VanaCore game data: items (ids 8192 to 12287). Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [8193]={id=8193,name="Harlequin Head",log_name="Harlequin head",log_plural="Harlequin heads",article=0,description="Fire2 Wind2 Lightning2 Light0 \nIce2 Earth2 Water2 Dark0",category="puppet",type=0,flags=0,flag_names={},stack=1,targets=0,resource_id=0,puppet_slot=1,element_charge=2236962,server_name="harlequin_head",sort_name="harlequin_head",server_type=4,ah=0,ah_name="none",base_sell=0},

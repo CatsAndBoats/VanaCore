@@ -1,4 +1,4 @@
--- VanaCore game data: weapon_skills. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/weapon_skills.sql, the command names (ROM/181/72, ROM/181/74): don't edit,
+-- VanaCore game data: weapon_skills. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/weapon_skills.sql, the command names (ROM/181/72, ROM/181/74): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [1]={id=1,name="Combo",description="Delivers a threefold attack. Damage varies with TP. Skillchain attribute: Impaction",skill=1,skill_name="hand_to_hand",skill_level=5,element="none",range=3,aoe=1,radius=0,skillchains={"impaction"},main_only=0,unlock_id=0,jobs={1,2,6,13,18,19},animation=16,animation_time=2000},

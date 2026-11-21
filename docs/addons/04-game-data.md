@@ -564,8 +564,8 @@ kept: `vana.packets.last(true, 0x00A)` is the login or zone-in packet, `vana.pac
 
 Everything above is read from the running game and is only ids: a buff is `33`, a spell `4`, an item `26963`. The
 names, descriptions, costs and the rest live in the game's DAT files and in the server, so VanaCore ships them as Lua
-tables, generated from both (`conflux/tools/gen_gamedata.py`, from the DATs through xi-tools and CatsEyeXI's server
-SQL), under `addons\vanacore\libs\gamedata\`. Nothing is read from the game for these.
+tables, generated from both (`tools/gen_gamedata.py` in CatsEyeXI's [CatsAndBoats/dats](https://github.com/CatsAndBoats/dats) repository, from the DATs through
+xi-tools and CatsEyeXI's server SQL), under `addons\vanacore\libs\gamedata\`. Nothing is read from the game for these.
 
 ```lua
 local id = vana.gamedata.find('spells', 'Cure IV')    -- 4 (case-insensitive; items by their log name too)
@@ -606,10 +606,11 @@ keeps milliseconds (`cast_time`, `recast`) and the server's own units elsewhere 
 an item's `cast_time` and delays are the client's numbers). Where the server's enums name a value the row carries both
 the number and the names (`targets` / `target_names`, `flags` / `flag_names`); unlisted bits are just bits.
 
-To regenerate after a DAT or server change (xi-tools' Python, its `.env` naming the game install):
+To regenerate after a DAT or server change, from the dats repository with xi-tools' Python (its `.env` naming the game
+install):
 
 ```
-D:\xi-tools\.venv\Scripts\python.exe conflux\tools\gen_gamedata.py [--only spells,items]
+<xi-tools>\.venv\Scripts\python.exe tools\gen_gamedata.py --out <VanaCore>\addons\vanacore\libs\gamedata [--only spells,items]
 ```
 
 ## An item's stats: `vana.gamedata.item_stats`

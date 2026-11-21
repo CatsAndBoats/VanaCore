@@ -1,4 +1,4 @@
--- VanaCore game data: merits. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/merits.sql: don't edit,
+-- VanaCore game data: merits. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/merits.sql: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [64]={id=64,name="max_hp",display="Max Hp",upgrades=15,value=10,jobs=1048575,upgrade_id=0,category=0},

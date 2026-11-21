@@ -1,4 +1,4 @@
--- VanaCore game data: items (ids 4096 to 8191). Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
+-- VanaCore game data: items (ids 4096 to 8191). Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [4096]={id=4096,name="Fire Crystal",log_name="fire crystal",log_plural="fire crystals",article=0,description="A crystal infused with fire energy.\n",category="usable",type=8,flags=516,flag_names={"mystery_box","canuse"},stack=12,targets=1,resource_id=0,cast_time=0,server_name="fire_crystal",sort_name="fire_crystal",server_type=5,ah=35,ah_name="crystals",base_sell=15,use_targets=1,activation=0,animation=0,animation_time=0,use_max_charges=0,use_delay_server=0,reuse_delay_server=0,use_aoe=0},

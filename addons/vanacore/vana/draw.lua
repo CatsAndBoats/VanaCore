@@ -855,7 +855,7 @@ function M.tabs(id, x, y, right, labels, index, alpha_scale)
     return index, changed
 end
 
--- Switches joined as one control (a True Font line's Bold, Italic and Uppercase, Josh 2026-11-08): one well and outline round
+-- Switches joined as one control (a True Font line's Bold, Italic and Uppercase, 2026-11-08): one well and outline round
 -- them all, a hairline between each, each a button of its own lit while on (as M.chip's). `chips`: { { letter, font, on,
 -- enabled, id = its own id }, ... }, from x; the width it takes M.chip_bar_width's (which sets each one's w).
 -- Returns the one pressed (its index; nil: none) and the one the mouse is on.

@@ -1,4 +1,4 @@
--- VanaCore game data: items (ids 61440 to 65535). Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
+-- VanaCore game data: items (ids 61440 to 65535). Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [63025]={id=63025,name="Movement",log_name="Movement",log_plural="Movement",article=0,description="Switching between autorun/walk character movement modes.",category="general",type=5,flags=769,flag_names={"wallhanging","linkshell","canuse"},stack=0,targets=44,resource_id=0},

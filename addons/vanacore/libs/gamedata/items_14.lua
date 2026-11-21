@@ -1,4 +1,4 @@
--- VanaCore game data: items (ids 57344 to 61439). Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
+-- VanaCore game data: items (ids 57344 to 61439). Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the item DATs (ROM/118/106-110, ROM/286/73, ...), sql/item_basic, item_equipment, item_weapon, item_usable, item_mods: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [57345]={id=57345,name="First Step Forward",log_name="First Step Forward",log_plural="",article=0,description="Speak to one of the following Records of Eminence guides: Rolandienne in Southern San d'Oria (G-10), Isakoth in Bastok Markets (E-11), Fhelm Jobeizat in Windurst Woods (J-10), Eternal Flame in Western Adoulin (H-11).",category="roe",type=0,flags=11659,flag_names={"wallhanging","unknown_01","mog_garden","scroll","linkshell","cantradenpc","canequip","nodelivery"},stack=307,targets=1,resource_id=0},

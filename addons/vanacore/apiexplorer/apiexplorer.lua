@@ -4,7 +4,7 @@ apiexplorer: VanaCore's addon API, to read and to run.
 Reference: every table and function in `vana` (and the events), each with its arguments, what it returns and what it does.
 What's listed is read from the game's own `vana` table as it is now, so a function this VanaCore has and the docs don't
 yet is there too, and one the docs name that this VanaCore hasn't is marked; the descriptions are the docs'
-(reference.lua, made from docs/addons by conflux/tools/gen_apiexplorer_reference.py). Each entry links to the snippets
+(reference.lua, made from docs/addons by tools/gen_apiexplorer_reference.py). Each entry links to the snippets
 that use it, and Try it puts a call to it in the code box (Listen, for an event, shows each one as it comes).
 
 Snippets: a call to pick, run, read what it returns and copy, in the spirit of Postman. Every one is a complete snippet
@@ -1025,7 +1025,7 @@ end
 -- The reference: every table and function in `vana` as the game has it now, described from the docs
 -------------------------------------------------------------------------------
 
--- reference.lua (made by conflux/tools/gen_apiexplorer_reference.py from docs/addons/15-api-reference.md, 02-events.md and
+-- reference.lua (made by tools/gen_apiexplorer_reference.py from docs/addons/15-api-reference.md, 02-events.md and
 -- the topic pages): `spaces`, the tables in the docs' order with their page and notes; `entries`, one a row of the docs:
 -- the table it's filed under (ns), its name in the list (label), what it takes and returns (sig), what it does (desc), the
 -- paths to look up in the game (live: `*` ends a wildcard), what a snippet's code has when it uses it (find), a call to try

@@ -1,4 +1,4 @@
--- VanaCore game data: job_points. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/job_points.sql: don't edit,
+-- VanaCore game data: job_points. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/job_points.sql: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [32]={id=32,name="mighty_strikes_effect",display="Mighty Strikes Effect",upgrades=2,job=1},

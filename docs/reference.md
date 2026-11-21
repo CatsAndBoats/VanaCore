@@ -42,8 +42,8 @@ On GitHub, **VanaCore Release** (`.github/workflows/vanacore.yaml`, run from the
 Everything comes from `vanacore.ini` next to `VanaCore.exe` (see `vanacore.example.ini`). Relative paths in it are from `VanaCore.exe`'s folder.
 ```ini
 [client]
-pol=D:\cexi\catseyexi-client\Game\PlayOnlineViewer
-ffxi=D:\cexi\catseyexi-client\Game\FINAL FANTASY XI
+pol=C:\Games\MyServer\Game\PlayOnlineViewer
+ffxi=C:\Games\MyServer\Game\FINAL FANTASY XI
 
 [server]
 server=server.catseyexi.com

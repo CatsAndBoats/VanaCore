@@ -1,4 +1,4 @@
--- VanaCore game data: elements. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the server's element numbering: don't edit,
+-- VanaCore game data: elements. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the server's element numbering: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={id=0,name="none"},

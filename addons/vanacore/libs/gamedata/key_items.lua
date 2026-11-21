@@ -1,4 +1,4 @@
--- VanaCore game data: key_items. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the key item table (ROM/175/35): don't edit,
+-- VanaCore game data: key_items. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the key item table (ROM/175/35): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={id=0,name="-Active Effects",plural="-Active Effects",description="",category=2},

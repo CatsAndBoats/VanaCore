@@ -1010,8 +1010,8 @@ end
 -- frame stayed. No HUD preset is loaded after, so Auto save leaves the one that was as it is.
 -- True Font off too: each area's switch at the end of its font line ([client] menu.font, buttons.font, chat.font... sharp or
 -- game) taken out, which is off (the game's letters; chatfont.cpp read_want), on every page a HUD preset reads, Options'
--- rows too. A line's own reset and a preset leave a switch alone, so Vanilla UI kept True Font on (Josh, 2026-11-10). Not
--- the nameplates' or the damage numbers' ([graphics] nameplates.font, damage.font): theirs stay as they are (Josh).
+-- rows too. A line's own reset and a preset leave a switch alone, so Vanilla UI kept True Font on (2026-11-10). Not
+-- the nameplates' or the damage numbers' ([graphics] nameplates.font, damage.font): theirs stay as they are.
 local function vanilla_ui()
     M.flush()
     use_kind(PRESET_KINDS.hud) -- (its button is on the HUD presets' row: already the kind)
@@ -2895,7 +2895,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     if row.kind == 'subheader' then
         -- a sub-panel's heading (sub_room below the row above, 8 above the next: row_height): its title in capitals, semibold
         -- italic and spaced, in teal (rose for danger), then a tag, a line in the title's colour and its switch
-        -- (a group's heading, Shadows' Advanced Settings, in rose too: asked for in game, Josh 2026-11-09)
+        -- (a group's heading, Shadows' Advanced Settings, in rose too: asked for in game, 2026-11-09)
         local color = (row.danger or row.group) and P.rose or P.teal
         cy = y + sub_room(row, sec) + S(ROW_H) / 2
         local line_end = right
@@ -3189,7 +3189,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     elseif row.kind == 'columns' then
         -- sliders in columns side by side (Lighting's Night: Dark night | Bright night; data.lua), each column its title,
         -- then each slider's name over its track. A column whose dim_if says so is drawn at 40% (the night not picked; 60%
-        -- till Josh asked for fainter, 2026-11-07), still settable, as a greyed sub-panel's rows are
+        -- till fainter was asked for, 2026-11-07), still settable, as a greyed sub-panel's rows are
         local gap = S(28)
         local cw = (right - lx - gap * (#row.columns - 1)) / #row.columns
         for c, col in ipairs(row.columns) do
@@ -3260,7 +3260,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         return h
     elseif row.kind == 'action' and row.big then
         -- a button alone on its line, in the middle of the page: taller, its text semibold in the danger red (Shadows'
-        -- Toggle Advanced Settings; asked for, Josh 2026-11-12). Its row.run only
+        -- Toggle Advanced Settings; asked for, 2026-11-12). Its row.run only
         local bw = M.measure(row.text, fonts.semi, BODY + 1) + S(40)
         if M.button(id, math.floor((lx + right - bw) / 2), y + h / 2, row.text, nil, 'danger', enabled, alpha, 30, bw, fonts.semi, BODY + 1) then
             pcall(row.run)
@@ -3523,7 +3523,7 @@ end
 -- near LuaJIT's 200 locals. Returns the y after.
 M.draw_group = function (page, sec, list, a, b, x, y, w, ctx)
     -- the box from the page's names to its controls' ends (lx to right: draw_row), as its heading's line runs, so it stands
-    -- off the page's edges (it ran to them, the divider and the scrollbar: asked for in game, Josh 2026-11-09); the rows set
+    -- off the page's edges (it ran to them, the divider and the scrollbar: asked for in game, 2026-11-09); the rows set
     -- in so their hover band (4 in from a row's edges: draw_row) stands 6 off the box on every side
     local inset, inset_right = S(LEFT) + S(2), S(RIGHT) + S(2)
     local room = note_width(w - inset - inset_right)
@@ -3536,7 +3536,7 @@ M.draw_group = function (page, sec, list, a, b, x, y, w, ctx)
     local view_top, view_bottom = st.view_top, st.view_bottom
     if view_top == nil or (by + bh >= view_top and by <= view_bottom) then
         local dl = imgui.GetWindowDrawList()
-        -- (darker than the status rows' box: P.side_l, the list of pages' left edge, solid; asked for in game, Josh 2026-11-09)
+        -- (darker than the status rows' box: P.side_l, the list of pages' left edge, solid; asked for in game, 2026-11-09)
         M.fill(dl, bx, by, bw, bh, P.side_l, S(5), 0, 1)
         M.outline(dl, bx, by, bw, bh, P.line, S(5))
     end

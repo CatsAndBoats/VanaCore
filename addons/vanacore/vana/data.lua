@@ -93,7 +93,7 @@ local function colours_line(label, switch, ...)
     return row
 end
 local function dropdown(label, section, key, default, options, restart) local row = choice(label, section, key, default, options, restart); row.dropdown = true; return row end
--- A choice row drawn as a dropdown however few its options (the aspect ratios: no < and > either side, Josh 12 November)
+-- A choice row drawn as a dropdown however few its options (the aspect ratios: no < and > either side, 12 November)
 local function as_dropdown(row) row.dropdown = true; return row end
 -- The aspect-ratio dropdowns' options: `first` (the non-shape ones), then the shapes, narrowest first, under the kind of
 -- screen each is
@@ -272,7 +272,7 @@ local function area_sharp(prefix, follows)
     return value == 'sharp'
 end
 -- An area's True Font switch, at the end of its font line (row.switch: vana.lua draw_font_row; each was a Letters row of
--- Game's and True Font above it till Josh asked for the switch, 2026-11-08): on, `prefix` sharp, off game, read as
+-- Game's and True Font above it till the switch was asked for, 2026-11-08): on, `prefix` sharp, off game, read as
 -- area_sharp has it; `pinned`: a key following this one while unset (the titles the buttons'), set to what it is first so it
 -- stays as it was (as True Font's page's switches do). `section`: a [graphics] key's own (the damage numbers', the
 -- nameplates': no following), the renderer's settings read again. A line's reset leaves it as it is, as a sub-panel's switch;
@@ -1042,7 +1042,7 @@ end
 
 -- A window's Lock and No Pointer Events (vana.layout.flags), icon switches at its row's end (draw.lua M.icon_switches):
 -- each as the last frame had it. None for text and shapes (not an ImGui window), nor with a VanaCore.Core.dll that hasn't
--- vana.layout.flags. Asked by Josh 2026-11-07 (statustimers' icons dragged and their tooltips in the way).
+-- vana.layout.flags. Asked for 2026-11-07 (statustimers' icons dragged and their tooltips in the way).
 function layout.flags_of(w)
     if vana.layout.flags == nil or w.name:find('##objects/', 1, true) ~= nil then
         return nil
@@ -1117,7 +1117,7 @@ end
 
 -- The Layout page: a panel for each addon (or plugin) loaded now with a window, those drawing now first, by name (each a
 -- sub-tab under Addons). The windows of those not loaded now (drawn earlier this session, or saved places none has drawn
--- since the game started) are in one panel, Other, last, a sub-panel for each. Asked for (Josh, 2026-11-10): the list
+-- since the game started) are in one panel, Other, last, a sub-panel for each. Asked for (2026-11-10): the list
 -- under Addons only the addons that are active.
 function layout.rows()
     local rows = {}
@@ -1389,7 +1389,7 @@ local function button_tabs()
                 vana.config.set('client', prefix, on and '1' or '0')
             end
             enable.rebuild = true -- the rows below lock and unlock by it
-            enable.colour = M.P.green -- (light green, name and switch: plain to see, Josh asked 2026-11-07)
+            enable.colour = M.P.green -- (light green, name and switch: plain to see, asked for 2026-11-07)
             group[#group + 1] = enable
         end
         local style = lock(button(choice('Style', 'client', key('style'), 'game', { { 'game', 'Game' }, { 'flat', 'Flat' } })))
@@ -3253,7 +3253,7 @@ local TABS = {
                                end
                                return row
                            end)(dropdown('Resolution', 'ffxi', 'resolution.game', 'auto', resolutions('resolution.game'))),
-                           -- the 3D world's size right under the game's (below UI aspect ratio till asked for here, Josh 2026-11-10)
+                           -- the 3D world's size right under the game's (below UI aspect ratio till asked for here, 2026-11-10)
                            needs_dx((function (row)
                                row.lock_if = dlss_sized
                                row.tip = function ()
@@ -3262,7 +3262,7 @@ local TABS = {
                                return row end)(
                                dropdown('Background resolution', 'graphics', 'background', '3072x3072', background_options()))),
                            (function (row) row.show_if = dlss_sized return row end)(note('Set by DLSS or FSR while on.', 'lock')),
-                           -- the picture's shape and smoothing (under Picture till asked for here, Josh 2026-11-10)
+                           -- the picture's shape and smoothing (under Picture till asked for here, 2026-11-10)
                            as_dropdown(choice('Aspect ratio', 'graphics', 'aspect', 'auto', aspects({ { 'off', "Game's" }, { 'auto', 'Fit the window' } }))),
                            dropdown('UI resolution', 'ffxi', 'resolution.ui', '', resolutions('resolution.ui', 'Same as Resolution')),
                            needs_dx(as_dropdown(choice('UI aspect ratio', 'ui', 'aspect', 'game', aspects({ { 'game', "Game's" }, { 'off', 'Fill the window' } })))),
@@ -3676,7 +3676,7 @@ local TABS = {
                 choice('DEP at start (Mac / CrossOver)', 'client', 'dep', 'auto', { { 'auto', 'Auto' }, { '1', 'On' }, { '0', 'Off' } }, true),
                 -- the FPS counter ([client] fps.*, overlay.cpp); its font is the VanaCore label's too ([client] font.*). A
                 -- sub-panel with its rows in a box (a group, to the VanaCore heading), as Shadows' Advanced Settings is; the
-                -- Game page's last (asked for, Josh 2026-11-10)
+                -- Game page's last (asked for, 2026-11-10)
                 (function ()
                     local sub = inner_sub('FPS Counter Options', nil, 'group')
                     sub.tip = 'The FPS counter in the corner of the screen: whether it shows, where, and its font.'
@@ -3691,7 +3691,7 @@ local TABS = {
                           toggle('Bold', 'client', 'font.bold', true)),
                 toggle('Text outline', 'client', 'font.outline', true),
                 header('VanaCore'),
-                -- (first, and the console window's switches on Developer: asked for, Josh 2026-11-10)
+                -- (first, and the console window's switches on Developer: asked for, 2026-11-10)
                 subheader('Addon windows'),
                 imgui_font_row(),
                 subheader('Screenshots'),
@@ -3869,7 +3869,7 @@ local TABS = {
             }) do
                 rows[#rows + 1] = row
             end
-            -- every heading on Developer in red (asked for, Josh 2026-11-10): back from the end to its header, the last
+            -- every heading on Developer in red (asked for, 2026-11-10): back from the end to its header, the last
             for i = #rows, 1, -1 do
                 if rows[i].kind == 'header' then
                     break
@@ -3900,7 +3900,7 @@ local TABS = {
             scenery_detail.rebuild = true -- the Farther slider locks and unlocks by it
             local detail_range = free(slider('Detail kept farther by', 'graphics', 'lod.range', 2, 1, 10, 0.5, '%.1fx'), 0.25, 10)
             detail_range.lock_if = function () return (vana.config.get('graphics', 'lod') or 'game'):lower() ~= 'range' end
-            -- Lighting's Night (Josh, 2026-11-07: Dark night and Bright night "kinda conflict"): Off (the game's own night), Dark
+            -- Lighting's Night (2026-11-07: Dark night and Bright night "kinda conflict"): Off (the game's own night), Dark
             -- or Bright picked on one heading (vana.lua: a sub-panel's modes), their sliders side by side under it, the one not
             -- picked at 60% (vana.lua: columns). Dark night (gfx/d3d8.c night_light, gfx_d3d12.c moon_grade): the world's ambient
             -- and moon light dimmed outdoors through the night, the picture drawn to a cool blue-grey. Bright night
@@ -4093,7 +4093,7 @@ local TABS = {
                 toggle('Fill in far ground', 'graphics', 'drawdistance.fill', false),
                 toggle('Draw the whole zone in view', 'graphics', 'drawdistance.full', false),
                 toggle('Off in large open zones', 'graphics', 'drawdistance.large_off', true),
-                -- the zone's draws of one mesh sent together (gfx_d3d12_batch.h): on by default (Josh, 2026-11-12, Zi'Tah)
+                -- the zone's draws of one mesh sent together (gfx_d3d12_batch.h): on by default (2026-11-12, Zi'Tah)
                 needs_dx12(toggle('Batch repeated scenery', FX, 'batch', true)),
                 -- far scenery hidden behind what's drawn left undrawn (occlusion.cpp, gfx_d3d12_occl.h); Count only logs it
                 needs_dx12(choice('Skip hidden scenery', 'graphics', 'occl', '1', { { '0', 'Off' }, { '1', 'On' }, { '2', 'Count only' } })),
@@ -4111,7 +4111,7 @@ local TABS = {
                 effect('Shadows', 'sun', 0.6),
                 note("The game's own shadows are turned off while these are on, on purpose: they would draw twice. "
                      .. "Turning these off leaves the game's off: Config > Shadows puts them back."),
-                -- what most players set (Josh, 2026-11-05: "shadows is getting mad complicated"); the rest under Advanced Settings.
+                -- what most players set (2026-11-05: "shadows is getting mad complicated"); the rest under Advanced Settings.
                 -- By day and by night apart (a player, 2026-11-06): the night's pair go to the renderer in the day's place from
                 -- 18:00 to 06:00 outdoors (gfx_dispatch.c gfx_sun_hours); the day's Strength at 0 is no shadows at night either
                 subheader('Daytime', '06:00 to 18:00'),
@@ -4130,7 +4130,7 @@ local TABS = {
                 slider('Softness', FX, 'sun_soft', 0, 0, 0.2, 0.005, '%.3f'),
                 slider('Underside Shadows', FX, 'sun_face', 1, 0, 1, 0.05),
                 -- Advanced Settings: its rows and its sub-panels (inner_sub ... 'in') in a box, hidden until the button over
-                -- it shows it (Josh, 2026-11-12; kept in the window's settings.lua: vana.lua M.toggle_group)
+                -- it shows it (2026-11-12; kept in the window's settings.lua: vana.lua M.toggle_group)
                 { kind = 'action', label = 'Toggle Advanced Settings', text = 'Toggle Advanced Settings', big = true,
                   tip = 'Shows or hides the shadows\' fine-tuning. Most players never need it.',
                   run = function () M.toggle_group('shadows.advanced') end },
@@ -4141,7 +4141,7 @@ local TABS = {
                         .. 'and how often they\'re redrawn. Most players never need these.'
                     return sub
                 end)(),
-                -- two sub-panels only (Josh, 2026-11-12: "a lot of subcategories"): the shadows' own rows under the heading
+                -- two sub-panels only (2026-11-12: "a lot of subcategories"): the shadows' own rows under the heading
                 -- itself (Close-up and Look till then), Sun and weather (Conditions and Place the sun), GPU Redraw Options
                 needs_dx12(toggle('Plants cast shadows', FX, 'sun_plants', true)),
                 needs_dx12(resets(toggle('Keep plant shadows still', FX, 'sun_plants_still', true))),
@@ -4183,15 +4183,15 @@ local TABS = {
                 slider('Hold far shadows (frames)', FX, 'sun_far_hold', 3, 0, 15, 1, '%d'),
                 needs_dx12(slider('Hold near shadows (frames)', FX, 'sun_near_hold', 30, 0, 600, 10, '%d')),
                 needs_dx12(toggle('Spread redraws over 4 frames', FX, 'sun_roll', false)),
-                -- (Day & Night till 2026-11-07, when Josh had it named Lighting and put under Shadows)
+                -- (Day & Night till 2026-11-07, when it was named Lighting and put under Shadows)
                 header('Lighting'),
                 -- the least ambient light everything the game lights has, day and night, indoors and out (gfx/d3d8_night.h):
-                -- Windower's game_forceambientlight, Ashita's /ambient; 1 lights everything full. At the top (Josh, 2026-11-07)
+                -- Windower's game_forceambientlight, Ashita's /ambient; 1 lights everything full. At the top (2026-11-07)
                 effect_sub('Force ambient light', 'ambient_force', 0, 0.5),
                 slider('Level', FX, 'ambient_force', 0, 0, 1, 0.05),
                 -- the sun's light raised through the day, outdoors (gfx/d3d8_sun.c d3d8_brighten: 1 + it, 06:00 to 18:00): what
                 -- faces the sun brighter up to full light, the shade left; with Bloom's threshold down and the grade's Whites
-                -- up, a blown-out day (Josh, 2026-11-12)
+                -- up, a blown-out day (2026-11-12)
                 effect_sub('Sun strength', 'day_bright', 0, 1, 'Outdoors by day'),
                 slider('Strength', FX, 'day_bright', 0, 0, 3, 0.05),
                 -- Night: Off, Dark or Bright on its heading, their sliders side by side under it (see `night` above)
@@ -4594,7 +4594,7 @@ local TABS = {
                 (function (row) row.preview = function (value) vana.camera.preview(row.key, value) end return row end)(
                     free(slider('Vertical position', 'camera', 'offset.y', 0, -30, 30, 1, '%d%%'), -45, 45)),
                 header('Damage Numbers'),
-                -- (cyan, name and switch, and first: Josh asked 2026-11-10)
+                -- (cyan, name and switch, and first: asked for 2026-11-10)
                 (function (row) row.colour = M.P.cyan row.lock_if = function () return (vana.config.get('graphics', 'damage.font') or '') ~= 'sharp' end return row end)(
                     toggle('Show preview', 'graphics', 'damage.preview', false)),
                 free(slider('Time on screen', 'graphics', 'damage.duration', 2.5, 1, 6, 0.1, '%.1f s'), 0.5, 10),
@@ -5477,7 +5477,7 @@ local TABS = {
                 -- Disable True Font ([client] truefont.disable=1), in red: every interface area's off at once, wherever its own
                 -- switch is, each area's settings kept; the rest of the page locked meanwhile. Menus & Lists off kept on the
                 -- areas following it, Buttons and Equipment's among them, whose switches are on Interface (reported in game
-                -- 2026-11-08). Not the nameplates or damage numbers: they keep their own switches (Josh, 2026-11-09)
+                -- 2026-11-08). Not the nameplates or damage numbers: they keep their own switches (2026-11-09)
                 (function (row) row.danger = true return row end)(subheader('Disable True Font', nil, {
                     get = function () return get('client', 'truefont.disable') == '1' end,
                     set = function (on) vana.config.set('client', 'truefont.disable', on and '1' or '0') end,
@@ -5516,7 +5516,7 @@ local TABS = {
             if #added == 0 then
                 rows[#rows + 1] = info('None added yet', function () return '' end)
             end
-            -- an area of the interface's text on one line under Fonts (each was a sub-panel of two rows till Josh asked for
+            -- an area of the interface's text on one line under Fonts (each was a sub-panel of two rows till asked for
             -- one line each, 2026-11-08): its name, its font (the default or its own), italic, bold, uppercase, size and
             -- outline (area_font), its switch at the end (off: the line greyed, still settable); `follows` a key, each of
             -- them that area's until set
@@ -5532,7 +5532,7 @@ local TABS = {
             area('General', 'menu.font', 15, nil,
                  'The text in most menus and lists: Config, the Magic and Abilities lists, the skill and job menus, quests and missions, Search, Linkshell, the Mog House, the macros\' names.\n'
                  .. 'Each area here that isn\'t set yet follows its switch.')
-            -- (the Merit Points menu's text, General's until Josh asked for it apart, 2026-11-08: chatfont.cpp kListWindows;
+            -- (the Merit Points menu's text, General's until it was asked for apart, 2026-11-08: chatfont.cpp kListWindows;
             -- each part General's until set, as VanaCore reads it, key_for)
             area('Menu Lists', 'lists.font', 15, 'menu.font',
                  'The Merit Points menu\'s lists: its categories, the merits and their points box. Their buttons stay Main Commands\', their numbers Labels & Stats\'.\n'
@@ -5550,8 +5550,8 @@ local TABS = {
                  'The Current Gil box wherever it shows (beside Equipment, Items, a trade, the delivery box): its title and amount. Only the settings here change it.')
             area('Status Timers', 'buffs.font', 13, true, -- (the status icons' timers, each centred under its icon; Interface > Status Icons too)
                  'The timers under your status icons (29m, 3h), each centred under its icon. Also on Interface > Status Icons.')
-            -- (the Target window's title and name are on Game Options > Target and HUD > Target Window, not here: Josh, 2026-11-07)
-            -- (the Equipment window's two, slot names and stats, are on Interface > Equipment alone: Josh, 2026-11-06)
+            -- (the Target window's title and name are on Game Options > Target and HUD > Target Window, not here: 2026-11-07)
+            -- (the Equipment window's two, slot names and stats, are on Interface > Equipment alone: 2026-11-06)
             for i = 3, #rows do -- (all but the heading and Disable True Font locked while it's on)
                 local was = rows[i].lock_if
                 rows[i].lock_if = function () return get('client', 'truefont.disable') == '1' or (was ~= nil and was()) end
@@ -5648,7 +5648,7 @@ local TABS = {
                 space.label = ''
                 return tips_line('Space above', { space })
             end
-            -- the Single Inventory Number's True Font (always True Font's: Josh, 2026-11-09), the line every True Font area has
+            -- the Single Inventory Number's True Font (always True Font's: 2026-11-09), the line every True Font area has
             -- (area_font, [client] items.count.font.*, itemcount.cpp) but its switch: its own font or the default font, its size
             -- in the interface's pixels (0 the count left out; unset, an older items.count.size's percent of 16, else 24),
             -- italic, bold, outline (no capitals: digits); locked while Single Inventory Number is off
@@ -6235,7 +6235,7 @@ local TABS = {
                     return row
                 end)(),
                 -- the player's name in its own True Font, drawn whole (statuswindow_name.h); off, the menu font's big name (the
-                -- Name row's Large / Game until 2026-11-08: True Font made it redundant, Josh)
+                -- Name row's Large / Game until 2026-11-08: True Font made it redundant)
                 moved((function (row) row.label = 'Name' return row end)(area_font('status.name.font', 16, true)), 'status'),
                 moved(dropdown('Jobs', 'client', 'status.jobs', 'full', { { 'full', 'Full: Level 75 SAM' }, { 'simple', 'Simple: 75 SAM / 37 WHM' }, { 'short', 'Short: Lv 75 SAM' }, { 'long', 'Long: Lv 75 Samurai' }, { 'game', 'Game: Lv75 Samurai' } }), 'status'),
                 moved(toggle('Show item level (ILv / Su)', 'client', 'status.itemlevel', true), 'status'),
@@ -6267,7 +6267,7 @@ local TABS = {
                 -- its titles (Profile, Monstrosity) their own True Font, the text's keys until set (chatfont.cpp key_for)
                 subheader('Profile titles'),
                 area_font('profile.title.font', 11, 'profile.font'),
-                -- Status > Craft Skills: its levels' "(60)" made "60" when off (profilewin.cpp sync_brackets, Josh 2026-11-09)
+                -- Status > Craft Skills: its levels' "(60)" made "60" when off (profilewin.cpp sync_brackets, 2026-11-09)
                 subheader('Craft Skills'),
                 toggle('Brackets around levels', 'client', 'craft.brackets', true),
                 -- what the Network window reads (the HUD Manager's Network Window had it until 2026-11-05; its hide, frame,
@@ -7453,7 +7453,7 @@ end)()
 
 M.TABS, M.TIPS, M.tab_named = TABS, TIPS, tab_named
 -- the effects' debug views, picked in the Debug window (debug.lua), in no panel or preset; never saved (ini.cpp session_only).
--- By category, each A-Z (asked for, Josh 2026-11-18)
+-- By category, each A-Z (asked for, 2026-11-18)
 M.DEBUG_VIEW = needs_dx(choice('Debug view', FX, 'debug', '0', {
     { '0', 'Off' },
     { header = 'Effects' },

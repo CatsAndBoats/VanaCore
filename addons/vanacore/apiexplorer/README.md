@@ -34,8 +34,8 @@ your own addon.
   - an entry in purple is one this VanaCore has that the docs don't describe yet: it's listed with its name only;
   - `vana.imgui` lists every ImGui function VanaCore has, by ImGui's own names.
 - The descriptions come from the addon docs (`docs/addons/15-api-reference.md`, `02-events.md` and the topic pages) through
-  `reference.lua`, which `conflux/tools/gen_apiexplorer_reference.py` makes: when the docs change, run it again
-  (`python conflux\tools\gen_apiexplorer_reference.py`) rather than editing `reference.lua`.
+  `reference.lua`, which `tools/gen_apiexplorer_reference.py` makes: when the docs change, run it again
+  (`python tools\gen_apiexplorer_reference.py`) rather than editing `reference.lua`.
 
 ## Snippets
 

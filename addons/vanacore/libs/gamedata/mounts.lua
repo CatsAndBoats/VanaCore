@@ -1,4 +1,4 @@
--- VanaCore game data: mounts. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from the mount tables (ROM/351/84, ROM/351/85): don't edit,
+-- VanaCore game data: mounts. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from the mount tables (ROM/351/84, ROM/351/85): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={id=0,name="Chocobo",key_item=86,description="Calls forth your personal chocobo."},

@@ -1,4 +1,4 @@
--- VanaCore game data: zones. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/zone_settings.sql: don't edit,
+-- VanaCore game data: zones. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/zone_settings.sql: don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [0]={id=0,name="unknown",server_name="unknown",type=1,type_names={"city"},music={day=0,night=0,battle_solo=0,battle_party=0},restriction=0,tax=0,misc=4128},

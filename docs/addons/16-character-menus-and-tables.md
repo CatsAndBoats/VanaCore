@@ -151,7 +151,7 @@ Twenty tables: `spells`, `abilities`, `weapon_skills`, `status_effects`, `zones`
 
 ### Where they come from
 
-Nothing in these is read from the running game. They're generated, by `conflux/tools/gen_gamedata.py`, from the two
+Nothing in these is read from the running game. They're generated, by `tools/gen_gamedata.py` in CatsEyeXI's [CatsAndBoats/dats](https://github.com/CatsAndBoats/dats) repository, from the two
 places the facts live:
 
 - **The game's DATs**, for what the client shows: names, descriptions, help texts, the item records (level, slots,
@@ -182,10 +182,11 @@ Text is UTF-8 as the client shows it, with the element icons as `{Fire}`, `{Ice}
 the chat, pass it through `vana.encoding.to_shift_jis` first. Times are seconds where the server keeps milliseconds
 (`cast_time`, `recast`); an item's own `cast_time` and delays are the client's numbers as they are.
 
-To regenerate after a DAT or server change, with xi-tools' Python (its `.env` names the game install):
+To regenerate after a DAT or server change, from the dats repository with xi-tools' Python (its `.env` names the game
+install):
 
 ```
-D:\xi-tools\.venv\Scripts\python.exe conflux\tools\gen_gamedata.py [--only spells,items]
+<xi-tools>\.venv\Scripts\python.exe tools\gen_gamedata.py --out <VanaCore>\addons\vanacore\libs\gamedata [--only spells,items]
 ```
 
 ## 4. The API Explorer
@@ -208,7 +209,7 @@ Every table and function of the API, with what it takes, what it returns and wha
   entry) puts code there that counts the events and shows what the last one handed its handler; **Stop listening** (or
   another Run) ends it. The `d3d_*` draw events, `load` and `unload` have no Listen.
 - The descriptions are this series' ([15. API reference](15-api-reference.md), [2. Events](02-events.md)), made into
-  the addon's `reference.lua` by `conflux\tools\gen_apiexplorer_reference.py`. What's listed is read from the running
+  the addon's `reference.lua` by `tools\gen_apiexplorer_reference.py`. What's listed is read from the running
   VanaCore's own `vana` table: an entry in red is one the docs name that this VanaCore hasn't (an older one); an entry in
   purple is one this VanaCore has that the docs don't describe yet. `vana.imgui` lists every ImGui function by ImGui's
   own names ([6. Drawing](06-drawing.md#whats-there)).

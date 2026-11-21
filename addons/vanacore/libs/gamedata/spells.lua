@@ -1,4 +1,4 @@
--- VanaCore game data: spells. Generated 2026-10-25 by conflux/tools/gen_gamedata.py from sql/spell_list.sql, the spell records and names (ROM/118/114, ROM/181/73, ROM/181/75): don't edit,
+-- VanaCore game data: spells. Generated 2026-10-25 by CatsEyeXI's dats tools/gen_gamedata.py from sql/spell_list.sql, the spell records and names (ROM/118/114, ROM/181/73, ROM/181/75): don't edit,
 -- regenerate. vana.gamedata loads it (docs/addons/04-game-data.md).
 return {
 [1]={id=1,name="Cure",description="Restores target's HP. Afflatus Solace: Grants the effect of \"Stoneskin.\"",type="white",family=1,skill=33,skill_name="healing_magic",element="light",mp=8,cast_time=2,recast=5,range=200,radius=0,aoe=4,targets=95,target_names={"self","player_party","enemy","player_alliance","player","npc"},jobs={[3]=1,[5]=3,[7]=5,[20]=5},requirements=0,message=7,magic_burst_message=7,animation=1,animation_time=2000,base=0,multiplier=1,ce=0,ve=0,icon=6,menu_index=1},
