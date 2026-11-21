@@ -797,6 +797,8 @@ static struct
     uint32_t w, h, frame;
 } g_water_late;
 static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy, uint32_t w, uint32_t h, const GfxScene* s);
+static void water_mirror_bind(GfxDraw* d); /* d3d8_water_mirror.h: the world mirrored in the water, on one of the pass's draws */
+static int g_wmirror_lost; /* ... the device was lost since its mirror was made: the back end's texture went with it */
 
 /* A draw kept for the pass reads the game's textures and buffers as they were when it was kept; the game may release them
  * before the scene ends (at a zone change, a settings reload: the kept draw's vertex buffer or shimmer texture gone), and
@@ -952,6 +954,7 @@ static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy,
     float* tn = d->u.texm[6];
     tn[4] = s->proj[10], tn[5] = s->proj[14], tn[6] = s->proj[11] < 0.0f ? -1.0f : 1.0f, tn[7] = minz;
     tn[8] = maxz - minz, tn[9] = (float)w, tn[10] = (float)h;
+    water_mirror_bind(d);
 }
 
 /* --- the game's water baked into its ground ------------------------------------------------------------------------ */
@@ -1121,6 +1124,7 @@ static void water_device_lost(void)
 {
     gfx_buf_destroy(g_bake_buf), g_bake_buf = NULL, g_bake_dirty = 1;
     ocean_lost();
+    g_wmirror_lost = 1;
 }
 
 /* the CPU row of index slot i of the draw (its own row for a draw without indices) */
@@ -1422,6 +1426,7 @@ static void water_ground_pass(const GfxScene* s, int copies, GfxTex* colour_copy
 }
 
 #include "d3d8_water_sea.h" /* the sea drawn on to the horizon (water_horizon_pass) */
+#include "d3d8_water_mirror.h" /* the world mirrored in the water (water_mirror, water_mirror_bind; water.mirror) */
 
 /* The pass: the frame's kept draws into the scene's target (color, with its depth), each over the scene as it is - the game's
  * world, VanaCore's grass - from scene_finish once the world is done, before the scene effects. From the ones the pass can't
@@ -1441,7 +1446,10 @@ static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s)
     /* the sun's shadows off the water (water.shadows 0): the depth copy is the scene before the water, which the effects tell it by */
     g_scene.s.water_noshadow = copies && !g_water_set.shadows ? 1u : 0u;
     if (copies) /* kept for a water draw that comes after the scene is done (water_keep) */
+    {
         g_water_late.c = colour_copy, g_water_late.d = depth_copy, g_water_late.w = w, g_water_late.h = h, g_water_late.frame = g_scene.frame;
+        water_mirror(color, s, horizon, sea_y); /* the world mirrored in the nearest water's level, for the draws below (water_pass_draw) */
+    }
     gfx_set_targets(color, 0, 0, depth);
     for (uint32_t i = 0; i < g_water_kept_n; ++i)
     {

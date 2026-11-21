@@ -154,6 +154,10 @@ typedef struct WaterSettings
     float relief;   /* water.relief: the wavelets lit as slopes, the refraction with them, 0 flat */
     int shadows;    /* water.shadows: the sun's shadows on the pass's water; 0 (the default) none (water_pass: GfxScene.water_noshadow) */
     int sea;        /* water.sea: the game's sea tiles dropped and VanaCore's one sea plane drawn in their place (d3d8_water_sea.h) */
+    /* the world mirrored in the water (d3d8_water_mirror.h): how strongly (water.mirror, 0 off), the mirror's size as a share of
+     * the scene's each way (water.mirror.scale), how far from the camera what's mirrored reaches, in yalms (water.mirror.reach,
+     * 0 all of it), and how far the waves push it about (water.mirror.waves) */
+    float mirror, mirror_scale, mirror_reach, mirror_waves;
 } WaterSettings;
 void d3d8_set_water(const WaterSettings* settings);
 /* The zone's floors as the grass gets them (grass_set_floors): where the collision's water floors lie, so the ground's triangles

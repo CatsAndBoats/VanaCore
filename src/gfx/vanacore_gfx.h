@@ -357,6 +357,9 @@ typedef struct VanaWater
     float relief;   /* water.relief: the wavelets lit as slopes */
     int shadows;    /* water.shadows: the sun's shadows fall on VanaCore's water (0, the default: none) */
     int sea;        /* water.sea: VanaCore's own sea plane in place of the game's sea tiles (1, the default) */
+    /* the world mirrored in the water: its strength (water.mirror, 0 off), its size as a share of the scene's (water.mirror.scale),
+     * how far what's mirrored reaches in yalms (water.mirror.reach, 0 all) and how far the waves push it about (water.mirror.waves) */
+    float mirror, mirror_scale, mirror_reach, mirror_waves;
 } VanaWater;
 void vanacore_gfx_set_water(const VanaWater* settings);
 /* The game's water models (from XI on Anything): 1 while the calling thread loads a map model under one of a zone DAT's

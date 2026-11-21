@@ -1743,8 +1743,11 @@ typedef struct Caster
     uint8_t dead;                  /* a buffer or texture it draws from went, or changed: not drawn */
     uint8_t has_clip0;             /* clip0 is known (a fixed one: gfx_draw_clip0) */
     uint8_t own;                   /* vertices or indices of a buffer the game rewrites, as drawn, in the ring (GFX_CASTER_COPY_MOST) */
+    uint8_t cull;                  /* its D3DCULL, and whether srv and samp hold every stage's (not an alpha test's alone): */
+    uint8_t textured;              /* for the water's mirror, which draws it again in colour (gfx_d3d11_mirror.h) */
     float clip0[4];                /* its first vertex's clip-space position: where it stands (sun_cache_update) */
 } Caster;
+static int mirror_wanted(void); /* gfx_d3d11_mirror.h: the water asks for the mirror, so the casters are kept for it too */
 
 static Caster* g_casters;
 static uint32_t g_ncasters, g_casters_cap;
@@ -1787,6 +1790,7 @@ static Caster* caster_new(const GfxDraw* d)
     c->lib.vs = d->vs, c->lib.fs = d->fs;
     c->vs = gfx_tokens_kept(d->vs.prog, 0, d->vs_tokens), c->ps = gfx_tokens_kept(d->fs.prog, 1, d->ps_tokens);
     c->fixed = d->prim != GFX_TRIANGLEFAN && (!d->indices || d->ibuf);
+    c->cull = d->cull;
     c->dead = 1; /* until it is drawn */
     return c;
 }
@@ -2002,7 +2006,8 @@ static void draw_main(const GfxDraw* d)
      * is kept for the sun's shadow maps */
     if (d->caster && !g_rt_face && !g_rt_level && ds)
         g_rt->depth_world = ds;
-    Caster* rec = d->caster && g_fxs.fx != 0.0f && g_fxs.sun > 0.0f ? caster_new(d) : NULL;
+    const int mirrored = mirror_wanted(); /* the water's mirror draws the casters again, in colour */
+    Caster* rec = d->caster && ((g_fxs.fx != 0.0f && g_fxs.sun > 0.0f) || mirrored) ? caster_new(d) : NULL;
 
     /* the vertex streams: a static buffer's own view, or this draw's bytes in the ring's (all of them in
      * one write). A caster's from a buffer the game rewrites between draws go in that write too, as they are
@@ -2082,8 +2087,9 @@ static void draw_main(const GfxDraw* d)
         rec->uoff = uoff, rec->ugen = ncopy ? g_cring.gen - 1u : g_cring.gen, rec->need = (uint32_t)need;
         rec->topo = (uint8_t)topology(d->prim), rec->n = vertex_count(d->prim, d->count), rec->vstart = d->vertex_start;
         rec->ifmt = DXGI_FORMAT_UNKNOWN;
-        if (alpha_tested(&d->fs))
+        if (alpha_tested(&d->fs) || mirrored)
         {
+            rec->textured = (uint8_t)mirrored;
             memcpy(rec->srv, tex, sizeof tex);
             memcpy(rec->samp, samp, sizeof samp);
             for (int i = 0; i < 8; ++i)
@@ -4048,6 +4054,7 @@ static uint32_t sun_draw(SunMap* m, const GfxScene* s, const float* invP, const 
 }
 
 #include "gfx_d3d11_smooth.h" /* vn_replay: the scene's own smooth normals for the sun's shading (sun_smooth) */
+#include "gfx_d3d11_mirror.h" /* gfx_scene_mirror: the world mirrored in the water ([graphics] water.mirror) */
 
 /* VanaCore's zone lines into the effects' uniforms: the ZL_MAX nearest the camera (cam) within ZL_FAR, each its
  * centre and axes in view space, its half sizes along them; none without the camera */

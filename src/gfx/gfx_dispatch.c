@@ -351,6 +351,11 @@ int gfx_scene_snapshot(GfxTex* color, GfxTex** colour_copy, GfxTex** depth_copy,
     quads_flush();
     return g_backend->scene_snapshot(color, colour_copy, depth_copy, w, h);
 }
+GfxTex* gfx_scene_mirror(const GfxTex* color, const GfxScene* s, float level, float scale, float reach)
+{
+    quads_flush();
+    return g_backend->scene_mirror(color, s, level, scale, reach);
+}
 void gfx_scene_floors(GfxTex* id, GfxTex* depth, int state)
 {
     quads_flush();

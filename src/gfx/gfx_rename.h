@@ -28,6 +28,7 @@
 #define gfx_scene_done GFX_CAT(GFX_PREFIX, _scene_done)
 #define gfx_scene_world_depth GFX_CAT(GFX_PREFIX, _scene_world_depth)
 #define gfx_scene_snapshot GFX_CAT(GFX_PREFIX, _scene_snapshot)
+#define gfx_scene_mirror GFX_CAT(GFX_PREFIX, _scene_mirror)
 #define gfx_scene_floors GFX_CAT(GFX_PREFIX, _scene_floors)
 #define gfx_scene_floors_wanted GFX_CAT(GFX_PREFIX, _scene_floors_wanted)
 #define gfx_scene_rain_mask GFX_CAT(GFX_PREFIX, _scene_rain_mask)

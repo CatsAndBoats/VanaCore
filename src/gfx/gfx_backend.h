@@ -46,6 +46,8 @@
     X(void, scene_world_depth, (GfxTex * depth), (depth))                                                              \
     X(int, scene_snapshot, (GfxTex * color, GfxTex * *colour_copy, GfxTex * *depth_copy, uint32_t * w, uint32_t * h),    \
         (color, colour_copy, depth_copy, w, h))                                                                        \
+    X(GfxTex*, scene_mirror, (const GfxTex* color, const GfxScene* s, float level, float scale, float reach),          \
+        (color, s, level, scale, reach))                                                                               \
     X(void, scene_floors, (GfxTex * id, GfxTex * depth, int state), (id, depth, state))                                \
     X(int, scene_floors_wanted, (void), ())                                                                            \
     X(void, scene_rain_mask, (GfxTex * mask, float wet, float reflect, float puddles), (mask, wet, reflect, puddles))  \

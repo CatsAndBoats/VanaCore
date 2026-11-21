@@ -50,6 +50,13 @@ static void read_water(When when)
     water.relief = number(L"water.relief", 1.0f, 0.0f, 3.0f);     // the wavelets lit as slopes, the refraction with them
     water.sea = flag(L"water.sea", true) ? 1 : 0;                // the game's sea tiles replaced by VanaCore's one sea plane
     water.shadows = flag(L"water.shadows", false) ? 1 : 0;        // the sun's shadows on the water (off: none fall on it)
+    // the world mirrored in the water (d3d8_water_mirror.h): water.mirror its strength (0 off), water.mirror.scale the mirror's size
+    // as a share of the scene's each way, water.mirror.reach how far from the camera what's mirrored reaches (yalms, 0 all of it),
+    // water.mirror.waves how far the waves push it about
+    water.mirror = number(L"water.mirror", 1.0f, 0.0f, 2.0f);
+    water.mirror_scale = number(L"water.mirror.scale", 0.5f, 0.25f, 1.0f);
+    water.mirror_reach = number(L"water.mirror.reach", 300.0f, 0.0f, 2000.0f);
+    water.mirror_waves = number(L"water.mirror.waves", 1.0f, 0.0f, 4.0f);
     water::set_wanted(water.detect != 0 || water.view != 0 || flag(L"water.log", false)); // the game's model loading is hooked once something wants its water
     static int said_detect = 0;
     if (water.detect != said_detect && when != When::Quiet)

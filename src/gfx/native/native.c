@@ -778,7 +778,8 @@ void vanacore_gfx_set_water(const VanaWater* in)
 {
     WaterSettings s = { in->enabled, in->waves, in->speed, in->size, in->reflection, in->glint, in->brightness, in->colour,
         in->shallowness, in->turbulence, in->direction, in->glint_size, in->has_tint, in->tint, in->detect, in->view, in->pass,
-        in->clarity, in->refraction, in->shore, in->foam, in->ripples, in->ripple_size, in->log, in->probe, in->horizon, in->falls, in->caustics, in->relief, in->shadows, in->sea };
+        in->clarity, in->refraction, in->shore, in->foam, in->ripples, in->ripple_size, in->log, in->probe, in->horizon, in->falls, in->caustics, in->relief, in->shadows, in->sea,
+        in->mirror, in->mirror_scale, in->mirror_reach, in->mirror_waves };
     d3d8_set_water(&s);
 }
 int vanacore_gfx_water_loading(int on) { return d3d8_water_loading(on); }

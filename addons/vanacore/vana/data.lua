@@ -2026,6 +2026,10 @@ TIPS.rows = {
     ['graphics.water.reflection'] = 'How much of the sky shows in the water.',
     ['graphics.water.glint'] = 'The sparkle of the sun and moon on the water.',
     ['graphics.water.glint.size'] = 'How big the sparkles are.',
+    ['graphics.water.mirror'] = 'How strongly the world around the water is mirrored in it: the shore, trees, walls and cliffs. 0 is off. Needs the water pass.',
+    ['graphics.water.mirror.scale'] = 'How sharp the mirrored world is: its size as a share of the picture. Lower is softer and faster.',
+    ['graphics.water.mirror.reach'] = 'How far from the camera things are still mirrored, in yalms. 0 mirrors everything drawn. Lower is faster.',
+    ['graphics.water.mirror.waves'] = 'How much the waves break up the mirrored world. 0 is a still mirror.',
     -- Mass grass
     ['graphics.grass.radius'] = 'How far from you grass is drawn.',
     ['graphics.grass.density'] = 'How thickly the grass grows.',
@@ -4377,6 +4381,11 @@ local TABS = {
                 needs_dx(slider('Sky reflection', 'graphics', 'water.reflection', 1, 0, 2, 0.05)),
                 needs_dx(slider('Sun and moon glint', 'graphics', 'water.glint', 1, 0, 3, 0.05)),
                 needs_dx(slider('Glint size', 'graphics', 'water.glint.size', 1, 0.2, 4, 0.05)),
+                needs_dx(slider('World mirror', 'graphics', 'water.mirror', 1, 0, 2, 0.05)),
+                note("The shore, trees, walls and cliffs mirrored in the water, upside down and broken up by the waves, and the sky as it is (clouds, a dusk's colours), where the water showed two sky colours alone. One level of water at a time: the lake, pond or sea nearest the camera. 0 is off. Needs the water pass."),
+                needs_dx(slider('Mirror detail', 'graphics', 'water.mirror.scale', 0.5, 0.25, 1, 0.05)),
+                needs_dx(slider('Mirror reach', 'graphics', 'water.mirror.reach', 300, 0, 2000, 10, '%d')),
+                needs_dx(slider('Mirror ripple', 'graphics', 'water.mirror.waves', 1, 0, 4, 0.05)),
                 -- Mass Grass (src/gfx/grass.c): tufts and flowers scattered on the zone's grass-textured ground round the player;
                 -- shown as Game Options' last sub-tab since 2026-11-06, it was the Experimental page's (vana.lua MOVED_PANELS)
                 needs_dx({ kind = 'header', text = 'Mass Grass', section = 'graphics', key = 'grass',

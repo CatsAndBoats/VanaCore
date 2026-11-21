@@ -100,7 +100,9 @@ typedef struct GfxVsKey
                          * scene effects' light setting); the vertex function passes the normal on */
     uint8_t shadow;     /* drawn again from the sun (the back end's shadow map): the position the
                          * function makes goes through the matrix in buffer 5; 2, fading out of the map
-                         * (only a share of its texels kept, the share in the same buffer: sun_f) */
+                         * (only a share of its texels kept, the share in the same buffer: sun_f); 3
+                         * (GFX_VS_MIRROR), drawn again for the water's mirror (gfx_scene_mirror): its position
+                         * through that matrix, its colour its own */
     uint8_t centered;   /* XYZRHW drawn with today's pixel centres, not D3D8's: a render target copied at another
                          * size, which D3D8's moved half a texel (d3d8.c build_draw) */
     uint8_t cpos;       /* a vertex shader also passes its clip-space position on (VOut.cp): a pixel shader's normal map
@@ -113,6 +115,8 @@ typedef struct GfxVsKey
                          * piece's transforms (GfxInst) in stream inst - 1, one the draw doesn't read, by SV_InstanceID. In the
                          * byte the struct had spare (its size is the same) */
 } GfxVsKey;
+
+#define GFX_VS_MIRROR 3 /* GfxVsKey.shadow: the water's mirror */
 
 /* GfxVsKey.motion: where the position the frame before comes from - the low bits: GFX_MO_SAME (the vertices are the
  * frame before's, only the matrix moved) or 1 + the stream (t0..t3) the frame before's positions were put in, float3
@@ -505,6 +509,14 @@ void gfx_scene_world_depth(GfxTex* depth);
  * the target itself. The back end keeps the two (made again at another size or format); w and h are the target's size. 0 when
  * there is nothing to copy (no device, a target not drawn with a depth of its own size): the water is then drawn without them. */
 int gfx_scene_snapshot(GfxTex* color, GfxTex** colour_copy, GfxTex** depth_copy, uint32_t* w, uint32_t* h);
+/* The world mirrored in a level of water, for VanaCore's water pass (d3d8_water_mirror.h): this frame's opaque world draws, as
+ * the back end keeps them for the sun's maps (its casters), drawn again from the scene's camera mirrored about the level plane
+ * y = level (the world's up is -y) into a target `scale` times the scene's viewport each way: what stands above the level alone
+ * (the plane is the pass's near plane), nothing farther from the camera than `reach` (0: all of it). The back end keeps the
+ * target (made again at another size); its alpha is 0 where the world was drawn and 1 where nothing was (the sky's place). NULL
+ * when there is none to give (no device, no casters kept yet: the first call asks for them from the next frame on, and each call
+ * keeps them kept for a few frames more). */
+GfxTex* gfx_scene_mirror(const GfxTex* color, const GfxScene* s, float level, float scale, float reach);
 /* The zone's floors drawn this frame as a layer of their own (floors.c), with the scene's camera, the viewport's size: id's red is
  * the kind of ground (the game's footsteps': object, path, grass, sand, snow, stone, metal, wood, shallow water, deep water, as
  * 1 to 10 times 16; 0 no floor) and depth the floors' depth. The reflections keep to the kinds asked for ([graphics.effects]

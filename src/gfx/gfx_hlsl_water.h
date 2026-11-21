@@ -232,6 +232,8 @@ static void emit_water_light(Sb* b, const GfxVsKey* vk)
         "  float3 shallow = shalc * ((0.3 + 0.7 * day) * q2.x);\n");
 }
 
+#include "gfx_hlsl_water_mirror.h" /* emit_water_mirror: the world mirrored in the water (stage 3) */
+
 /* the caustics on the bed, into the scene's colour read under the pixel (sc), before it is lit through the water */
 static void emit_water_caustics(Sb* b, int ground)
 {
@@ -373,7 +375,7 @@ static void emit_water_ground_fade(Sb* b, const char* dt, const char* ds)
 
 /* the pass (water 2): what's under the surface from the scene's copies, by the depth under each pixel; the shore. The ground's
  * water (water 3): the bed's depth from the vertex (the first texture coordinate's x), the rest the same */
-static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int ocean)
+static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int ocean, int mirror)
 {
     char ct[32], cs[32], dt[32], ds[32];
     water_tex(ct, cs, sizeof ct, 6);
@@ -476,7 +478,10 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
         "  spc *= edge;\n"
         /* the sun's glint off the churned surface came out as a grid of hard-edged bright cells (the glint's high power on the
          * noise's slopes, which flip sign each half cell): under a waterfall's foot the glint stands down and the froth is the light */
-        "  spc *= 1.0 - 0.9 * foot;\n"
+        "  spc *= 1.0 - 0.9 * foot;\n");
+    if (mirror) /* the world mirrored in the water, into sky and F (gfx_hlsl_water_mirror.h) */
+        emit_water_mirror(b);
+    sb_printf(b,
         "  float4 col = float4(saturate(lerp(under, sky, F) + spc * (1.5 * q1.w)), 1.0);\n"
         /* the relief at a third on open water: from high above, the fine ripples lit as slopes over a deep, even colour were a
          * speckle across the whole sea */
@@ -511,13 +516,14 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
 }
 
 /* the pixel function's body for a draw made VanaCore's water (GfxFsKey.water): 1 in its place, 2 the water pass, 3 the
- * ground's water in the pass; fog the draw's pixel fog mode (GfxFsKey.fog) */
-static void emit_water_fs(Sb* b, const GfxVsKey* vk, int water, int fog)
+ * ground's water in the pass; fog the draw's pixel fog mode (GfxFsKey.fog); mirror: the world mirrored in the water is in
+ * stage 3 (d3d8_water_mirror.h) */
+static void emit_water_fs(Sb* b, const GfxVsKey* vk, int water, int fog, int mirror)
 {
     emit_water_surface(b, water);
     emit_water_light(b, vk);
     if (water >= 2)
-        emit_water_depth(b, vk, water >= 3, fog, water == 4);
+        emit_water_depth(b, vk, water >= 3, fog, water == 4, mirror);
     else
         sb_printf(b,
             "  float3 body = lerp(deep, shallow, saturate(q2.z * (0.1 + 0.7 * pow(1.0 - cv, 1.5))));\n"

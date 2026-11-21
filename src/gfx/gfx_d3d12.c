@@ -3067,6 +3067,7 @@ typedef struct PipeKey
 
 #define PIPE_FAILED ((void*)1)
 #define PIPE_MAGIC 0x31443344u /* "D3D1" */
+static int mirror_wanted(void); static void mirror_blend(D3D12_RENDER_TARGET_BLEND_DESC* c); /* gfx_d3d12_mirror.h: the water's */
 
 typedef struct PipeEntry
 {
@@ -3310,7 +3311,7 @@ static ID3D12PipelineState* build_pipeline(const PipeKey* k, const uint32_t* vs,
     pd.VS.pShaderBytecode = ID3D10Blob_GetBufferPointer(s->vs), pd.VS.BytecodeLength = ID3D10Blob_GetBufferSize(s->vs);
     /* drawn into the sun's shadow map: depth alone, but for an alpha test or a fade (shadow 2) */
     int shadow = k->lib.vs.shadow;
-    if (!shadow || shadow == 2 || alpha_tested(&k->lib.fs))
+    if (!shadow || shadow == 2 || shadow == GFX_VS_MIRROR || alpha_tested(&k->lib.fs)) /* (the water's mirror: its own colour) */
         pd.PS.pShaderBytecode = ID3D10Blob_GetBufferPointer(s->ps), pd.PS.BytecodeLength = ID3D10Blob_GetBufferSize(s->ps);
     D3D12_RENDER_TARGET_BLEND_DESC* c = &pd.BlendState.RenderTarget[0];
     uint32_t wm = k->pipe.write_mask;
@@ -3336,6 +3337,8 @@ static ID3D12PipelineState* build_pipeline(const PipeKey* k, const uint32_t* vs,
             c->SrcBlendAlpha = D3D12_BLEND_ONE, c->DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA, c->BlendOpAlpha = D3D12_BLEND_OP_ADD;
 #endif
     }
+    if (shadow == GFX_VS_MIRROR) /* the colour as drawn and the alpha 0 */
+        mirror_blend(c);
     pd.SampleMask = UINT_MAX;
     /* D3D's front faces are clockwise on screen; CULL_CCW (the default) culls the back ones */
     pd.RasterizerState.FillMode = k->fill == 2 ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
@@ -3347,7 +3350,7 @@ static ID3D12PipelineState* build_pipeline(const PipeKey* k, const uint32_t* vs,
        the walls' weathering came through the banners hung in front of them. */
     pd.RasterizerState.DepthBias = -k->zbias;
     pd.RasterizerState.SlopeScaledDepthBias = -(float)k->zbias * 0.03125f;
-    if (shadow) /* the map's own bias: surfaces at a slant to the sun are pushed back more */
+    if (shadow && shadow != GFX_VS_MIRROR) /* the map's own bias: surfaces at a slant to the sun are pushed back more */
         pd.RasterizerState.DepthBias = 0, pd.RasterizerState.SlopeScaledDepthBias = 1.5f;
     pd.RasterizerState.DepthClipEnable = k->depth.noclip ? FALSE : TRUE; /* (VanaCore's sea past the far plane: GfxDepthKey) */
     const GfxDepthKey* dk = &k->depth;
@@ -3853,6 +3856,7 @@ typedef struct Caster
     uint8_t plant;            /* a tree's, a bush's or grass (draw_plant): left out of the sun's maps with sun_plants 0 */
     uint8_t sought;           /* a piece of the zone round the player, drawn for the sun's maps alone by the caster pass (GfxDraw.sought,
                                * caster_only), not in the scene */
+    uint8_t cull, textured;   /* its D3DCULL; bind and tex hold every stage's: for the water's mirror (gfx_d3d12_mirror.h) */
     uint8_t world;            /* ... in world space (GfxDraw.sought 2): its uniforms' transform is its world matrix alone, so it goes
                                * into a map by the map's own matrix, not through the camera (sun_draw); clip0 is where it stands */
     float clip0[4];           /* its first vertex's clip-space position: where it stands (sun_cache_update) */
@@ -4000,6 +4004,7 @@ static Caster* caster_new(const GfxDraw* d)
     c->lib.vs = d->vs, c->lib.fs = d->fs;
     c->vs = gfx_tokens_kept(d->vs.prog, 0, d->vs_tokens), c->ps = gfx_tokens_kept(d->fs.prog, 1, d->ps_tokens);
     c->fixed = caster_fixed(d);
+    c->cull = d->cull;
     c->plant = (uint8_t)draw_plant(d);
     c->cpu_u = ~0u;
     return c;
@@ -4013,7 +4018,7 @@ static Caster* caster_new(const GfxDraw* d)
  * left that map undrawn, and characters took the world's width (outline_width) whatever theirs was set to. */
 static int caster_wanted(const GfxDraw* d)
 {
-    if (g_fxs.sun > 0.0f)
+    if (g_fxs.sun > 0.0f || mirror_wanted())
         return 1;
 #ifdef VANACORE
     /* (the occlusion's share on characters and Render visual 19 need the characters' depth only where the stencil can't tell them) */
@@ -4351,7 +4356,7 @@ static void draw_encode(const GfxDraw* d)
      * each is kept for the sun's shadow map */
     if (d->caster && !g_rt_face && !g_rt_level && ds)
         g_rt->depth_world = ds;
-    Caster* rec = d->caster && !g_nout && !g_mout && g_fxs.fx != 0.0f && caster_wanted(d) ? caster_new(d) : NULL;
+    Caster* rec = d->caster && !g_nout && !g_mout && (g_fxs.fx != 0.0f || mirror_wanted()) && caster_wanted(d) ? caster_new(d) : NULL;
     if (g_mout) /* the motion pass's transform the frame before (gfx_hlsl.c: its VS reads it as the sun's maps read theirs), and
                  * the least alpha of its pixels that count (sun_f.x) */
     {
@@ -4367,8 +4372,9 @@ static void draw_encode(const GfxDraw* d)
         rec->dead = 1; /* until it is drawn */
         rec->ub = u.gpu, rec->need = (uint32_t)need, rec->topo = (uint8_t)topology(d->prim);
         rec->n = vertex_count(d->prim, d->count), rec->vstart = d->vertex_start;
-        if (alpha_tested(&d->fs))
+        if (alpha_tested(&d->fs) || mirror_wanted()) /* (the mirror's: kept with the effects off too) */
         {
+            rec->textured = (uint8_t)mirror_wanted();
             memcpy(rec->bind, bind, sizeof bind);
             for (int i = 0; i < 8; ++i)
                 if (bind[i] != SRV_NULL_2D && bind[i] != SRV_NULL_CUBE)
@@ -15633,6 +15639,7 @@ int gfx_scene_snapshot(GfxTex* color, GfxTex** colour_copy, GfxTex** depth_copy,
     return 1;
 }
 
+#include "gfx_d3d12_mirror.h" /* gfx_scene_mirror: the world mirrored in the water ([graphics] water.mirror) */
 #include "gfx_d3d12_floors.h" /* the glow over the grass, the floors and the rain's mask for the reflections (gfx_scene_floors) */
 
 void gfx_scene_done(GfxTex* color, const GfxScene* s)
@@ -17136,6 +17143,7 @@ int gfx_shutdown(void)
     g_el.color = g_el.depth = NULL;
     gfx_tex_destroy(g_fx.wdepth), g_fx.wdepth = NULL, g_fx.wdepth_of = g_fx.wdepth_glow = NULL, g_fx.wdepth_serial = 0;
     gfx_tex_destroy(g_snap_color), gfx_tex_destroy(g_snap_depth), g_snap_color = g_snap_depth = NULL;
+    mirror_release();
     g_fx.glow_kept_serial = 0;
     g_fx.floors_id = g_fx.floors_depth = NULL, g_fx.floors_state = 0;
     g_dlss_replay_depth = NULL, g_zup_cur = 0;

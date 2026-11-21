@@ -94,6 +94,7 @@
     <ClInclude Include="d3d8_water_bake.h" />
     <ClInclude Include="d3d8_water_memo.h" />
     <ClInclude Include="d3d8_water_level.h" />
+    <ClInclude Include="d3d8_water_mirror.h" />
     <ClInclude Include="d3d8_water_sea.h" />
     <ClInclude Include="d3d8_water_ocean.h" />
     <ClInclude Include="d3d8_chatfont.h" />
@@ -116,12 +117,15 @@
     <ClInclude Include="gfx.h" />
     <ClInclude Include="gfx_backend.h" />
     <ClInclude Include="gfx_hlsl_water.h" />
+    <ClInclude Include="gfx_hlsl_water_mirror.h" />
     <ClInclude Include="gfx_d3d11_glow.h" />
+    <ClInclude Include="gfx_d3d11_mirror.h" />
     <ClInclude Include="gfx_d3d11_smooth.h" />
     <ClInclude Include="gfx_d3d12_batch.h" />
     <ClInclude Include="gfx_d3d12_cmask.h" />
     <ClInclude Include="gfx_d3d12_floors.h" />
     <ClInclude Include="gfx_d3d12_measure.h" />
+    <ClInclude Include="gfx_d3d12_mirror.h" />
     <ClInclude Include="gfx_d3d12_sky.h" />
     <ClInclude Include="gfx_d3d12_occl.h" />
     <ClInclude Include="gfx_sun_bounds.h" />
