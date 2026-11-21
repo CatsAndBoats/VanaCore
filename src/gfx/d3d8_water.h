@@ -952,6 +952,14 @@ static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy,
     memcpy(&minz, &d->vp[4], 4), memcpy(&maxz, &d->vp[5], 4);
     if (!(maxz > minz))
         minz = 0.0f, maxz = 1.0f;
+    /* the viewport the pixel function reads (the copies' and the mirror's place by the pixel's own: u.vp) in the target's
+     * pixels, as it's drawn (d->vp). A draw of the game's comes with the game's (draw_packet: the XYZRHW mapping's), and with
+     * the scene drawn at another size than the game's own ([graphics] background 3072x3072, the scene 3440x1440) the copies
+     * were read up to the game's width alone - past pixel 3072 each row of a fountain's water was one texel of the bed, level
+     * bands that slid as the camera turned (Bastok Markets) - and the mirror and the sky at another place than the pixel's.
+     * The ground's water, the sea's sheet and the rain's pass set both alike already */
+    for (int i = 0; i < 4; ++i)
+        d->u.vp[i] = (float)d->vp[i];
     float* tn = d->u.texm[6];
     tn[4] = s->proj[10], tn[5] = s->proj[14], tn[6] = s->proj[11] < 0.0f ? -1.0f : 1.0f, tn[7] = minz;
     tn[8] = maxz - minz, tn[9] = (float)w, tn[10] = (float)h;
