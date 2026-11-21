@@ -1,0 +1,43 @@
+##########################################################################
+#
+# VanaCore boot script
+#
+# Runs every time the game starts. /plugin lines run at once; everything
+# else waits until a character is in the world ([addons] delay.login,
+# the Startup switch on the /vana Addons tab).
+#
+#  - Lines starting with # are comments.
+#  - Every other line runs as if typed into the chat box:
+#      /plugin load <name>            plugins\ashita\<name>.dll (Ashita 4.16
+#                                      and 4.30 plugins), or plugins\windower\
+#                                      (Windower 4 and 3 plugins)
+#      /addon load <name>             from addons\vanacore, addons\ashita
+#                                      or addons\windower, the first that has it
+#      /addon load <name> windower    from addons\windower only (or ashita, vanacore)
+#      /exec <script>                 runs scripts\<script>.txt
+#      /echo Hello                    a game command
+#  - /wait <seconds> waits before the lines after it.
+#  - The vanacore / ashita / windower at the end of a line is only needed
+#    when addons of the same name are in more than one of those folders.
+#
+# The /vana window, the launcher's Addons page and /addon unload switch
+# addons on and off by adding or removing their lines here. Key binds made
+# in /keybinds are kept in scripts\keybinds.txt, which runs after this.
+#
+##########################################################################
+
+# ---- VanaCore --------------------------------------------------------
+# VanaCore addons (put them in addons\vanacore)
+/addon load keybinds vanacore
+/addon load freecam vanacore
+/addon load loadscreen vanacore
+
+# ---- Ashita ----------------------------------------------------------
+# Ashita addons (put them in addons\ashita), for example:
+# /addon load luashitacast ashita
+# /addon load xiui ashita
+
+# ---- Windower --------------------------------------------------------
+# Windower addons (put them in addons\windower), for example:
+# /addon load ffxidb windower
+# /addon load gearswap windower

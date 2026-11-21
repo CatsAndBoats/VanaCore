@@ -41,6 +41,7 @@ amd_fidelityfx_*.dll
 
 # ---- AI assistant files, and research and survey tools that building VanaCore doesn't use
 CLAUDE.md
+!/CLAUDE.md
 AGENTS.md
 .claude/
 .cursor/
@@ -51,9 +52,6 @@ AGENTS.md
 /tools/ashita_probe.py
 /tools/ashita_survey.lua
 /tools/ashita_survey_report.py
-/tools/luatest/
-/tools/windower_coverage.py
-/tools/windower_dump.lua
 /research/emissive-hdr.md
 /research/multi-client-settings.md
 /research/roadmap.md
@@ -61,7 +59,6 @@ AGENTS.md
 /research/windower-coverage.md
 /fonts/game/
 /pivot/
-/zipup.bat
 /vanacore.zip
 *.zip
 

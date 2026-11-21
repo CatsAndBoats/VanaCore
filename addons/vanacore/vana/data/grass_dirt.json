@@ -1,0 +1,7 @@
+{
+  "default": 50,
+  "zones": {
+    "121": { "name": "The Sanctuary of Zi'Tah", "blended": true,
+             "ground": [ "65b719e367503797", "84e7fc407f0b77ba", "d6fa123eded4df43", "52e6e00bbba87eb5", "3387e136a0eb52f7" ] }
+  }
+}

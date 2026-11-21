@@ -1,0 +1,32 @@
+{
+  "name": "Ru'Aun Gardens ivy",
+  "kind": "ivy",
+  "dat": "ROM2/22/0.DAT",
+  "texture": "model   tu_w04c",
+  "size": [
+    256,
+    256
+  ],
+  "height": 0.6,
+  "sprites": [
+    [
+      0,
+      0,
+      128,
+      128
+    ],
+    [
+      128,
+      0,
+      256,
+      128
+    ],
+    [
+      128,
+      128,
+      256,
+      256
+    ]
+  ],
+  "zone": 130
+}

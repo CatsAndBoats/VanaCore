@@ -1,0 +1,301 @@
+<title>VanaCore Addon Docs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a fixed page list down the left, the markdown page on the right; a select replaces the list on a phone. */
+:root {
+  --bg: #f6f5f1;        /* page ground: warm paper */
+  --panel: #ecebe5;     /* the sidebar */
+  --fg: #23241f;
+  --muted: #6b6c63;
+  --line: #d9d8cf;
+  --accent: #2f6f8f;    /* teal-blue: links, the active page */
+  --accent-soft: #e2edf2;
+  --code-bg: #eeede7;
+  --code-fg: #2b2c26;
+  --kw: #8a3d5f; --str: #2f6f3a; --num: #a65a0d; --cmt: #7d7e74; --fn: #2f5f8f;
+  --font: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1c1a; --panel: #212320; --fg: #e6e4dc; --muted: #9a9b91; --line: #34362f;
+    --accent: #7cb7d4; --accent-soft: #24343c; --code-bg: #262824; --code-fg: #e2e0d6;
+    --kw: #d89ab4; --str: #9ad29f; --num: #e0a860; --cmt: #8d8e84; --fn: #9cc3e6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1c1a; --panel: #212320; --fg: #e6e4dc; --muted: #9a9b91; --line: #34362f;
+  --accent: #7cb7d4; --accent-soft: #24343c; --code-bg: #262824; --code-fg: #e2e0d6;
+  --kw: #d89ab4; --str: #9ad29f; --num: #e0a860; --cmt: #8d8e84; --fn: #9cc3e6;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.55; margin: 0; }
+.app { display: flex; min-height: 100%; }
+nav.side {
+  flex: 0 0 272px; background: var(--panel); border-right: 1px solid var(--line);
+  position: sticky; top: env(safe-area-inset-top, 0px); height: calc(100vh - env(safe-area-inset-top, 0px));
+  overflow-y: auto; box-sizing: border-box;
+  padding-block: 18px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 12px;
+}
+nav.side h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; letter-spacing: 0.01em; }
+nav.side .sub { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+nav.side input { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); margin-bottom: 12px; }
+nav.side input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+nav.side .group { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 14px 0 6px; }
+nav.side a { display: block; padding: 5px 8px; border-radius: 6px; color: var(--fg); text-decoration: none; font-size: 13.5px; line-height: 1.35; }
+nav.side a:hover { background: var(--accent-soft); }
+nav.side a.active { background: var(--accent); color: #fff; font-weight: 500; }
+nav.side a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+nav.side a[hidden] { display: none; }
+.top { display: none; }
+main {
+  flex: 1 1 auto; min-width: 0;
+  padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+article { max-width: 860px; margin: 0 auto; }
+article h1 { font-size: 28px; line-height: 1.2; margin: 0 0 18px; text-wrap: balance; font-weight: 600; }
+article h2 { font-size: 21px; margin: 34px 0 10px; padding-top: 10px; border-top: 1px solid var(--line); font-weight: 600; text-wrap: balance; }
+article h3 { font-size: 17px; margin: 24px 0 8px; font-weight: 600; }
+article h4 { font-size: 15px; margin: 18px 0 6px; font-weight: 600; }
+article p { margin: 0 0 12px; }
+article a { color: var(--accent); }
+article ul, article ol { padding-left: 24px; margin: 0 0 12px; }
+article li { margin: 3px 0; }
+article li > p { margin: 0 0 6px; }
+article blockquote { margin: 0 0 12px; padding: 6px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 6px 6px 0; }
+article blockquote p { margin: 4px 0; }
+article code { font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); color: var(--code-fg); padding: 1px 5px; border-radius: 4px; }
+article pre { margin: 0; }
+.code { position: relative; margin: 0 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); overflow-x: auto; }
+.code pre { padding: 12px 14px; }
+.code pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; color: var(--code-fg); display: block; }
+.code button { position: absolute; top: 6px; right: 6px; font: inherit; font-size: 11.5px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.code:hover button, .code button:focus-visible { opacity: 1; }
+.code button:focus-visible { outline: 2px solid var(--accent); }
+.table-wrap { overflow-x: auto; margin: 0 0 14px; border: 1px solid var(--line); border-radius: 8px; }
+article table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+article th, article td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+article th { background: var(--panel); font-weight: 600; }
+article tr:last-child td { border-bottom: none; }
+article hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+article img { max-width: 100%; }
+.pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.pager a { color: var(--accent); text-decoration: none; }
+.pager a:hover { text-decoration: underline; }
+.pager .next { margin-left: auto; text-align: right; }
+.status { color: var(--muted); font-size: 13px; }
+/* highlight.js token colours, from the tokens above */
+.hljs-keyword, .hljs-built_in, .hljs-literal { color: var(--kw); }
+.hljs-string { color: var(--str); }
+.hljs-number { color: var(--num); }
+.hljs-comment { color: var(--cmt); font-style: italic; }
+.hljs-title, .hljs-function .hljs-title { color: var(--fn); }
+.hljs-attr, .hljs-section { color: var(--fn); }
+@media (max-width: 880px) {
+  nav.side { display: none; }
+  .top { display: block; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .top select { width: 100%; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+  .app { display: block; }
+  main { padding-block: 18px 40px; }
+  article h1 { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .code button { transition: none; } }
+</style>
+
+<div class="top"><select id="pick" aria-label="Page"></select></div>
+<div class="app">
+  <nav class="side" aria-label="Pages">
+    <h1>VanaCore Addon Docs</h1>
+    <p class="sub">The series in <code>docs\addons</code>, as it ships with VanaCore.</p>
+    <input id="filter" type="search" placeholder="Filter pages" autocomplete="off">
+    <div id="list"></div>
+  </nav>
+  <main><article id="page"><p class="status">Loading…</p></article></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  // The pages, in the series' order. `file` is the markdown as published beside this page; `token` is the page's #hash.
+  var PAGES = [
+    { token: 'readme', file: 'docs/README.md', title: 'Writing addons for VanaCore', group: 'The series' },
+    { token: '01-getting-started', file: 'docs/01-getting-started.md', title: '1. Getting started' },
+    { token: '02-events', file: 'docs/02-events.md', title: '2. Events' },
+    { token: '03-tasks-and-timing', file: 'docs/03-tasks-and-timing.md', title: '3. Tasks and timing' },
+    { token: '04-game-data', file: 'docs/04-game-data.md', title: '4. Game data' },
+    { token: '05-chat-and-commands', file: 'docs/05-chat-and-commands.md', title: '5. Chat and commands' },
+    { token: '06-drawing', file: 'docs/06-drawing.md', title: '6. Drawing' },
+    { token: '07-game-interface', file: 'docs/07-game-interface.md', title: "7. The game's interface" },
+    { token: '08-settings-and-files', file: 'docs/08-settings-and-files.md', title: '8. Settings and files' },
+    { token: '09-input', file: 'docs/09-input.md', title: '9. Input' },
+    { token: '10-packets', file: 'docs/10-packets.md', title: '10. Packets' },
+    { token: '11-memory-and-ffi', file: 'docs/11-memory-and-ffi.md', title: '11. Memory and FFI' },
+    { token: '12-system', file: 'docs/12-system.md', title: '12. System' },
+    { token: '13-ashita-and-windower', file: 'docs/13-ashita-and-windower.md', title: '13. Ashita and Windower addons' },
+    { token: '14-dev-workflow', file: 'docs/14-dev-workflow.md', title: '14. Developing and debugging' },
+    { token: '15-api-reference', file: 'docs/15-api-reference.md', title: '15. API reference' },
+    { token: '16-character-menus-and-tables', file: 'docs/16-character-menus-and-tables.md', title: "16. The character, the menus and the game's tables" },
+    { token: '17-http-and-websockets', file: 'docs/17-http-and-websockets.md', title: '17. HTTP, WebSockets and promises' },
+    { token: '18-widgets', file: 'docs/18-widgets.md', title: "18. Widgets: boxes in the game's 3D space" },
+    { token: 'examples', file: 'docs/examples/README.md', title: 'Examples', group: 'Examples' },
+    { token: 'examples-zone_greeter', file: 'docs/examples/zone_greeter.md', title: 'Greet each zone' },
+    { token: 'examples-party_window', file: 'docs/examples/party_window.md', title: 'A party window in ImGui' },
+    { token: 'examples-chat_timestamps', file: 'docs/examples/chat_timestamps.md', title: 'Chat timestamps and a filter' },
+    { token: 'examples-web_requests', file: 'docs/examples/web_requests.md', title: 'Web requests without stopping the game' },
+    { token: 'examples-hide_chat', file: 'docs/examples/hide_chat.md', title: 'Hide the chat log' },
+    { token: 'examples-add_button', file: 'docs/examples/add_button.md', title: 'Add a Config button' },
+    { token: 'examples-hide_party_list', file: 'docs/examples/hide_party_list.md', title: 'Hide the party list' },
+    { token: 'examples-move_window', file: 'docs/examples/move_window.md', title: 'Move the Target window' },
+    { token: 'examples-replace_menu_item', file: 'docs/examples/replace_menu_item.md', title: 'Take over a menu item' },
+    { token: 'examples-plates', file: 'docs/examples/plates.md', title: 'Widgets over names' },
+    { token: 'examples-custom_equipment', file: 'docs/examples/custom_equipment.md', title: 'Your own equipment screen' }
+  ];
+  var byToken = {}, byFile = {};
+  PAGES.forEach(function (p) { byToken[p.token] = p; byFile[p.file.replace(/^docs\//, '')] = p; });
+
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  // GitHub's heading slugs, so the series' own #links land
+  function slug(text) {
+    return text.toLowerCase().replace(/<[^>]+>/g, '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-');
+  }
+  // A link in a page: another page of the series (with or without an anchor), an anchor in this page, or the web
+  function resolveLink(href, current) {
+    var m = /^(?:\.\.\/)?((?:examples\/)?[\w\-]+\.md)(#.*)?$/.exec(href);
+    if (m) {
+      var rel = m[1];
+      if (current.file.indexOf('docs/examples/') === 0 && rel.indexOf('examples/') !== 0 && !byFile[rel] && byFile['examples/' + rel]) rel = 'examples/' + rel;
+      if (!byFile[rel] && current.file.indexOf('docs/examples/') === 0 && byFile['examples/' + rel]) rel = 'examples/' + rel;
+      var page = byFile[rel];
+      if (page) return { page: page.token, anchor: m[2] ? m[2].slice(1) : '' };
+    }
+    if (href.charAt(0) === '#') return { anchor: href.slice(1) };
+    return null;
+  }
+
+  var current = null, slugCounts = {};
+  var renderer = new marked.Renderer();
+  renderer.heading = function (text, level, raw) {
+    var id = slug(raw || text);
+    if (slugCounts[id] !== undefined) { slugCounts[id] += 1; id = id + '-' + slugCounts[id]; } else { slugCounts[id] = 0; }
+    return '<h' + level + ' id="' + id + '">' + text + '</h' + level + '>\n';
+  };
+  renderer.link = function (href, title, text) {
+    var t = title ? ' title="' + escapeHtml(title) + '"' : '';
+    var r = resolveLink(href, current);
+    if (r && r.page) return '<a href="#' + r.page + '" data-page="' + r.page + '" data-anchor="' + escapeHtml(r.anchor) + '"' + t + '>' + text + '</a>';
+    if (r && r.anchor !== undefined) return '<a href="#" data-anchor="' + escapeHtml(r.anchor) + '"' + t + '>' + text + '</a>';
+    return '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener"' + t + '>' + text + '</a>';
+  };
+  renderer.code = function (code, infostring) {
+    var lang = (infostring || '').trim().split(/\s+/)[0];
+    var body;
+    if (lang && window.hljs && hljs.getLanguage(lang)) body = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+    else body = escapeHtml(code);
+    return '<div class="code"><button type="button" class="copy" aria-label="Copy code">Copy</button><pre><code class="hljs' + (lang ? ' language-' + escapeHtml(lang) : '') + '">' + body + '</code></pre></div>\n';
+  };
+  renderer.table = function (header, body) {
+    return '<div class="table-wrap"><table><thead>' + header + '</thead><tbody>' + body + '</tbody></table></div>\n';
+  };
+  marked.use({ renderer: renderer, gfm: true, breaks: false });
+
+  var list = document.getElementById('list'), pick = document.getElementById('pick'), article = document.getElementById('page');
+  var cache = {};
+
+  function buildList() {
+    var html = '', group = '';
+    PAGES.forEach(function (p) {
+      if (p.group && p.group !== group) { group = p.group; html += '<div class="group">' + group + '</div>'; }
+      html += '<a href="#' + p.token + '" data-page="' + p.token + '">' + escapeHtml(p.title) + '</a>';
+    });
+    list.innerHTML = html;
+    pick.innerHTML = PAGES.map(function (p) { return '<option value="' + p.token + '">' + escapeHtml(p.title) + '</option>'; }).join('');
+  }
+
+  function markActive(token) {
+    Array.prototype.forEach.call(list.querySelectorAll('a'), function (a) { a.classList.toggle('active', a.getAttribute('data-page') === token); });
+    pick.value = token;
+    try { localStorage.setItem('vanacore-docs-page', token); } catch (e) {}
+  }
+
+  function scrollToAnchor(anchor) {
+    if (!anchor) { window.scrollTo(0, 0); return; }
+    var el = document.getElementById(anchor);
+    if (el) el.scrollIntoView({ block: 'start' });
+    else window.scrollTo(0, 0);
+  }
+
+  function pager(page) {
+    var i = PAGES.indexOf(page), prev = PAGES[i - 1], next = PAGES[i + 1], html = '<div class="pager">';
+    if (prev) html += '<a href="#' + prev.token + '" data-page="' + prev.token + '">&larr; ' + escapeHtml(prev.title) + '</a>';
+    if (next) html += '<a class="next" href="#' + next.token + '" data-page="' + next.token + '">' + escapeHtml(next.title) + ' &rarr;</a>';
+    return html + '</div>';
+  }
+
+  function show(token, anchor) {
+    var page = byToken[token] || PAGES[0];
+    current = page;
+    markActive(page.token);
+    var render = function (md) {
+      slugCounts = {};
+      article.innerHTML = marked.parse(md) + pager(page);
+      scrollToAnchor(anchor);
+    };
+    if (!cache[page.file] && window.VANACORE_DOCS && window.VANACORE_DOCS[page.file] !== undefined) {
+      cache[page.file] = window.VANACORE_DOCS[page.file]; // the markdown inlined (docs/html/index.html, built by tools/gen_docs_html.py)
+    }
+    if (cache[page.file]) { render(cache[page.file]); return; }
+    article.innerHTML = '<p class="status">Loading ' + escapeHtml(page.title) + '…</p>';
+    fetch(page.file).then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }).then(function (md) {
+      cache[page.file] = md;
+      if (current === page) render(md);
+    }).catch(function (e) {
+      article.innerHTML = '<p class="status">This page could not be loaded (' + escapeHtml(String(e.message || e)) + ').</p>';
+    });
+  }
+
+  function go(token, anchor) {
+    if (location.hash !== '#' + token) { try { history.replaceState(null, '', '#' + token); } catch (e) {} }
+    show(token, anchor);
+  }
+
+  document.addEventListener('click', function (ev) {
+    var a = ev.target.closest && ev.target.closest('a[data-page], a[data-anchor]');
+    if (a) {
+      ev.preventDefault();
+      var token = a.getAttribute('data-page'), anchor = a.getAttribute('data-anchor') || '';
+      if (token) go(token, anchor); else scrollToAnchor(anchor);
+      return;
+    }
+    var b = ev.target.closest && ev.target.closest('button.copy');
+    if (b) {
+      var code = b.parentNode.querySelector('code').textContent;
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1200); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, function () { selectCode(b); });
+      else selectCode(b);
+    }
+  });
+  function selectCode(b) {
+    var range = document.createRange(); range.selectNodeContents(b.parentNode.querySelector('code'));
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    b.textContent = 'Selected: press Ctrl+C'; setTimeout(function () { b.textContent = 'Copy'; }, 2000);
+  }
+  pick.addEventListener('change', function () { go(pick.value, ''); });
+  document.getElementById('filter').addEventListener('input', function (ev) {
+    var q = ev.target.value.trim().toLowerCase();
+    Array.prototype.forEach.call(list.querySelectorAll('a'), function (a) { a.hidden = q !== '' && a.textContent.toLowerCase().indexOf(q) === -1; });
+  });
+  window.addEventListener('hashchange', function () {
+    var token = location.hash.slice(1);
+    if (byToken[token] && (!current || current.token !== token)) show(token, '');
+  });
+
+  buildList();
+  var start = location.hash.slice(1);
+  if (!byToken[start]) { try { start = localStorage.getItem('vanacore-docs-page') || ''; } catch (e) { start = ''; } }
+  show(byToken[start] ? start : 'readme', '');
+})();
+</script>

@@ -1,0 +1,26 @@
+{
+  "name": "Ru'Aun Gardens tall grass",
+  "kind": "grass",
+  "dat": "ROM2/22/4.DAT",
+  "texture": "model   tu_w06c",
+  "size": [
+    256,
+    256
+  ],
+  "height": 1.0,
+  "sprites": [
+    [
+      6,
+      8,
+      251,
+      132
+    ],
+    [
+      3,
+      134,
+      254,
+      255
+    ]
+  ],
+  "zone": 130
+}

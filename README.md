@@ -29,8 +29,8 @@ share stays open source too.
 
 - **Modern graphics:** Direct3D 12 or 11 in place of the game's Direct3D 8, with sun shadows, ambient occlusion,
   per-pixel lighting, reflections, fog, god rays, bloom and depth of field.
-- **DLSS and FSR:** NVIDIA DLSS (with frame generation and DLSS 5) on RTX cards, and AMD FSR 3/4 with frame
-  generation on any card.
+- **DLSS and FSR:** NVIDIA DLSS (with frame generation, and [DLSS 5](#dlss-5) with NVIDIA's own DLL) on RTX cards,
+  and AMD FSR 3/4 with frame generation on any card.
 - **HUD Manager:** edit the game's own interface like FFXIV's HUD layouts. Move, resize or hide any window or menu.
 - **Addons and plugins:** VanaCore's own addon API can place things in the 3D world, hook and add to the game's
   menus, and draw windows under the game's own.
@@ -225,7 +225,6 @@ grown past its allowance in `tools\lint\baseline.json`.
 | `src/shared/` | Headers both use (the version, what the launcher hands the core) |
 | `addons/vanacore/` | VanaCore's own Lua addons, the /vana window among them |
 | `docs/` | The reference, and the addon and plugin docs (see [Documentation](#documentation)) |
-| `research/` | Notes from reverse-engineering the client and designing features |
 | `tools/` | Code generators (the Ashita ABI and Lua bindings, game data, docs), lint, and test programs |
 | `third_party/` | LuaJIT, Dear ImGui, AsmJit, LuaSocket, the Ashita SDK's headers, FSR's headers, the DLSS fetch script |
 | `fonts/`, `assets/`, `scripts/` | Fonts and images loaded into the game, and the default `boot.txt` |
@@ -235,6 +234,7 @@ grown past its allowance in `tools\lint\baseline.json`.
 - [docs/reference.md](docs/reference.md): everything VanaCore does, with every `vanacore.ini` setting.
 - [docs/addons/](docs/addons/README.md): writing addons, and the whole `vana` Lua API.
 - [docs/plugins/](docs/plugins/README.md): what Ashita plugins can ask of VanaCore.
+- [docs/tech/d3d12-frame-order.html](docs/tech/d3d12-frame-order.html): one Direct3D 12 frame in order, and when the grass, glow, shadows and effects come in.
 - [vanacore.example.ini](vanacore.example.ini): every setting with its default.
 
 ## Contributing
@@ -256,6 +256,13 @@ VanaCore builds on:
 Their licences are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Inspired by [Windower Fenestra](https://github.com/Windower/Fenestra).
+
+## DLSS 5
+
+DLSS 5 isn't bundled or provided by VanaCore, as NVIDIA hasn't released it yet. To use it, find NVIDIA's
+`nvngx_dlssnr.dll` yourself and put it in VanaCore's `dlss\` folder, beside `VanaCore.Dlss.exe`. The next time the
+game starts, DLSS 5's switch in the /vana window's DLSS panel unlocks (it needs an NVIDIA RTX 40 or 50 card). Once
+NVIDIA officially releases DLSS 5, VanaCore will provide it.
 
 ## Licence
 

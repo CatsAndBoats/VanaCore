@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>D3D12 Frame Order</title>
+<meta name="description" content="One frame of VanaCore on Direct3D 12, in order: when the grass, glow, sun shadows, scene effects, the game's effects, the upscaler, the colour grade and the interface come in.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one long frame read top to bottom, like a GPU capture's event list; a phase strip and feature finder above it. */
+:root {
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --ink: #17202c;
+  --muted: #5b6677;
+  --line: #dde2ea;
+  --accent: #2557d6;
+  --accent-soft: #e5ecfc;
+  --game: #6b7486;
+  --game-soft: #eceef2;
+  --vc: #0f8a6a;
+  --vc-soft: #def3ec;
+  --gpu: #8a5a12;
+  --gpu-soft: #f6ecd9;
+  --hit: #fff4c2;
+  --hit-line: #e0b400;
+  --p1: #8a93a3; --p2: #6b7486; --p3: #14996f; --p4: #2557d6; --p5: #c2532d; --p6: #7c3fc4; --p7: #6b7486; --p8: #3d4757;
+  --f-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141b; --panel: #161d27; --ink: #e6ebf2; --muted: #93a0b3; --line: #273142;
+    --accent: #7fa4ff; --accent-soft: #1c2a47;
+    --game: #a3adbf; --game-soft: #232b38; --vc: #4fd1a8; --vc-soft: #133429; --gpu: #e0a955; --gpu-soft: #3a2c15;
+    --hit: #3a3313; --hit-line: #d9b331;
+    --p1: #77839a; --p2: #8f9ab0; --p3: #3cc493; --p4: #7fa4ff; --p5: #ef8a63; --p6: #b88cf0; --p7: #8f9ab0; --p8: #a9b4c6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141b; --panel: #161d27; --ink: #e6ebf2; --muted: #93a0b3; --line: #273142;
+  --accent: #7fa4ff; --accent-soft: #1c2a47;
+  --game: #a3adbf; --game-soft: #232b38; --vc: #4fd1a8; --vc-soft: #133429; --gpu: #e0a955; --gpu-soft: #3a2c15;
+  --hit: #3a3313; --hit-line: #d9b331;
+  --p1: #77839a; --p2: #8f9ab0; --p3: #3cc493; --p4: #7fa4ff; --p5: #ef8a63; --p6: #b88cf0; --p7: #8f9ab0; --p8: #a9b4c6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.01em; }
+h2 { font-size: 22px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+.lede { max-width: 72ch; color: var(--muted); margin: 8px 0 0; }
+.lede code { color: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; font-size: 13px; color: var(--muted); align-items: center; }
+.who { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 var(--f-mono); letter-spacing: 0.04em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; white-space: nowrap; }
+.who.game { color: var(--game); background: var(--game-soft); }
+.who.vc { color: var(--vc); background: var(--vc-soft); }
+.who.gpu { color: var(--gpu); background: var(--gpu-soft); }
+
+/* phase strip */
+.strip { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.strip a { display: grid; gap: 4px; text-decoration: none; color: var(--ink); padding: 10px 10px 9px; background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--pc); border-radius: 6px; min-width: 0; }
+.strip a:hover, .strip a:focus-visible { border-color: var(--pc); outline: none; }
+.strip .n { font: 600 12px/1 var(--f-mono); color: var(--pc); }
+.strip .t { font: 600 13px/1.25 var(--f-display); }
+.strip .c { font-size: 11px; color: var(--muted); }
+.strip a.lit { background: var(--hit); }
+@media (max-width: 820px) { .strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 440px) { .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* finder */
+.finder { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
+.finder-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.finder-head .hint { font-size: 13px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 13px/1 var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 7px 11px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.answer { min-height: 1.5em; font-size: 14px; color: var(--muted); }
+.answer b { color: var(--ink); font-weight: 600; }
+.answer .refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.answer .refs a { font: 500 12px/1 var(--f-mono); color: var(--accent); background: var(--accent-soft); padding: 5px 7px; border-radius: 4px; text-decoration: none; }
+.answer .refs a:hover { text-decoration: underline; }
+
+/* at a glance */
+.glance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+.glance dl { margin: 0; display: contents; }
+.g-item { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.g-item dt { font: 600 14px/1.4 var(--f-display); }
+.g-item dd { margin: 0; font-size: 14px; color: var(--muted); }
+.g-item dd b { color: var(--ink); font-weight: 600; }
+.g-item dd a { color: var(--accent); font-family: var(--f-mono); font-size: 12px; text-decoration: none; }
+@media (max-width: 760px) { .glance { grid-template-columns: minmax(0, 1fr); } }
+
+/* phases */
+.phase { display: grid; gap: 0; scroll-margin-top: 16px; }
+.phase-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; align-items: baseline; padding: 0 0 10px; border-bottom: 2px solid var(--pc); }
+.phase-head .pn { font: 700 28px/1 var(--f-display); color: var(--pc); grid-row: span 2; }
+.phase-head p { margin: 0; color: var(--muted); font-size: 14px; max-width: 80ch; }
+.phase-head p code { color: var(--ink); }
+.steps { list-style: none; margin: 0; padding: 0; }
+.step { display: grid; grid-template-columns: 3.4em minmax(0, 1fr); gap: 14px; padding: 14px 10px 14px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 16px; transition: opacity .15s ease, background .15s ease; }
+.step .sn { font: 500 13px/1.6 var(--f-mono); color: var(--pc); text-align: right; font-variant-numeric: tabular-nums; }
+.step .body { display: grid; gap: 6px; min-width: 0; }
+.step .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.step h3 { font-size: 16px; font-weight: 600; }
+.step p { margin: 0; max-width: 78ch; }
+.step ul { margin: 2px 0 0; padding-left: 18px; display: grid; gap: 3px; max-width: 78ch; }
+.step .meta { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
+.step .meta div { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 8px; }
+.step .meta span.k { font: 500 10.5px/1.9 var(--f-mono); text-transform: uppercase; letter-spacing: 0.06em; }
+.step .meta code { color: var(--ink); word-break: break-word; }
+body.filtering .step { opacity: 0.32; }
+body.filtering .step.hit { opacity: 1; background: var(--hit); box-shadow: inset 3px 0 0 var(--hit-line); }
+@media (prefers-reduced-motion: reduce) { .step { transition: none; } }
+@media (max-width: 520px) {
+  .step { grid-template-columns: minmax(0, 1fr); gap: 4px; padding-right: 0; }
+  .step .sn { text-align: left; }
+  .step .meta div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 10px; }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 90ch; }
+.foot { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>D3D12 Frame Order</h1>
+    <p class="lede">One frame of VanaCore on Direct3D 12, from the slot opening to the picture on the window. The game draws through Direct3D 8 (<code>d3d8.c</code>), each call turned into Direct3D 12 work (<code>gfx_d3d12.c</code>); VanaCore's own passes slot in between the game's draws at the points below. The <b>Profile</b> line is the name the step goes by in the /vana stats GPU profile.</p>
+    <div class="legend">
+      <span class="who game">Game</span> the game's own draws
+      <span class="who vc">VanaCore</span> added or replaced by VanaCore
+      <span class="who gpu">Backend</span> Direct3D 12 bookkeeping
+    </div>
+  </header>
+
+  <nav class="strip" id="strip" aria-label="Phases of the frame"></nav>
+
+  <section class="finder" aria-labelledby="finder-title">
+    <div class="finder-head">
+      <h2 id="finder-title">When does it come in?</h2>
+      <span class="hint">Pick a feature to light up every step it touches.</span>
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="Features"></div>
+    <div class="answer" id="answer" aria-live="polite">Nothing picked: the whole frame is shown.</div>
+  </section>
+
+  <section aria-labelledby="glance-title" style="display:grid;gap:10px">
+    <h2 id="glance-title">At a glance</h2>
+    <div class="glance">
+      <dl>
+        <div class="g-item"><dt>Grass</dt><dd><b>After the whole world, before the effects.</b> The depth before it is copied first, so it casts no occlusion, takes no reflection and can be left out of the ink lines. <a href="#s3-5">3.5</a></dd></div>
+        <div class="g-item"><dt>Glow</dt><dd><b>Mid-world</b>, where the game lays its own avatar/trust glow; <b>laid again over the grass</b> once that's drawn. <a href="#s2-5">2.5</a> <a href="#s3-5">3.5</a></dd></div>
+        <div class="g-item"><dt>Sun shadows</dt><dd>Casters <b>recorded during the world</b>; maps <b>drawn at the start of the effects</b>; looked up in the occlusion pass, laid on in the composite. <a href="#s2-3">2.3</a> <a href="#s4-3">4.3</a> <a href="#s4-6">4.6</a></dd></div>
+        <div class="g-item"><dt>Scene effects</dt><dd>AO, bloom, god rays, fog, ink lines, reflections, DoF, FXAA: <b>one block</b> on the finished world, before the game's flames and spells. <a href="#p4">Phase 4</a></dd></div>
+        <div class="g-item"><dt>Game's effects</dt><dd>Flames, spells, particles: <b>after the scene effects</b>, so no fog or AO on them. Their light is added back later. <a href="#s5-1">5.1</a> <a href="#s6-2">6.2</a></dd></div>
+        <div class="g-item"><dt>Water, rain</dt><dd>Water then rain, <b>after the grass</b>, both drawn over copies of the scene. <a href="#s3-6">3.6</a> <a href="#s3-7">3.7</a></dd></div>
+        <div class="g-item"><dt>Colour grade</dt><dd><b>Last on the 3D picture</b>: after the game's effects, on the upscaler's output when one runs. <a href="#s6-3">6.3</a> <a href="#s6-4">6.4</a></dd></div>
+        <div class="g-item"><dt>Names over heads</dt><dd>Held back while the upscaler and grade run, <b>drawn on top after</b>: never graded or upscaled. <a href="#s5-3">5.3</a> <a href="#s6-5">6.5</a></dd></div>
+        <div class="g-item"><dt>DLSS / FSR</dt><dd>At the <b>first draw that reads the scene</b> (the game laying it on the back buffer), after the zone lines and the effects' light. <a href="#s6-3">6.3</a></dd></div>
+        <div class="g-item"><dt>/vana window</dt><dd>ImGui is <b>its own layer</b>, laid at window size in the very last draw, with the FPS overlay. <a href="#s8-2">8.2</a></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <main id="phases" style="display:grid;gap:34px"></main>
+
+  <section class="note" aria-labelledby="sees-title">
+    <h2 id="sees-title">What the order means</h2>
+    <ul>
+      <li><b>Anything drawn before Phase 4 gets the scene effects.</b> Grass, VanaCore's water, rain streaks, the sky and the glow all sit under the AO, shadows, fog, bloom and FXAA. Anything after it (the game's particles, late world pieces, names) does not.</li>
+      <li><b>Casters drawn after the effects can't reach this frame's maps.</b> The game sometimes draws a third of a zone after its first particle; those pieces go into the shadow cache for the next frame (<code>sun_late</code>).</li>
+      <li><b>The colour grade covers the game's effects; the composite doesn't.</b> Fog, lines and AO are in the composite (Phase 4); the grade and moonlight wait until the game has finished the 3D picture (Phase 6).</li>
+      <li><b>FXAA and DLSS/FSR don't stack.</b> With DLSS or AMD FSR gathering frames, FXAA is skipped; FSR 1 runs on an FXAA'd scene.</li>
+      <li><b>Depth of field moves with the upscaler.</b> Without one it's the last scene effect; with one it's laid on the upscaled output instead (a blur before it shimmered with the jitter).</li>
+      <li><b>With effects off</b> (<code>[graphics.effects] enabled = 0</code>), Phase 4 is skipped except FXAA and the upscaler hand-off; the world, grass, water, rain and glow still draw.</li>
+    </ul>
+  </section>
+
+  <p class="foot">The <b>Code</b> lines name a file and its functions; files are in <code>src/gfx</code> unless they start with <code>core/</code> (<code>src/core</code>). Written 2026-11-21 from <code>d3d8.c</code> scene_note / scene_finish / Present, <code>gfx_d3d12.c</code> draw_one / gfx_scene_done / dlss_on_draw / gfx_present, and grass.c, sky.c, floors.c, zonemesh.c, snow.c, d3d8_water.h, d3d8_rain.h. Direct3D 11 runs most of the same order with fewer passes.</p>
+</div>
+
+<script>
+const FEATURES = [
+  ["grass", "Grass"], ["glow", "Glow"], ["shadows", "Sun shadows"], ["ao", "Ambient occlusion"], ["fog", "Fog"],
+  ["bloom", "Bloom"], ["rays", "God rays"], ["lines", "Ink lines / cel"], ["refl", "Reflections / bounce"],
+  ["water", "Water"], ["rain", "Rain"], ["snow", "Snow"], ["sky", "Sky"], ["fx", "Game's effects"],
+  ["elight", "Effects light"], ["zonelines", "Zone lines"], ["upscaler", "DLSS / FSR"], ["grade", "Colour grade"],
+  ["night", "Night / moon"], ["dof", "Depth of field"], ["aa", "FXAA"], ["names", "Names over heads"],
+  ["ui", "Interface / ImGui"], ["fg", "Frame generation"], ["zone", "Zone draws / culling"]
+];
+
+const PHASES = [
+  { n: 1, id: "p1", title: "Frame opens", short: "Slot, fences", color: "--p1",
+    text: "Before the game's first draw lands. Up to <code>FRAMES</code> frames are in flight; each has its own command allocator and upload ring.",
+    steps: [
+      { t: "Frame slot waited on", who: "gpu", tags: [],
+        p: "<code>frame_begin</code> waits for the GPU to finish the frame that last used this slot, then resets its allocator and ring. Time spent here is the CPU waiting on the GPU.",
+        code: "gfx_d3d12.c frame_begin" },
+      { t: "Hidden zone pieces left out", who: "vc", tags: ["zone"],
+        p: "The core reads the occlusion test from a frame or two ago (step 4.1) and leaves out the zone pieces it found hidden behind what was drawn. A piece coming into view is drawn again when a later test sees it.",
+        set: "[graphics] occl", code: "core/occlusion.cpp, gfx_d3d12_occl.h" }
+    ] },
+  { n: 2, id: "p2", title: "The game draws its world", short: "Sky, zone, characters", color: "--p2",
+    text: "Every 3D draw into the world's target. The scene's camera and fog are taken from its first fogged, depth-writing draw. Long scenes are sent to the GPU in pieces.",
+    steps: [
+      { t: "Sky dome replaced by VanaCore's sky", who: "vc", tags: ["sky"],
+        p: "The game's dome is the first 7 to 11 strips of the world. They're recognised by shape and skipped; at the first world draw after them VanaCore draws the sky in one full-screen pass from their colours, writing no depth, and the world covers it as it covered the dome.",
+        set: "[graphics] sky", prof: "The game's scene › VanaCore's sky (sky), in place of the game's dome", code: "sky.c, gfx_d3d12_sky.h gfx_sky" },
+      { t: "The zone, batched", who: "game", tags: ["zone"],
+        p: "The game walks its zone by place. With batching on, the draws are kept while FFXiMain draws the zone and sent at its end: the opaque groups (one mesh, texture and state) as one instanced draw each, then the blended pieces (leaf edges, decals) in the order they came.",
+        set: "[graphics.effects] batch", prof: "The game's scene › The game's draws", code: "gfx_d3d12_batch.h, core/zonebatch.cpp" },
+      { t: "What every world draw also feeds", who: "vc", tags: ["shadows", "upscaler", "night", "water", "ao", "refl"],
+        list: [
+          "<b>Shadow caster</b>: opaque or alpha-tested, depth-writing world draws are recorded for the sun's maps (<code>scene_caster</code>); a batch's pieces are recorded one by one.",
+          "<b>Sun vote</b>: each lit draw's directional lights vote for the sun (<code>sun_vote</code>), counted at the scene's end.",
+          "<b>Night light</b>: lit draws have their ambient and sun/moon light taken down through the night, with the brightness floors (<code>night_light</code>).",
+          "<b>Jitter</b>: with DLSS or FSR, each 3D draw is moved by the frame's sub-pixel step.",
+          "<b>Motion and mask</b>: moving things are drawn again into the motion target and the upscaler's reactive mask (<code>mo_draw</code>, <code>mask_draw</code>).",
+          "<b>Detail normals</b>: normal-mapped draws are drawn again into the normals target the effects read (<code>nout</code>).",
+          "<b>Water</b>: the game's water tiles are made VanaCore's water or kept for the water pass (<code>water_keep</code>).",
+          "<b>Mip chains</b> for textures the scene draws smaller (the scene filter)."
+        ],
+        set: "sun_casters, night, night_bright, ambient_force, dlss_motion*, normalmap", prof: "The game's scene › Mip chains for textures drawn smaller", code: "d3d8.c scene_note, d3d8_casters.h, d3d8_night.h; gfx_d3d12.c draw_one" },
+      { t: "Characters", who: "game", tags: ["shadows", "rain", "ao", "lines"],
+        p: "Players, NPCs and monsters write the characters' stencil bit, which becomes their mask in the effects. While it rains they're drawn wet (darker, glossy, rings and runnels). They cast into the sun's maps like the world. A see-through character goes into a target of its own and is laid over the world.",
+        set: "[graphics] rain*", code: "d3d8_rain.h, gfx_d3d12_cmask.h" },
+      { t: "Avatar and trust glow", who: "vc", tags: ["glow"],
+        p: "The game draws the character alone into a full-size picture, shrinks it and lays tinted copies over the scene. With VanaCore's glow the copies are skipped: at the first one VanaCore blurs the full-size picture down its mip chain and lays it in their tint, right there, partway through the world.",
+        set: "[graphics] glow, glow.size, glow.quality", prof: "The game's scene › VanaCore's glow (a character's picture blurred, laid over)", code: "d3d8.c glow_draw → gfx_d3d12.c gfx_glow" },
+      { t: "Clouds, sun and moon", who: "game", tags: ["sky", "rays"],
+        p: "The sky's other layers come after the world, round the camera: blended and unfogged. They don't end the scene, so the god rays have the sun to start from.",
+        set: "moon_size, moon_brightness" },
+      { t: "The world's scene ends", who: "vc", tags: [],
+        p: "At the first of the game's own effects drawn round the camera (a particle, after the sky). Otherwise at the first interface draw into the scene, a full-size read of it, 3D into another target, or Present. Phase 3 and 4 run here, before that draw.",
+        set: "[graphics] effects.aftersky", code: "d3d8.c scene_note → scene_finish" }
+    ] },
+  { n: 3, id: "p3", title: "VanaCore adds to the world", short: "Grass, water, rain", color: "--p3",
+    text: "<code>scene_finish</code> in d3d8.c, in this order, still inside the world's scene and before any effect.",
+    steps: [
+      { t: "The sun picked", who: "vc", tags: ["shadows", "rays", "fog"],
+        p: "The votes are counted and the sun's direction and colour go into the scene, with the zone lines, sparkles and ground marks to draw later.",
+        code: "d3d8_sun.c d3d8_sun_pick" },
+      { t: "Floors layer", who: "vc", tags: ["refl"],
+        p: "The zone's collision, read from its DAT, drawn with the scene's camera into a target and depth of its own: each pixel says what ground is under it (stone, metal, wood, path…). The reflections use it to keep to the kinds asked for.",
+        set: "refl_floors", code: "floors.c floors_scene" },
+      { t: "Zone meshes to the shadow cache", who: "vc", tags: ["shadows"],
+        p: "VanaCore's own copy of the zone's meshes, from the DAT, handed to the sun's caster cache a share a frame. While they come, the game's own zone draws are left out of the maps.",
+        set: "sun_zone_mesh", code: "zonemesh.c zonemesh_scene" },
+      { t: "Snow trails", who: "vc", tags: ["snow"],
+        p: "Footprints pressed into the snowfields, drawn as shading on the ground the game already shows.",
+        set: "[graphics] snow*", code: "snow.c snow_scene" },
+      { t: "Grass", who: "vc", tags: ["grass", "glow", "ao", "refl", "lines"],
+        list: [
+          "The scene's depth <b>before the grass</b> is copied (<code>gfx_scene_world_depth</code>). The occlusion, reflections and ink lines read the world from it.",
+          "Tufts, moss, flowers and the grass assets' sprites drawn into the scene with its depth, swaying.",
+          "The frame's glow laid again where the tufts covered it (<code>gfx_glow_over_grass</code>)."
+        ],
+        set: "[graphics] grass*, outline_nograss", prof: "The game's scene › The game's draws (the glow: VanaCore's glow)", code: "grass.c grass_scene" },
+      { t: "Water pass", who: "vc", tags: ["water", "shadows"],
+        p: "The scene's colour and depth copied, then the kept water draws drawn as VanaCore's water over the copies, with the water baked into the ground and the sea's horizon. With water shadows off, the depth before the water lets the effects leave shadows off it.",
+        set: "[graphics] water*, water.shadows", code: "d3d8_water.h water_pass" },
+      { t: "Rain pass", who: "vc", tags: ["rain", "refl"],
+        p: "Streaks, splashes and the lens's droplets over it all, kept out from under shelter. Also draws the wet-ground and puddle mask the reflections read.",
+        set: "[graphics] rain*, rain.ground, rain.reflect", code: "d3d8_rain.h rain_pass" }
+    ] },
+  { n: 4, id: "p4", title: "Scene effects", short: "gfx_scene_done", color: "--p4",
+    text: "<code>gfx_scene_done</code> on the finished world. From 4.2 on, only with <code>[graphics.effects] enabled</code>; FXAA and the hand-off at the end run either way.",
+    steps: [
+      { t: "Settle and occlusion test", who: "vc", tags: ["zone", "upscaler"],
+        p: "The zone's kept batch sent, the moving things' motion redraws flushed, then the occlusion test: a chain of the farthest depth over larger and larger squares, each zone piece's box tested against it, read back for a later frame (step 1.2).",
+        set: "[graphics] occl", prof: "The game's scene › The occlusion test", code: "gfx_d3d12.c gfx_scene_done, gfx_d3d12_occl.h occl_scene" },
+      { t: "Setup", who: "vc", tags: ["shadows", "fog", "refl", "ao"],
+        p: "The uniforms. The scene's smooth normals drawn again (<code>vn_replay</code>, against the depth before the grass). The sun's direction glides to each new step or is held; its light and strength (dusk clamp, cloud, indoors). The fog's colour eased; the player light placed.",
+        set: "sun_dusk, sun_free, fog_*, player_light*", prof: "Effects setup", code: "gfx_scene_done, gfx_shared.c gfx_sun_light" },
+      { t: "Sun shadow maps", who: "vc", tags: ["shadows"],
+        list: [
+          "<b>Far map</b> from the caster cache and this frame's casters.",
+          "<b>Near, sharp map</b> round the camera.",
+          "<b>Middle map</b> between them (off by default).",
+          "<b>Characters' own map</b> for softer shadows on them.",
+          "The zone's curved surfaces over the smooth normals (<code>zn_draw</code>)."
+        ],
+        p: "By day only, fading out as the sun nears the horizon.",
+        set: "sun, sun_distance, sun_near, sun_mid, sun_soft_chars, sun_cache, sun_curved", prof: "Sun shadow maps › The far map / The near, sharp map / The characters' own map", code: "gfx_d3d12.c sun_map, sun_map_view; gfx_sun_*.h" },
+      { t: "Characters' depth and mask", who: "vc", tags: ["lines", "ao"],
+        p: "For the characters' own ink lines and the occlusion's share on them: their depth from the camera, and the mask from their stencil bit (<code>cmask_pass</code>).",
+        set: "outline_width_chars, ao_chars, ao_soft_chars", prof: "Ambient occlusion › The lookups", code: "gfx_d3d12_cmask.h" },
+      { t: "Scene copied", who: "vc", tags: [],
+        p: "The scene as it is now, which every pass reads while the composite draws over the original.",
+        prof: "Effects setup › The scene copied (for the passes to read)" },
+      { t: "Occlusion and shadows", who: "vc", tags: ["ao", "shadows", "grass", "water"],
+        list: [
+          "Linear depth and three smaller levels, from the depth before the grass.",
+          "One pass: the occlusion's samples and the sun's map lookups (and the water mask).",
+          "Blurred across then down (shadows blurred over the zone's surfaces).",
+          "Blended with the frame before; smoothed on characters."
+        ],
+        set: "ao, ao_quality, radius, sun_soft, sun_soft_zone, temporal", prof: "Ambient occlusion › Depth for it / The lookups / Blurred / Blended with the frame before", code: "gfx_scene_done FX_LINZ, FX_AO, FX_BLUR, FX_TEMPORAL" },
+      { t: "Bloom", who: "vc", tags: ["bloom"],
+        p: "The bright parts at a quarter size (shaded by the occlusion and shadows), blurred; again at an eighth.",
+        set: "bloom, threshold", prof: "Bloom › The bright parts / Blurred / At an eighth" },
+      { t: "God rays", who: "vc", tags: ["rays", "sky"],
+        p: "The bright sky round the sun as a mask, 64 steps toward the sun's place on screen, blurred.",
+        set: "rays, rays_decay, rays_length", prof: "God rays › The bright sky / The rays / Blurred" },
+      { t: "Cel smoothing and the sky's colour", who: "vc", tags: ["lines", "fog", "sky"],
+        p: "The scene smoothed for the cel look, and one texel of the sky's colour for the height fog when fog takes the sky's.",
+        set: "smooth, fog_color=sky", prof: "Composite › Smoothing / The sky's colour" },
+      { t: "Composite", who: "vc", tags: ["ao", "shadows", "lines", "fog", "bloom", "rays", "grass", "zonelines"],
+        p: "One shader, in place on the scene: occlusion and shadows laid on, ink lines and creases (without the grass), cel bands, height fog lit toward the sun, the player light's pool, bloom and god rays added. The zone lines only when there's no late pass for them. <b>No colour grade here</b>: that's laid last.",
+        set: "outline*, bands, fog, fog_*, player_light, bloom, rays", prof: "Composite › The composite shader (all its features in one pass)", code: "gfx_scene_done FX comp" },
+      { t: "Clarity", who: "vc", tags: ["grade"],
+        p: "The scene copied, blurred at a quarter size, and its difference laid back as a gain. Off with the colour grade.",
+        set: "clarity, grade", prof: "Reflections, bounce light and clarity › Clarity: its blur / laid over" },
+      { t: "Reflections and bounce light", who: "vc", tags: ["refl", "rain", "grass"],
+        list: [
+          "Screen-space reflections at the occlusion's size, kept to the floors' kinds of ground and the rain's wet patches; grass neither takes nor shows in them.",
+          "Bounce light in a layer of its own, blurred and blended with the frame before.",
+          "Both laid over the scene."
+        ],
+        set: "refl*, gi*, rain.reflect", prof: "Reflections, bounce light and clarity › Reflections / Bounce light / laid over the scene", code: "FX_SSR, FX_GI, FX_GITEMP" },
+      { t: "Depth of field", who: "vc", tags: ["dof"],
+        p: "Here only when no upscaler runs; otherwise it's laid on the upscaler's output (6.3).",
+        set: "dof, dof_*", prof: "Depth of field › The focus / half size / The blur / Laid over", code: "dof_run" },
+      { t: "FXAA", who: "vc", tags: ["aa", "upscaler"],
+        p: "Last on the finished 3D scene. Skipped when DLSS or AMD FSR gathers the frames; FSR 1 wants it first.",
+        set: "[graphics] antialias", prof: "FXAA › FXAA", code: "fx_antialias" },
+      { t: "Late passes armed", who: "vc", tags: ["elight", "zonelines", "upscaler", "grade"],
+        p: "The effects' light and the zone lines are noted to run later. The upscaler (or the grade alone) is noted, with a copy of the scene before the game's effects for its masks. The caster list cleared. The profile switches to the interface.",
+        code: "el_note, zl_note, dlss_frame, dlss_keep_before" }
+    ] },
+  { n: 5, id: "p5", title: "The game draws on", short: "Particles, names", color: "--p5",
+    text: "Into the finished, effected scene. Nothing here gets the scene effects.",
+    steps: [
+      { t: "The game's effects", who: "game", tags: ["fx", "elight", "upscaler"],
+        p: "Flames, spells, particles, the game's own rain streaks, heat haze. No fog, occlusion or FXAA on them. Additive ones are also drawn again into the effects-light target (<code>el_emit</code>) and into the upscaler's mask.",
+        set: "elight_lantern, elight_dim, elight_actor, dlss_reactive", prof: "The interface drawn over the scene, and the rest › The game's interface draws, and the rest" },
+      { t: "Late world pieces", who: "game", tags: ["shadows", "zone"],
+        p: "World the game draws after its first particle (up to a third of a zone some frames). Drawn as they are, with the player light's pool added. Still casters: into the cache for the next frame's maps.",
+        set: "sun_late", code: "d3d8_casters.h late_pool, sun_cache_late" },
+      { t: "Names over heads, floating text", who: "game", tags: ["names", "upscaler", "grade"],
+        p: "Drawn into the scene's target before the game lays it on the back buffer. When an upscaler or the grade is waiting, they're copied and held, not drawn.",
+        code: "gfx_d3d12.c dlss_on_draw, dlss_hold" }
+    ] },
+  { n: 6, id: "p6", title: "The scene handed on", short: "Upscale, grade", color: "--p6",
+    text: "At the first draw that reads the scene: the game laying it on the back buffer (or the first name over a head, for 6.1 and 6.2). Run in <code>draw_one</code> just before that draw.",
+    steps: [
+      { t: "Zone lines, sparkles, ground rings", who: "vc", tags: ["zonelines"],
+        p: "Laid over the scene after the late world draws, with the composite's uniforms; the aura halo round characters with them.",
+        set: "[graphics] zonelines, sparkles", code: "zl_on_draw → zl_run" },
+      { t: "Light from the effects", who: "vc", tags: ["elight", "fx"],
+        p: "What the game's flames and spells added, blurred at bloom's size and laid over the scene as light on the world round them. With DLSS 5 it can go on its output instead.",
+        set: "elight, elight_radius, dlss5_elight_post", prof: "The interface drawn over the scene › Light from the effects", code: "el_on_draw → el_run" },
+      { t: "Upscaler", who: "vc", tags: ["upscaler", "dof", "grade", "night"],
+        list: [
+          "Motion redraws flushed; colour, depth, motion and the masks into the shared inputs.",
+          "VanaCore.Dlss.exe (64-bit) runs DLSS, DLSS 5 or AMD FSR 3.1/4 on its own queue.",
+          "The output at the shown size, with depth of field and the colour grade (and moonlight) folded in.",
+          "FSR 1 runs in-process instead; with names_native, a plain copy at the shown size."
+        ],
+        set: "[graphics] dlss, fsr, dlss5*, names_native", prof: "DLSS › Its inputs / Waiting on the helper's DLSS / Its output onto the frame", code: "dlss_on_draw → dlss_run → upscale_run, fsr1_run, dof_after" },
+      { t: "Colour grade (no upscaler)", who: "vc", tags: ["grade", "night"],
+        p: "In place on the scene, last: over the game's effects too. Moonlight with it at night.",
+        set: "grade, sat, contrast, warmth, hue, night_moon …", prof: "DLSS › Its output onto the frame (and the colour grade, laid last)", code: "grade_scene, grade_in_place" },
+      { t: "Held names drawn", who: "vc", tags: ["names", "upscaler"],
+        p: "The names and floating text held in 5.3, drawn over the upscaler's output at its size (or into the graded scene).",
+        prof: "DLSS › The interface held for DLSS, drawn over its output", code: "dlss_replay" },
+      { t: "Scene laid on the back buffer", who: "game", tags: ["fg"],
+        p: "The draw that triggered all this goes ahead, reading the upscaler's output in the scene's place. With frame generation, a copy without the names is taken first (its hudless frame)." }
+    ] },
+  { n: 7, id: "p7", title: "The game's interface", short: "Menus, chat", color: "--p7",
+    text: "2D onto the back buffer.",
+    steps: [
+      { t: "Menus, chat, windows", who: "game", tags: ["ui"],
+        p: "Everything 2D the game draws. VanaCore changes what's drawn on the way (True Font text, cut window corners) but adds no pass here.",
+        prof: "The interface drawn over the scene › The game's interface draws" },
+      { t: "Present called", who: "vc", tags: ["ui"],
+        p: "The scene ended if it hasn't been; the next frame's world target picked (the busiest by vertices). VanaCore's ImGui (/vana and the rest), drawn into a layer of its own, is handed to the backend.",
+        code: "d3d8.c IDirect3DDevice8_Present, scene_present, gfx_present_layer" }
+    ] },
+  { n: 8, id: "p8", title: "Onto the window", short: "gfx_present", color: "--p8",
+    text: "<code>gfx_present</code>: the motion redraws flushed, then one of two ways out.",
+    steps: [
+      { t: "Frame generation", who: "vc", tags: ["fg", "names"],
+        p: "When on: the frame and its hudless copy handed to the helper, which makes the in-between frames; its own thread presents them. The names over heads are drawn onto its frames.",
+        set: "[graphics] dlss.framegen, nameplates.framegen", prof: "Frame generation: the frame handed over / Waiting on the helper's frame generation / The names over heads", code: "fg_present" },
+      { t: "The frame onto the window", who: "vc", tags: ["ui", "grade"],
+        list: [
+          "The back buffer drawn at the window's size, with contrast-adaptive sharpening (off with the grade).",
+          "VanaCore's interface layer (ImGui) laid over at the window's size.",
+          "The FPS overlay."
+        ],
+        set: "sharpen", prof: "The frame onto the window (and sharpen) / VanaCore's interface (ImGui) laid over / The FPS overlay", code: "present_draw" },
+      { t: "Presented", who: "gpu", tags: [],
+        p: "The frame's command list submitted; on a separate present queue, which waits for the drawing, the texture is copied into the swap chain's buffer and presented.",
+        code: "frame_end, show_present" }
+    ] }
+];
+
+const WHO = { game: "Game", vc: "VanaCore", gpu: "Backend" };
+const esc = s => s; // content is authored here, already HTML
+
+const strip = document.getElementById("strip");
+const main = document.getElementById("phases");
+PHASES.forEach(ph => {
+  const a = document.createElement("a");
+  a.href = "#" + ph.id;
+  a.style.setProperty("--pc", `var(${ph.color})`);
+  a.dataset.phase = ph.n;
+  a.innerHTML = `<span class="n">${ph.n}</span><span class="t">${ph.title}</span><span class="c">${ph.short}</span>`;
+  strip.appendChild(a);
+
+  const sec = document.createElement("section");
+  sec.className = "phase";
+  sec.id = ph.id;
+  sec.style.setProperty("--pc", `var(${ph.color})`);
+  const items = ph.steps.map((s, i) => {
+    const num = `${ph.n}.${i + 1}`;
+    const meta = [];
+    if (s.set) meta.push(`<div><span class="k">Setting</span><code>${s.set}</code></div>`);
+    if (s.prof) meta.push(`<div><span class="k">Profile</span><span>${s.prof}</span></div>`);
+    if (s.code) meta.push(`<div><span class="k">Code</span><code>${s.code}</code></div>`);
+    const list = s.list ? `<ul>${s.list.map(x => `<li>${x}</li>`).join("")}</ul>` : "";
+    const para = s.p ? `<p>${s.p}</p>` : "";
+    return `<li class="step" id="s${ph.n}-${i + 1}" data-tags="${s.tags.join(" ")}" data-num="${num}" data-title="${s.t.replace(/"/g, "&quot;")}">
+      <div class="sn">${num}</div>
+      <div class="body">
+        <div class="top"><h3>${s.t}</h3><span class="who ${s.who}">${WHO[s.who]}</span></div>
+        ${list}${para}
+        ${meta.length ? `<div class="meta">${meta.join("")}</div>` : ""}
+      </div></li>`;
+  }).join("");
+  sec.innerHTML = `<div class="phase-head"><span class="pn">${ph.n}</span><h2>${ph.title}</h2><p>${ph.text}</p></div><ol class="steps">${items}</ol>`;
+  main.appendChild(sec);
+});
+
+const chips = document.getElementById("chips");
+const answer = document.getElementById("answer");
+let current = null;
+FEATURES.forEach(([key, label]) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "chip";
+  b.id = "chip-" + key;
+  b.textContent = label;
+  b.setAttribute("aria-pressed", "false");
+  b.addEventListener("click", () => pick(current === key ? null : key));
+  chips.appendChild(b);
+});
+
+function pick(key) {
+  current = key;
+  document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c.id === "chip-" + key)));
+  const steps = [...document.querySelectorAll(".step")];
+  document.querySelectorAll(".strip a").forEach(a => a.classList.remove("lit"));
+  if (!key) {
+    document.body.classList.remove("filtering");
+    steps.forEach(s => s.classList.remove("hit"));
+    answer.textContent = "Nothing picked: the whole frame is shown.";
+    return;
+  }
+  document.body.classList.add("filtering");
+  const hits = steps.filter(s => s.dataset.tags.split(" ").includes(key));
+  steps.forEach(s => s.classList.toggle("hit", hits.includes(s)));
+  const phases = new Set(hits.map(s => s.dataset.num.split(".")[0]));
+  document.querySelectorAll(".strip a").forEach(a => a.classList.toggle("lit", phases.has(a.dataset.phase)));
+  const label = FEATURES.find(f => f[0] === key)[1];
+  answer.innerHTML = `<b>${label}</b>: ${hits.length} step${hits.length === 1 ? "" : "s"}, in phase${phases.size === 1 ? "" : "s"} ${[...phases].join(", ")}.
+    <div class="refs">${hits.map(s => `<a href="#${s.id}">${s.dataset.num} ${s.dataset.title}</a>`).join("")}</div>`;
+  try { localStorage.setItem("frame-order-pick", key); } catch (e) {}
+}
+try { const k = localStorage.getItem("frame-order-pick"); if (k && FEATURES.some(f => f[0] === k)) pick(k); } catch (e) {}
+</script>
+</body>
+</html>

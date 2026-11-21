@@ -23,11 +23,6 @@ Everything else goes below. See CONTRIBUTING.md.
 - GPU:
 - OS: <!-- Windows 10 / 11, Wine, Proton -->
 
-## AI use
-
-<!-- None, or which tools and for what (for example "Claude wrote the first draft of the parser; I rewrote the error
-handling and tested it"). -->
-
 ## Checklist
 
 - [ ] I understand every line of this change and can explain it without help

@@ -1,0 +1,16 @@
+#include "resource.hpp"
+
+IDR_LUA_VANA RCDATA "lua\\vana.lua"
+IDR_LUA_ASHITA RCDATA "lua\\compat\\ashita.lua"
+IDR_LUA_WINDOWER RCDATA "lua\\compat\\windower.lua"
+IDR_LUA_SETTINGS RCDATA "lua\\settings.lua"
+IDR_LUA_NET RCDATA "lua\\net.lua"
+
+// Windows' common controls 6 for the addon package dialogs (addonpkg_win.cpp); 24 is RT_MANIFEST
+IDR_ADDONPKG_MANIFEST 24 "addonpkg.manifest"
+
+// The GM icons before staff names (gmicons.cpp; who gets which is gmicons_staff.h): found by these names
+GM_DEV RCDATA "..\\..\\assets\\gm\\dev.png"
+GM_ADMIN RCDATA "..\\..\\assets\\gm\\admin.png"
+GM_SGM RCDATA "..\\..\\assets\\gm\\sgm.png"
+GM_GM RCDATA "..\\..\\assets\\gm\\gm.png"

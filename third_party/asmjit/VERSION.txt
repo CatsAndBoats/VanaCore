@@ -1,0 +1,2 @@
+AsmJit (https://github.com/asmjit/asmjit) at commit c87860217e43e2a06060fcaae5b468f6a55b9963 (2025-12-13), its asmjit/ folder as it is.
+VanaCore builds its core, support and x86 parts (VanaCore.Core.vcxproj).
