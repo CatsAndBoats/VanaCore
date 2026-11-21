@@ -271,14 +271,16 @@ static void emit_water_foam(Sb* b, const char* dt, const char* ds)
         "  float freach = (1.0 - smoothstep(fw * 0.3, fw * 3.0, D)) * (1.0 - vown);\n"
         "  float fedge = 0.0;\n"
         "  { float2 pxn = float2(0.35, 0.35) / max(fp, 1e-4) / wsz, pxf = float2(0.9, 0.9) / max(fp, 1e-4) / wsz;\n"
-        "    float zs = pe.z * 0.985;\n"
+        /* (nearer, but only by up to a tenth of the distance, at least 2 yalms: what rises out of the water there. The ferry's rail
+         * and the monsters on its deck, a few yalms off in front of the sea 300 out, were outlined in foam, 2026-11-21) */
+        "    float zs = pe.z * 0.985, zm = max(pe.z - max(2.0, pe.z * 0.1), 0.0);\n"
         "    float2 on[4] = { float2(pxn.x, 0.0), float2(-pxn.x, 0.0), float2(0.0, pxn.y), float2(0.0, -pxn.y) };\n"
         "    float2 of[4] = { float2(pxf.x, pxf.y), float2(-pxf.x, pxf.y), float2(pxf.x, -pxf.y), float2(-pxf.x, -pxf.y) };\n"
         "    [unroll] for (int ei = 0; ei < 4; ++ei) {\n"
         "      float zn = water_viewz(%s.SampleLevel(%s, clamp(uv0 + on[ei], uvlo, uvhi), 0).r, zp, ws.x, pe.z);\n"
         "      float zf = water_viewz(%s.SampleLevel(%s, clamp(uv0 + of[ei], uvlo, uvhi), 0).r, zp, ws.x, pe.z);\n"
-        "      fedge = max(fedge, (zn > 0.0 && zn < zs) ? 1.0 : 0.0);\n"
-        "      fedge = max(fedge, (zf > 0.0 && zf < zs) ? 0.4 : 0.0); } }\n"
+        "      fedge = max(fedge, (zn > zm && zn < zs) ? 1.0 : 0.0);\n"
+        "      fedge = max(fedge, (zf > zm && zf < zs) ? 0.4 : 0.0); } }\n"
         "  float fsurge = 0.5 + 0.5 * sin(t * 0.209440 + D * 0.9) * sin(t * 0.146608 + p.x * 0.05 + p.z * 0.07);\n"
         "  float2 xf = p.xz / (0.8 * max(q3.w, 0.25)) + float2(0.32 * t, -0.213333 * t);\n"
         "  float3 nf = water_noise(xf), nf2 = water_noise(xf * 2.7 + 3.3);\n"
@@ -292,7 +294,8 @@ static void emit_water_foam(Sb* b, const char* dt, const char* ds)
         "  frim *= max(fslope, 1.0 - smoothstep(fw * 0.08, fw * 0.25, D));\n"
         "  float fdense = max(frim, fedge);\n"
         "  float fstreak = max(freach * max(fslope, frim), fedge * 0.7) * smoothstep(0.55 - 0.35 * fdense - 0.15 * fsurge, 0.85 - 0.2 * fdense, foam_s);\n"
-        "  float fl = wq.z * saturate(fdense * (0.2 + 0.8 * smoothstep(0.42, 0.78, foam_s)) + fstreak);\n"
+        /* (none on a ferry's sea, matrix 5's byte 1 at 3: d3d8_water_sea.h; its whitecaps stay) */
+        "  float fl = wq.z * saturate(fdense * (0.2 + 0.8 * smoothstep(0.42, 0.78, foam_s)) + fstreak) * (u.texm[5][1][0] > 2.5 ? 0.0 : 1.0);\n"
         /* the foam as bubbles: Worley cells at two scales (0.32 and 0.11 yalms), bright rims and clearer middles, popping and
          * reforming with time; thin foam breaks into separate bubbles (the cells' middles alone), dense foam (against the bank,
          * under a fall's foot) is whole, with a darkening under it so it sits on the water. The froth at a fall's foot joins it */
@@ -437,6 +440,7 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
              * Jeuno: zoomed in they're drawn, out they're not), and the sea read them: bright teal over a bed some yalms down,
              * dark once they went */
             "  if (u.texm[5][1][0] > 1.5) D = lerp(D, Dv, smoothstep(2.0, 6.0, D));\n"
+            "  if (u.texm[5][1][0] > 2.5) D = Dv;\n" /* a ferry's sea (byte 1 at 3): deep against the hull too, no shore */
             /* (not the horizon's sheet, matrix 5's byte 1: shaded as the tiles it carries on from, or it was a lighter second sea) */
             "  F = max(F, u.texm[5][1][0] > 0.5 ? 0.0 : 0.35 * q1.z);\n" /* the sky in it at least a third (times the reflection setting): what the game
                                                        * paints under a stream is a dark bed meant to be seen through its own bright

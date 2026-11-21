@@ -2505,7 +2505,7 @@ local function draw_banner(row, lx, right, y)
 end
 
 -- The beta testers: a pill each in its own colour, four to a line; the mouse lights the pill. A GM
--- ("[GM] Pie") is gold, with "GM" after the name.
+-- ("[GM] Pie") is gold, with "GM" after the name; "[Grass] Araedi" is green, with Mass Grass's seedling after it.
 local function draw_names(row, id, lx, right, y, h)
     local dl = imgui.GetWindowDrawList()
     local gap, ch = S(CARD_GAP), S(CARD_H)
@@ -2513,9 +2513,10 @@ local function draw_names(row, id, lx, right, y, h)
     for k, name in ipairs(row.names) do
         local col, line = (k - 1) % NAME_COLS, math.floor((k - 1) / NAME_COLS)
         local cx, cy = lx + col * (cw + gap), y + S(4) + line * (ch + gap)
-        local gm = name:match('^%[GM%]%s*(.+)$')
-        local shown = gm or name
-        local hue = gm and P.amber or tester_hue(name)
+        local tag, tagged = name:match('^%[(%a+)%]%s*(.+)$')
+        local gm, grass = tag == 'GM', tag == 'Grass'
+        local shown = tagged or name
+        local hue = gm and P.amber or grass and P.green or tester_hue(name)
         local t = M.ease(id .. '.card' .. k, M.over(cx, cy, cw, ch) and 1 or 0, 14)
         local r = ch / 2
         M.fill(dl, cx, cy, cw, ch, '#000000', r, 0, 0.3)
@@ -2523,13 +2524,17 @@ local function draw_names(row, id, lx, right, y, h)
         M.outline(dl, cx, cy, cw, ch, hue, r, 0, 1, 0.55 + 0.4 * t)
         local ay = cy + ch / 2
         local nx = cx + S(12)
-        local tag_w = gm and M.measure('GM', fonts.semi, SMALL - 2.5) + S(10) or 0
+        local tag_w = gm and M.measure('GM', fonts.semi, SMALL - 2.5) + S(10) or grass and S(22) or 0
         local text = M.fit(shown, cx + cw - S(8) - nx - tag_w, fonts.text, BODY - 1)
         M.text_mid(dl, nx, ay, text, M.mix(P.text, P.white, t), fonts.text, BODY - 1)
-        if gm then
+        if gm or grass then
             local tx = nx + M.measure(text, fonts.text, BODY - 1) + S(6)
-            M.fill(dl, tx, ay - S(7), tag_w - S(4), S(14), P.amber, S(3), 0, 0.22)
-            M.text_centred(dl, tx, ay - S(7), tag_w - S(4), S(14), 'GM', P.amber, fonts.semi, SMALL - 2.5)
+            M.fill(dl, tx, ay - S(7), tag_w - S(4), S(14), hue, S(3), 0, 0.22)
+            if gm then
+                M.text_centred(dl, tx, ay - S(7), tag_w - S(4), S(14), 'GM', hue, fonts.semi, SMALL - 2.5)
+            else
+                M.icon_centred(dl, tx + (tag_w - S(4)) / 2, ay, 'seedling', hue, 9)
+            end
         end
     end
 end
@@ -3316,7 +3321,9 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         M.text_mid(dl, lx, cy, row.label, lit and (row.colour or P.text) or P.dim, fonts.text, BODY, alpha)
     end
     if row.restart then
-        M.text_mid(dl, lx + M.measure(row.label, fonts.text, BODY) + S(5), cy - S(1), '*', P.amber, fonts.semi, BODY + 1, alpha)
+        -- (after the name where it's drawn: a sub row's is set in)
+        M.text_mid(dl, (row.sub and lx + S(22) or lx) + M.measure(row.label, fonts.text, BODY) + S(5), cy - S(1), '*', P.amber,
+                   fonts.semi, BODY + 1, alpha)
     end
     if row.asset_own then
         -- a red × beside the name: the plant out of the library, asked twice
@@ -5818,7 +5825,8 @@ end
 
 -- The window's own commands besides /vana, each switched off in Client > Commands ([commands] <name>=0, data.lua's
 -- COMMANDS) for a player whose own addon or plugin has one of that name: left to it then
-local OWN_COMMANDS = { hud = true, gamepad = true, gamepads = true, addons = true, plugins = true, pivot = true }
+local OWN_COMMANDS = { hud = true, gamepad = true, gamepads = true, addons = true, plugins = true, pivot = true,
+                       api = true, apiexplorer = true }
 
 vana.events.on('command', function (e)
     local words = {}
@@ -5905,6 +5913,15 @@ vana.events.on('command', function (e)
             open(page)
             return true
         end
+    end
+    -- /api (or /apiexplorer) with the API Explorer not loaded: it's loaded and shown (/api hide: nothing to hide). Once
+    -- it's loaded the apiexplorer addon answers /api itself, so it's passed on (the same patterns as its own)
+    local api = e.command:match('^/api%s*(%a*)%s*$') or e.command:match('^/apiexplorer%s*(%a*)%s*$')
+    if (api == '' or api == 'show' or api == 'hide') and not M.apiexplorer_loaded() then
+        if api ~= 'hide' then
+            M.open_apiexplorer()
+        end
+        return true
     end
     if command ~= '//vana' and command ~= '/vana' then
         return false

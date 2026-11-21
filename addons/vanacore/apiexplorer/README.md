@@ -4,8 +4,8 @@ A window for addon authors with two tabs: **Reference**, every table and functio
 takes, what it returns and what it does; and **Snippets**, calls to run in the game, read what they return and copy into
 your own addon.
 
-- `/addon load apiexplorer` opens it; `/api` (or `/apiexplorer`) shows or hides it, `/api show` and `/api hide` only show
-  or only hide it.
+- `/api` (or `/apiexplorer`) shows or hides it, `/api show` and `/api hide` only show or only hide it. It isn't loaded
+  at start: `/api` loads it when it isn't (the /vana addon does that), as `/addon load apiexplorer` does.
 - Each tab has a list down the left: drag its right edge to widen it. The ≡ at the left of the top line hides the list
   (the page takes its room) and shows it again, as /vana's does. The window opens on the tab it was last on.
 

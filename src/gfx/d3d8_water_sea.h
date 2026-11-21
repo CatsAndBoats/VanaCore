@@ -2,6 +2,8 @@
  * water_ground_setup, gfx_draw). The sea drawn on to the horizon (water_horizon_pass, from water_pass) */
 #pragma once
 
+#define SEA_FAR 50000.0f /* water.horizon's reach: the sheet's far edge under a pixel from the horizon (15 yalms up, 2160 high) */
+
 /* The sea drawn on to the horizon (water.horizon): the game's sea stops at the edge of the zone's meshes, a hard line under a far
  * draw distance. A flat sheet at the sea's level (g_sea: the lowest tiles that reach the zone's rim), SEA_UNDER lower, from the
  * zone's floors' box pulled in SEA_IN (so it lies under the last tiles, which win the depth test) out past the fog, in four quads
@@ -28,7 +30,15 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
     const float fog_end = s->fog[2] != 0.0f ? s->fog[1] : 0.0f;
     float reach = fog_end * 2.5f + 400.0f; /* well past the fog's end: the sheet has faded to nothing before its far edge */
     reach = reach < 2000.0f ? 2000.0f : reach > 20000.0f ? 20000.0f : reach;
+    /* water.horizon: past the game's far plane too, which its draw distance sets (a ferry's Boat rides at 1x cut the sea about 330
+     * yalms out, the game's painted sea past it), out to SEA_FAR; not cut there, its depth held at the far end (GfxDepthKey.noclip:
+     * LESSEQUAL against the cleared depth). With the camera over a yalm above it: nothing of it nearer than the near plane */
+    const int noclip = g_water_set.horizon && level - cam[1] > 1.0f;
+    if (noclip)
+        reach = SEA_FAR;
     float ilo[2] = { g_wfloor.zlo[0] + SEA_IN, g_wfloor.zlo[2] + SEA_IN }, ihi[2] = { g_wfloor.zhi[0] - SEA_IN, g_wfloor.zhi[2] - SEA_IN };
+    if (g_water_ship) /* a ferry has no floors' box (sea_note): the sea round the camera (left as it was, the last zone's box) */
+        ilo[0] = ihi[0] = cam[0], ilo[1] = ihi[1] = cam[2];
     for (int a = 0; a < 2; ++a)
         if (ilo[a] >= ihi[a])
             ilo[a] = ihi[a] = (ilo[a] + ihi[a]) * 0.5f;
@@ -64,6 +74,7 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
     }
     static GfxDraw d;
     water_ground_setup(&d, s, copies, colour_copy, depth_copy, w, h);
+    d.depth.noclip = (uint8_t)noclip;
     d.data[0] = v, d.size[0] = sizeof v;
     d.count = full ? 2 : 16;
     /* The sheet is shaded as the sea's tiles it carries on from are (the water's own settings: its colour, brightness and reflection
@@ -76,6 +87,10 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
         d.u.texm[7][4] *= 0.5f; /* the waves at half (as before): its swells out to the horizon were bands */
     /* the horizon's sheet (gfx_hlsl_water.h: matrix 5's byte 1): its inner ring fades in, and no least share of the sky */
     d.u.texm[5][1] = full ? 2.0f : 1.0f; /* 2: the whole sea, faded at the shore by the scene's depth under it, not the rings' */
+    /* 3: a ferry's whole sea, deep throughout and no shore foam: its one shore is the boat's hull, whose waterline foam was a
+     * strip of noisy bubbles seen past the rail from the deck, a white outline round the rail and the rope (2026-11-21) */
+    if (full && g_water_ship)
+        d.u.texm[5][1] = 3.0f;
     /* the whole sea's waves are the FFT ocean's (d3d8_water_ocean.h; GfxFsKey.water 4): its two cascades in stages 4 and 5,
      * wrapping, filtered through their mips (anisotropic: the sea is seen at grazing angles) */
     if (full && d.fs.water == 3 && ocean_update())

@@ -522,3 +522,35 @@ void gfx_fx_build_end(int ok)
     const double took = g_fxb_start_ns ? (double)(gfx_now_ns() - g_fxb_start_ns) * 1e-9 : 0.0;
     fprintf(stderr, ok ? "[recomp] gfx: scene effects ready (built in %.1f s)\n" : "[recomp] gfx: scene effects failed to build after %.1f s; off\n", took);
 }
+
+/* --- the start-up rebuild's thread pool (gfx_shared.h), made once, kept for the process ---------------------------- */
+static PTP_POOL g_warm_pool;
+static TP_CALLBACK_ENVIRON g_warm_env;
+static DWORD g_warm_n;
+static INIT_ONCE g_warm_once = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK warm_pool_make(PINIT_ONCE once, PVOID param, PVOID* ctx)
+{
+    (void)once;
+    (void)param;
+    (void)ctx;
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    const DWORD n = si.dwNumberOfProcessors / 2;
+    g_warm_n = n < 1 ? 1 : n > 4 ? 4 : n;
+    g_warm_pool = CreateThreadpool(NULL);
+    if (!g_warm_pool)
+        return TRUE;
+    SetThreadpoolThreadMaximum(g_warm_pool, g_warm_n);
+    InitializeThreadpoolEnvironment(&g_warm_env);
+    SetThreadpoolCallbackPool(&g_warm_env, g_warm_pool);
+    return TRUE;
+}
+
+void* gfx_warm_env(void)
+{
+    InitOnceExecuteOnce(&g_warm_once, warm_pool_make, NULL, NULL);
+    return g_warm_pool ? &g_warm_env : NULL;
+}
+
+unsigned gfx_warm_threads(void) { return gfx_warm_env() ? (unsigned)g_warm_n : 0; }

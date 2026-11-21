@@ -12,6 +12,10 @@ From vana.game.loading() (zoneload.cpp), which follows each load:
   people  the zone is in: the text fades, and (People loading, off by default) a line at the top centre counts the
           people's models still loading
 
+A logout or /shutdown (the server's zone-out of type 1, out_type) shows none of it: the game fades to black, no
+screenshot, no text. The black lifts as the title screen's windows open (as autologin.cpp names them), or after
+LOGOUT_LONGEST should they not be seen; a /shutdown's game is gone before then.
+
 What shows, its scale and position, its colours, its panel and a picture behind it are /vana > Options > Loading Screen
 ([loadscreen] in the settings file, read each frame it shows). The picture: one of your screenshots (VanaCore's
 screenshots folder, every day's), a new one picked at random for each load, darkened toward its edges (edges.png).
@@ -19,6 +23,7 @@ screenshots folder, every day's), a new one picked at random for each load, dark
 In game:
   /loadscreen            /vana at its Loading Screen settings
   /loadscreen preview    shows it for a few seconds as a load would
+  /loadscreen preview logout   the logout's fade to black, lifting after a moment as the title screen would
   /addon unload loadscreen   switches it off (its scripts\boot.txt line taken out, as for any addon)
 --]]
 
@@ -46,6 +51,14 @@ local corner_alpha = 0
 local preview_until = nil
 local SERVER_LONGEST = 12 -- s of "waiting for the server" shown at most
 local logged_out = false  -- the logout event came: nothing shown until the next load starts
+
+-- A logout's black (its zone-out out_type 1): fast in, as a /shutdown's game ends about 0.6 s after its zone-out
+local LOGOUT_IN, LOGOUT_OUT = 0.4, 0.6 -- s
+local LOGOUT_LONGEST = 10                -- s of black at most, should the title screen's windows not be seen
+local TITLE_MENUS = { ptc8lice = true, loby2win = true, dbnamese = true, ptc6yesn = true } -- the title screen's windows
+local black = 0                          -- the black's opacity, 0 to 1
+local at_title = false                   -- a title screen window opened since the logout: the black lifts
+local preview_logout = false             -- /loadscreen preview logout: the preview is the logout's black
 
 local function now() return vana.time.clock() end
 
@@ -129,6 +142,8 @@ local function make()
     -- behind the text and bar while a screenshot is behind it all, so they read over a bright picture
     -- (Panel background colour and Panel opacity)
     ui.panel = vana.ui.rect({ width = 0, height = 0, radius = 10, color = '#0A0D14', layer = LAYER, visible = false })
+    -- a logout's black, over it all
+    ui.black = vana.ui.rect({ width = 0, height = 0, color = '#000000FF', layer = LAYER + 3, visible = false })
 end
 
 local function set_text(box, text)
@@ -249,6 +264,17 @@ local function draw_picture(covering, dt)
     ui.edges:set({ x = 0, y = 0, width = sw, height = sh, opacity = pic * opts.edges, visible = opts.edges > 0 })
 end
 
+-- A logout's black over the whole screen, fading in while `want`, out after
+local function draw_black(want, dt)
+    black = want and math.min(1, black + dt / LOGOUT_IN) or math.max(0, black - dt / LOGOUT_OUT)
+    if black <= 0 then
+        if ui.black.visible then ui.black.visible = false end
+        return
+    end
+    local sw, sh = vana.ui.screen()
+    ui.black:set({ x = 0, y = 0, width = sw, height = sh, opacity = black, visible = true })
+end
+
 -- The parts switched on, stacked round the Position setting, a panel behind them (Panel opacity, 0 for none)
 local function place(sw, sh)
     local s = opts.scale
@@ -307,20 +333,33 @@ local function frame()
     last_clock = clock
 
     local state = nil
+    local logout = false -- a logout's black wanted
     if preview_until ~= nil then
         if clock < preview_until then
-            state = preview_state()
+            if preview_logout then
+                logout = true
+            else
+                state = preview_state()
+            end
         else
-            preview_until = nil
+            preview_until, preview_logout = nil, false
         end
     elseif vana.game.loading ~= nil then
         state = vana.game.loading()
+        if state == nil or state.out_type ~= 1 then
+            at_title = false -- a title screen window counts only while a logout's load is the one going
+        end
         if state == nil then
             logged_out = false -- the next load shows again
+        elseif state.out_type == 1 then
+            -- a logout or /shutdown: black, no screenshot or text, until the title screen
+            logout = not at_title and state.elapsed < LOGOUT_LONGEST
+            state = nil
         elseif logged_out or (state.phase == 'server' and state.elapsed > SERVER_LONGEST) then
             state = nil
         end
     end
+    draw_black(logout, dt)
 
     if state ~= nil or shown > 0 or corner_alpha > 0 or pic > 0 then
         read_opts()
@@ -335,7 +374,7 @@ local function frame()
     if shown <= 0 then
         bar = 0
         for name, box in pairs(ui) do
-            if name ~= 'corner' and name ~= 'picture' and name ~= 'edges' and box.visible then
+            if name ~= 'corner' and name ~= 'picture' and name ~= 'edges' and name ~= 'black' and box.visible then
                 box.visible = false
             end
         end
@@ -405,6 +444,13 @@ end
 vana.events.on('zone_change', shown_again)
 vana.events.on('login', shown_again)
 
+-- The title screen's windows: a logout's black lifts (frame)
+vana.events.on('menu_open', function (e)
+    if TITLE_MENUS[e.name] then
+        at_title = true
+    end
+end)
+
 vana.events.on('command', function (e)
     local words = {}
     for word in e.command:gmatch('%S+') do
@@ -414,13 +460,15 @@ vana.events.on('command', function (e)
         return false
     end
     if words[2] == 'preview' then
-        preview_until = now() + 3.7
+        preview_logout = words[3] == 'logout' -- 2 s of black, then it lifts
+        preview_until = now() + (preview_logout and 2 or 3.7)
         bar = 0
         shown, pic = 0, 0 -- a new picture, as a load picks one
     elseif words[2] == nil then
         return false -- /vana opens at its Loading Screen settings (vana.lua)
     else
-        print('loadscreen: /loadscreen opens its settings; /loadscreen preview shows it as a load would')
+        print('loadscreen: /loadscreen opens its settings; /loadscreen preview shows it as a load would '
+            .. '(/loadscreen preview logout: a logout\'s fade to black)')
     end
     return true
 end)

@@ -242,6 +242,23 @@ freely, subject to the following restrictions:
 - LuaSocket's Lua modules (`socket.lua`, `mime.lua`, `socket/*.lua`): LuaSocket's MIT license, given under LuaSocket above (the files carry no notice of their own).
 - `json.lua` (Copyright (c) 2020 rxi) and `reflect.lua` (Copyright (C) 2014 Peter Cawley): MIT, the full notice at the top of each file.
 
+## Windower's addon libraries and resources
+
+`addons/vanacore/libs/windower/libs/` and `addons/vanacore/libs/windower/res/`, unmodified: Windower 4's `addons/libs` (https://github.com/Windower/Lua) and `res` (https://github.com/Windower/Resources), as Windower's updater installed them on 2026-11-20, without LuaSec (`ssl.lua`, `ssl/https.lua`: it needs a DLL a LuaJIT state can't load). Windower addons read them when `addons\windower\libs` or `addons\windower\res` doesn't have the file. `addons/vanacore/libs/NOTICE.md` says the same beside them. LuaSocket's Lua modules among them (`socket.lua`, `ltn12.lua`, `mime.lua`, `socket/*.lua`) are under LuaSocket's MIT license, given under LuaSocket above. The rest are under the BSD 3-Clause license, the notice at the end of each library file (`actions.lua` is Copyright © 2013, Suji, under the same terms):
+
+```
+Copyright © 2013-2026, Windower
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+    * Neither the name of Windower nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL Windower BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
 ## Ashita v4 SDK
 
 Source: the Ashita v4 SDK (`plugins/sdk`): interface version 4.16 as the CatsEyeXI client ships it, and 4.30 from https://github.com/AshitaXI/Ashita-v4beta at commit ed757ee915. `src/core/compat/ashita/abi.hpp` is generated from its headers by `tools/gen_ashita_abi.py` and so is a modified version of them, released with VanaCore's source under the same license. The changes: the interface declarations are reformatted (parameters renamed, default arguments dropped), Direct3D, DirectInput and ImGui types are replaced by stand-ins of the same size and passing convention, both versions' interfaces are in one file (in `vanacore::ashita::sdk::v416` and `v430`), and implementation class templates are added for each interface. The game structures (`ffxi/*.h`), enumerations and resource structures are the 4.30 SDK's, unchanged. The full license texts are in `third_party/ashita-sdk/` (`LICENSE-LGPLv3.md`, and `LICENSE-GPLv3.md`, which it builds on); in a VanaCore download, in `licenses\`.

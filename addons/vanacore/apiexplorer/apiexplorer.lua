@@ -12,7 +12,7 @@ you can paste into your own addon; the code box is editable, so change a slot or
 
 In game:
   /addon load apiexplorer    opens the window
-  /api                       shows or hides it (/apiexplorer too)
+  /api                       shows or hides it (/apiexplorer too); not loaded, /vana loads it and shows it
   /addon unload apiexplorer
 --]]
 

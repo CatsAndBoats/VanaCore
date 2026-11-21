@@ -817,6 +817,11 @@ void apply_live(When when)
     const bool distance_on = flag(L"drawdistance.enabled", true);
     g_distance.scenery = distance_on ? number(L"drawdistance", 5.0f, 0.0f, 100.0f) : 1.0f;
     g_distance.mobs = distance_on ? number(L"drawdistance.mobs", 5.0f, 0.0f, 100.0f) : 1.0f;
+    // drawdistance.ship: the zone's on a ferry (g_ship_zone; the panel's Boat rides), 1 (the game's) when not set: the whole
+    // zone moves past the boat with no view lists, so the game draws all of it in view out to the distance. Read again as
+    // the player boards or leaves one (apply_live from the zone's watch)
+    if (g_ship_zone && distance_on)
+        g_distance.scenery = number(L"drawdistance.ship", 1.0f, 0.0f, 100.0f);
     // drawdistance.target=game|drawn: characters drawn past the game's own distance can't be targeted (distance.cpp
     // targetable), or can be as far as they're drawn
     const std::wstring target = read(L"graphics", L"drawdistance.target", L"game");

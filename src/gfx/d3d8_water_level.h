@@ -101,12 +101,27 @@ static int sea_level(float* y)
  * no one wades in it, so its collision has none at the rim, and with sea_zone() asked of every tile the sea's level was never set
  * and water.horizon drew nothing). 0: a chunk of the ground's water (water.detect=2), a sea's only in a zone with a sea (a
  * stream's end near the rim is none) */
+/* A ferry's zone (core/graphics.cpp ship_zone's: Ship bound for Selbina / Mhaura, their pirate versions, the open sea routes): its
+ * collision isn't read and the whole zone moves past the boat, so there's no floors' box to tell the sea by. Its sea is the game's
+ * level sheets round the boat, 274 and 658 yalms across (2026-11-21), and nothing past them: the water model's level sheets
+ * SEA_SHIP_LEAST across or more are the sea's there, and VanaCore's sea plane goes on to the horizon from them */
+#define SEA_SHIP_LEAST 200.0f
+static int g_water_ship;
+static void water_set_zone(int zone)
+{
+    g_water_ship = zone == 46 || zone == 47 || zone == 220 || zone == 221 || zone == 227 || zone == 228;
+}
 static void sea_note(const float lo[3], const float hi[3], int own)
 {
-    if (own ? !g_wfloor.zone || !(g_wfloor.zlo[0] <= g_wfloor.zhi[0]) : !sea_zone())
+    if (g_water_ship)
+    {
+        if (!own || (hi[0] - lo[0] < SEA_SHIP_LEAST && hi[2] - lo[2] < SEA_SHIP_LEAST))
+            return;
+    }
+    else if (own ? !g_wfloor.zone || !(g_wfloor.zlo[0] <= g_wfloor.zhi[0]) : !sea_zone())
         return;
-    if (lo[0] > g_wfloor.zlo[0] + SEA_RIM && hi[0] < g_wfloor.zhi[0] - SEA_RIM && lo[2] > g_wfloor.zlo[2] + SEA_RIM &&
-        hi[2] < g_wfloor.zhi[2] - SEA_RIM)
+    else if (lo[0] > g_wfloor.zlo[0] + SEA_RIM && hi[0] < g_wfloor.zhi[0] - SEA_RIM && lo[2] > g_wfloor.zlo[2] + SEA_RIM &&
+             hi[2] < g_wfloor.zhi[2] - SEA_RIM)
         return;
     const float y = hi[1]; /* the lowest point: a tile's one height; a sea chunk's wave troughs, which the horizon's sheet lies under */
     if (!g_sea.n || y > g_sea.y + 1.0f)

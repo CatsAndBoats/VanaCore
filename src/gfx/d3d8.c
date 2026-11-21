@@ -123,6 +123,7 @@ static uint32_t g_water_kept_n; /* of them, kept for the water pass (d3d8_water.
 static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s);
 static void rain_pass(GfxTex* color, GfxTex* depth, const GfxScene* s);
 static void rain_set_zone(int zone);
+static void water_set_zone(int zone); /* d3d8_water_level.h: a ferry's zone (g_water_ship) */
 static int rain_game_skip(const GfxDraw* d, uint32_t tex0);
 static void water_device_lost(void); /* the collision's water's buffer (d3d8_water.h) */
 static void rain_mask_lost(void);     /* the wet ground's mask (d3d8_rain.h) */
@@ -5482,6 +5483,7 @@ void d3d8_set_grass_zone(int zone)
 {
     grass_set_zone(zone);
     rain_set_zone(zone); /* the thunder weathers' dry zones (d3d8_rain.h) */
+    water_set_zone(zone); /* ... and a ferry's sea (d3d8_water_level.h) */
 }
 
 /* The characters - players, NPCs, monsters and what they wear: FFXI skins them on the CPU each frame, into dynamic

@@ -1150,6 +1150,8 @@ typedef struct Shaders
 typedef struct ShaderEntry
 {
     void* volatile state; /* NULL while building, SHADERS_FAILED, or the Shaders */
+    void* volatile job;   /* the start-up rebuild's ShaderJob until a thread takes it to build (warm_callback) */
+    int hurried;          /* a draw wanted it before the rebuild got to it: sent ahead on the default pool (shaders_for) */
 } ShaderEntry;
 
 typedef struct ShaderJob
@@ -1271,7 +1273,18 @@ static void CALLBACK job_callback(PTP_CALLBACK_INSTANCE inst, void* ctx)
     run_job((ShaderJob*)ctx);
 }
 
-static void queue_job(const LibKey* k, const uint32_t* vs, uint32_t nvs, const uint32_t* ps, uint32_t nps, int record)
+/* a start-up rebuild's pair, built by whichever comes first: its turn on the rebuild's few threads, or a draw wanting it
+ * (shaders_for); the other finds the job taken and does nothing. The entries live as long as the process */
+static void CALLBACK warm_callback(PTP_CALLBACK_INSTANCE inst, void* ctx)
+{
+    (void)inst;
+    ShaderJob* j = (ShaderJob*)InterlockedExchangePointer(&((ShaderEntry*)ctx)->job, NULL);
+    if (j)
+        run_job(j);
+}
+
+/* warm: one of the start-up rebuild's (prewarm_shaders), on its own pool (gfx_warm_env) */
+static void queue_job(const LibKey* k, const uint32_t* vs, uint32_t nvs, const uint32_t* ps, uint32_t nps, int record, int warm)
 {
     if (map_get(&g_shader_map, k, sizeof *k))
         return;
@@ -1283,6 +1296,13 @@ static void queue_job(const LibKey* k, const uint32_t* vs, uint32_t nvs, const u
         j->vs = (uint32_t*)malloc(4u * nvs), memcpy(j->vs, vs, 4u * nvs), j->nvs = nvs;
     if (nps)
         j->ps = (uint32_t*)malloc(4u * nps), memcpy(j->ps, ps, 4u * nps), j->nps = nps;
+    if (warm && !g_sync_pipelines)
+    {
+        e->job = j;
+        if (TrySubmitThreadpoolCallback(warm_callback, e, (PTP_CALLBACK_ENVIRON)gfx_warm_env()))
+            return;
+        e->job = NULL; /* the game's thread's: no draw has seen the entry yet */
+    }
     if (g_sync_pipelines || !TrySubmitThreadpoolCallback(job_callback, j, NULL))
         run_job(j);
 }
@@ -1315,14 +1335,15 @@ static void prewarm_shaders(void)
         if (ok && nps)
             ps = (uint32_t*)malloc(4u * nps), ok = fread(ps, 4, nps, f) == nps;
         if (ok)
-            queue_job(&k, vs, nvs, ps, nps, 0), n++;
+            queue_job(&k, vs, nvs, ps, nps, 0, 1), n++;
         free(vs);
         free(ps);
         if (!ok)
             break;
     }
     fclose(f);
-    fprintf(stderr, "[recomp] gfx: building %u shader pairs from %s in the background\n", n, g_shader_cache);
+    fprintf(stderr, "[recomp] gfx: building %u shader pairs from %s in the background, %u at a time\n", n, g_shader_cache,
+        gfx_warm_threads() ? gfx_warm_threads() : n);
 }
 
 static int g_pair_waiting; /* shaders_for's last NULL was a pair still compiling (not one that failed) */
@@ -1343,7 +1364,7 @@ static Shaders* shaders_for(const LibKey* k, const uint32_t* vs_tokens, const ui
             uint32_t nvs = 0, nps = 0;
             uint32_t* vs = k->vs.prog ? copy_tok(vs_tokens, &nvs) : NULL;
             uint32_t* ps = k->fs.prog ? copy_tok(ps_tokens, &nps) : NULL;
-            queue_job(k, vs, nvs, ps, nps, !g_sync_pipelines);
+            queue_job(k, vs, nvs, ps, nps, !g_sync_pipelines, 0);
             free(vs);
             free(ps);
             e = (ShaderEntry*)map_get(&g_shader_map, k, sizeof *k);
@@ -1353,6 +1374,12 @@ static Shaders* shaders_for(const LibKey* k, const uint32_t* vs_tokens, const ui
         last_key = *k, last = e;
     }
     void* st = InterlockedCompareExchangePointer(&e->state, NULL, NULL);
+    if (!st && e->job && !e->hurried)
+    {
+        /* still waiting its turn in the start-up rebuild: a draw wants it now, so it goes ahead on the default pool */
+        e->hurried = 1;
+        TrySubmitThreadpoolCallback(warm_callback, e, NULL);
+    }
     g_pair_waiting = st == NULL;
     return st && st != SHADERS_FAILED ? (Shaders*)st : NULL;
 }
@@ -1490,7 +1517,7 @@ static ID3D11DepthStencilState* depth_state(const GfxDepthKey* k)
 
 typedef struct RasterKey
 {
-    uint8_t cull, fill, shadow, pad; /* shadow: the sun's map's own bias (sun_draw) */
+    uint8_t cull, fill, shadow, noclip; /* shadow: the sun's map's own bias (sun_draw); noclip: GfxDepthKey.noclip */
     int32_t zbias;
 } RasterKey;
 
@@ -1509,7 +1536,7 @@ static ID3D11RasterizerState* raster_state(const RasterKey* k)
     d.SlopeScaledDepthBias = -(float)k->zbias * 0.03125f;
     if (k->shadow) /* the map's own bias: surfaces at a slant to the sun are pushed back more */
         d.DepthBias = 0, d.SlopeScaledDepthBias = 1.5f;
-    d.DepthClipEnable = TRUE;
+    d.DepthClipEnable = k->noclip ? FALSE : TRUE;
     if (FAILED(ID3D11Device_CreateRasterizerState(g_dev, &d, &s)))
         return NULL;
     map_put(&g_rasters, k, sizeof *k, s);
@@ -1904,10 +1931,10 @@ static void draw_main(const GfxDraw* d)
             dk.stencil = 0;
         if (!dk.stencil)
             dk.sfail = dk.szfail = dk.spass = dk.sfunc = dk.sread = dk.swrite = 0;
-        memset(dk.pad, 0, sizeof dk.pad);
+        dk.noclip = 0, memset(dk.pad, 0, sizeof dk.pad); /* (noclip is the rasterizer's, below) */
     }
     ID3D11DepthStencilState* depth = depth_state(&dk);
-    RasterKey rk = { d->cull, (uint8_t)(d->fill == 2 ? 2 : 3), 0, 0, ds ? d->zbias : 0 };
+    RasterKey rk = { d->cull, (uint8_t)(d->fill == 2 ? 2 : 3), 0, (uint8_t)(ds && d->depth.noclip), ds ? d->zbias : 0 };
     ID3D11RasterizerState* raster = raster_state(&rk);
     if (!blend || !depth || !raster)
     {

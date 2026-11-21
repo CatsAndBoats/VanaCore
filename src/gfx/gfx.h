@@ -183,7 +183,10 @@ typedef struct GfxDepthKey
 {
     uint8_t zenable, zwrite, zfunc, stencil;
     uint8_t sfail, szfail, spass, sfunc;
-    uint8_t sread, swrite, pad[2];
+    uint8_t sread, swrite;
+    uint8_t noclip; /* not cut at the near and far planes, its depth held to the viewport's range instead (DepthClipEnable off):
+                     * VanaCore's sea on to the horizon past the game's draw distance (d3d8_water_sea.h) */
+    uint8_t pad[1];
 } GfxDepthKey;
 
 typedef struct GfxLight

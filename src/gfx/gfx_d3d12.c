@@ -3071,6 +3071,8 @@ typedef struct PipeKey
 typedef struct PipeEntry
 {
     void* volatile state; /* NULL while building, PIPE_FAILED, or the ID3D12PipelineState */
+    void* volatile job;   /* the start-up rebuild's PipeJob until a thread takes it to build (warm_callback) */
+    int hurried;          /* a draw wanted it before the rebuild got to it: sent ahead on the default pool (pipeline_for) */
 } PipeEntry;
 
 typedef struct PipeJob
@@ -3094,6 +3096,8 @@ static CRITICAL_SECTION g_pipe_file_lock;
 static SRWLOCK g_shader_lock = SRWLOCK_INIT;
 static Map g_shaders; /* LibKey -> Shaders*, under g_shader_lock */
 static volatile LONG g_pipes_building;
+static volatile LONG g_warm_calls;  /* warm_callback's submissions not yet run: each holds its entry (builds_done waits for them) */
+static volatile LONG g_warm_cancel; /* the device going (gfx_shutdown): the rebuild's jobs not yet begun are dropped, not built */
 
 void gfx_set_sync_pipelines(int on) { g_sync_pipelines = on; }
 
@@ -3345,7 +3349,7 @@ static ID3D12PipelineState* build_pipeline(const PipeKey* k, const uint32_t* vs,
     pd.RasterizerState.SlopeScaledDepthBias = -(float)k->zbias * 0.03125f;
     if (shadow) /* the map's own bias: surfaces at a slant to the sun are pushed back more */
         pd.RasterizerState.DepthBias = 0, pd.RasterizerState.SlopeScaledDepthBias = 1.5f;
-    pd.RasterizerState.DepthClipEnable = TRUE;
+    pd.RasterizerState.DepthClipEnable = k->depth.noclip ? FALSE : TRUE; /* (VanaCore's sea past the far plane: GfxDepthKey) */
     const GfxDepthKey* dk = &k->depth;
     pd.DepthStencilState.DepthEnable = dk->zenable ? TRUE : FALSE;
     pd.DepthStencilState.DepthWriteMask = dk->zenable && dk->zwrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
@@ -3417,7 +3421,37 @@ static void CALLBACK job_callback(PTP_CALLBACK_INSTANCE inst, void* ctx)
     run_job((PipeJob*)ctx);
 }
 
-static void queue_job(const PipeKey* k, const uint32_t* vs, uint32_t nvs, const uint32_t* ps, uint32_t nps, int record)
+/* a start-up rebuild's pipeline, built by whichever comes first: its turn on the rebuild's few threads, or a draw wanting it
+ * (pipeline_for); the other finds the job taken and does nothing. With the device going, a job not yet begun is dropped */
+static void CALLBACK warm_callback(PTP_CALLBACK_INSTANCE inst, void* ctx)
+{
+    (void)inst;
+    PipeEntry* e = (PipeEntry*)ctx;
+    PipeJob* j = (PipeJob*)InterlockedExchangePointer(&e->job, NULL);
+    if (j && InterlockedCompareExchange(&g_warm_cancel, 0, 0))
+    {
+        InterlockedExchangePointer(&e->state, PIPE_FAILED);
+        free(j->vs);
+        free(j->ps);
+        free(j);
+        InterlockedDecrement(&g_pipes_building);
+    }
+    else if (j)
+        run_job(j);
+    InterlockedDecrement(&g_warm_calls); /* the entry isn't touched after this: gfx_shutdown may free it */
+}
+
+static int warm_submit(PipeEntry* e, PTP_CALLBACK_ENVIRON env)
+{
+    InterlockedIncrement(&g_warm_calls);
+    if (TrySubmitThreadpoolCallback(warm_callback, e, env))
+        return 1;
+    InterlockedDecrement(&g_warm_calls);
+    return 0;
+}
+
+/* warm: one of the start-up rebuild's (prewarm_pipelines), on its own pool (gfx_warm_env) */
+static void queue_job(const PipeKey* k, const uint32_t* vs, uint32_t nvs, const uint32_t* ps, uint32_t nps, int record, int warm)
 {
     if (map_get(&g_pipes, k, sizeof *k))
         return;
@@ -3431,6 +3465,13 @@ static void queue_job(const PipeKey* k, const uint32_t* vs, uint32_t nvs, const 
         j->ps = (uint32_t*)malloc(4u * nps), memcpy(j->ps, ps, 4u * nps), j->nps = nps;
     g_prof.pipelines++;
     InterlockedIncrement(&g_pipes_building);
+    if (warm && !g_sync_pipelines)
+    {
+        e->job = j;
+        if (warm_submit(e, (PTP_CALLBACK_ENVIRON)gfx_warm_env()))
+            return;
+        e->job = NULL; /* the game's thread's: no draw has seen the entry yet */
+    }
     if (g_sync_pipelines || !TrySubmitThreadpoolCallback(job_callback, j, NULL))
         run_job(j);
 }
@@ -3448,6 +3489,7 @@ static void prewarm_pipelines(void)
         return;
     CreateDirectoryA(path, NULL);
     snprintf(g_pipe_cache, sizeof g_pipe_cache, "%s\\pipelines.d3d12.v1", path);
+    InterlockedExchange(&g_warm_cancel, 0); /* a new device: what gfx_shutdown dropped went with the old one's entries */
     FILE* f = fopen(g_pipe_cache, "rb");
     if (!f)
         return;
@@ -3463,14 +3505,15 @@ static void prewarm_pipelines(void)
         if (ok && nps)
             ps = (uint32_t*)malloc(4u * nps), ok = fread(ps, 4, nps, f) == nps;
         if (ok)
-            queue_job(&k, vs, nvs, ps, nps, 0), n++;
+            queue_job(&k, vs, nvs, ps, nps, 0, 1), n++;
         free(vs);
         free(ps);
         if (!ok)
             break;
     }
     fclose(f);
-    fprintf(stderr, "[recomp] gfx: building %u pipelines from %s in the background\n", n, g_pipe_cache);
+    fprintf(stderr, "[recomp] gfx: building %u pipelines from %s in the background, %u at a time\n", n, g_pipe_cache,
+        gfx_warm_threads() ? gfx_warm_threads() : n);
 }
 
 static D3D12_PRIMITIVE_TOPOLOGY_TYPE topology_type(uint32_t prim)
@@ -3508,7 +3551,7 @@ static ID3D12PipelineState* pipeline_for(const PipeKey* k, const uint32_t* vs_to
             uint32_t nvs = 0, nps = 0;
             uint32_t* vs = k->lib.vs.prog ? copy_tok(vs_tokens, &nvs) : NULL;
             uint32_t* ps = k->lib.fs.prog ? copy_tok(ps_tokens, &nps) : NULL;
-            queue_job(k, vs, nvs, ps, nps, !g_sync_pipelines);
+            queue_job(k, vs, nvs, ps, nps, !g_sync_pipelines, 0);
             free(vs);
             free(ps);
             e = (PipeEntry*)map_get(&g_pipes, k, sizeof *k);
@@ -3518,6 +3561,12 @@ static ID3D12PipelineState* pipeline_for(const PipeKey* k, const uint32_t* vs_to
         *last_key = *k, *last = e;
     }
     void* st = InterlockedCompareExchangePointer(&e->state, NULL, NULL);
+    if (!st && e->job && !e->hurried)
+    {
+        /* still waiting its turn in the start-up rebuild: a draw wants it now, so it goes ahead on the default pool */
+        e->hurried = 1;
+        warm_submit(e, NULL);
+    }
     g_pipe_waiting = st == NULL;
     return st && st != PIPE_FAILED ? (ID3D12PipelineState*)st : NULL;
 }
@@ -17017,11 +17066,13 @@ static void map_free(Map* m)
     memset(m, 0, sizeof *m);
 }
 
-/* the thread pool's builds done: the pipelines' (queue_job) and the scene effects' (fx_ready). 0 when one is still on after ms */
+/* the thread pool's builds done: the pipelines' (queue_job, and warm_callback's calls still queued, each holding its entry) and
+ * the scene effects' (fx_ready). 0 when one is still on after ms */
 static int builds_done(DWORD ms)
 {
     const ULONGLONG until = GetTickCount64() + ms;
-    while (InterlockedCompareExchange(&g_pipes_building, 0, 0) != 0 || InterlockedCompareExchange(&g_fx.state, 0, 0) == 1)
+    while (InterlockedCompareExchange(&g_pipes_building, 0, 0) != 0 || InterlockedCompareExchange(&g_warm_calls, 0, 0) != 0 ||
+           InterlockedCompareExchange(&g_fx.state, 0, 0) == 1)
     {
         if (GetTickCount64() >= until)
             return 0;
@@ -17060,8 +17111,10 @@ int gfx_shutdown(void)
     if (!fg_stop_thread())
         return 0;
     dlss_let_go();
+    InterlockedExchange(&g_warm_cancel, 1); /* the start-up rebuild's queue drained, not built (warm_callback) */
     if (!builds_done(15000))
     {
+        InterlockedExchange(&g_warm_cancel, 0); /* the device stays: what's left of the rebuild is built after all */
         fprintf(stderr, "[recomp] gfx: a build on the thread pool didn't finish in 15 s: the device can't be let go of\n");
         return 0;
     }

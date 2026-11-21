@@ -9,7 +9,7 @@ Three parts of the API that go together, each with its reference elsewhere in th
 | Game tables | The names, descriptions, costs and numbers behind every id, as Lua tables | [4. Game data](04-game-data.md#static-game-data-vanagamedata) |
 
 The **API Explorer** addon describes every call on this page and runs them, showing what comes back:
-`/addon load apiexplorer`, then `/api`. The last section says how to use it.
+`/api` (it loads the addon when it isn't loaded). The last section says how to use it.
 
 ## 1. The character
 
@@ -190,8 +190,8 @@ D:\xi-tools\.venv\Scripts\python.exe conflux\tools\gen_gamedata.py [--only spell
 
 ## 4. The API Explorer
 
-`/addon load apiexplorer`, then `/api` (or `/apiexplorer`) shows or hides it; `/api show` and `/api hide` only show or
-only hide it. The window has two tabs, each with a list down the left (drag its right edge to widen it), and opens on the
+`/api` (or `/apiexplorer`) shows or hides it; `/api show` and `/api hide` only show or only hide it. The addon isn't
+loaded at start: `/api` loads it and shows it then. The window has two tabs, each with a list down the left (drag its right edge to widen it), and opens on the
 tab it was last on.
 
 ### Reference

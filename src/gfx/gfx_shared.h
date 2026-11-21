@@ -148,3 +148,12 @@ int gfx_hlsl_compiler_is_wine(void);
 void gfx_fx_build_begin(const char* backend);
 void gfx_fx_build_tick(void);
 void gfx_fx_build_end(int ok);
+
+/* The start-up rebuild's own thread pool (prewarm_shaders in gfx_d3d11.c, prewarm_pipelines in gfx_d3d12.c): half the
+ * processors, 1 to 4 threads. The rebuild queued every cached key on the default pool at once, and Wine's starts a new worker
+ * for each submission while the others are busy, up to 500: under Proton 654 pairs were hundreds of vkd3d-shader compiles side
+ * by side in the 32-bit address space, and a login in the first 50 s ran out of memory (LuaJIT's "not enough memory", a
+ * bad_alloc, the crash dump not written: Arnd, 2026-11-18 to 21). gfx_warm_env is the pool's PTP_CALLBACK_ENVIRON for
+ * TrySubmitThreadpoolCallback, NULL (the default pool) when it couldn't be made; gfx_warm_threads its maximum (0 then). */
+void* gfx_warm_env(void);
+unsigned gfx_warm_threads(void);

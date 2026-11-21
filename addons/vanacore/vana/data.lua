@@ -1451,6 +1451,36 @@ local function button_tabs()
     end
     return rows
 end
+-- Game Options > Sliders: the Config windows' sliders ([client] sliders.*, sliders.cpp); the flat style's rows locked with the game's
+local function slider_rows()
+    local function game() return (vana.config.get('client', 'sliders.style') or ''):lower() ~= 'flat' end
+    local function flat_only(row)
+        row.lock_if = game
+        for _, part in ipairs(row.parts or {}) do
+            part.lock_if = game
+        end
+        return row
+    end
+    local style = choice('Style', 'client', 'sliders.style', 'game', { { 'game', 'Game' }, { 'flat', 'Flat' } })
+    style.rebuild = true -- the flat style's rows lock and unlock by it
+    local marks = { { 'none', 'None' }, { 'round', 'Round' }, { 'square', 'Square' }, { 'bar', 'Line' } }
+    return {
+        style,
+        flat_only(colours_line('Colours', nil, colour_pick('Bar', 'client', 'sliders.track.color', '#3A4266'),
+                               colour_pick('Fill', 'client', 'sliders.fill.color', '#8C9EFF'),
+                               colour_pick('Selected', 'client', 'sliders.selected.color', '#8C9EFF'))),
+        flat_only(pair('Bar', nil, { slider('Height', 'client', 'sliders.height', 4, 1, 16, 1, '%d px'),
+                                     slider('Opacity', 'client', 'sliders.track.opacity', 100, 0, 100, 1, '%d%%') })),
+        flat_only(toggle('Round bar ends', 'client', 'sliders.round', true)),
+        flat_only(choice('Handle', 'client', 'sliders.knob', 'round', marks)),
+        flat_only(slider('Handle size', 'client', 'sliders.knob.size', 10, 2, 24, 1, '%d px')),
+        flat_only(colour_pick('Handle colour', 'client', 'sliders.knob.color', '#FFFFFF')),
+        flat_only(choice('Ends', 'client', 'sliders.ends', 'none',
+                         { { 'none', 'None' }, { 'game', 'Game' }, { 'round', 'Round' }, { 'square', 'Square' }, { 'bar', 'Line' } })),
+        flat_only(slider('Ends size', 'client', 'sliders.ends.size', 6, 2, 16, 1, '%d px')),
+        flat_only(colour_pick('Ends colour', 'client', 'sliders.ends.color', '#8A8FA6')),
+    }
+end
 -- An Equipment Squares row (and its sliders), greyed and locked while Own squares ([client] items.equip) is off
 local function equip_own(row)
     local function off() return (tonumber(vana.config.get('client', 'items.equip') or '') or 0) == 0 end
@@ -1526,9 +1556,10 @@ local function logged(row, costs, d3d12)
     return row
 end
 
--- About's Beta Testers panel: a new name goes at the end
-local BETA_TESTERS = { 'Yunas', 'Tai', 'Crobat', 'Torkson', 'Carver', 'Stieg', 'Muziko', 'Mizer', 'SmartASCII',
-                       'Nokk', 'Fluff', '[GM] Pie', 'Mythicangel', 'Loudnoises', 'Elehex',
+-- About's Beta Testers panel: a new name goes at the end. A tag before the name puts a badge after it (vana.lua:
+-- draw_names): '[GM]' the gold GM, '[Grass]' Mass Grass's green seedling
+local BETA_TESTERS = { 'Yunas', 'Tai', 'Crobat', 'Torkson', 'Carver', '[Grass] Araedi', 'Stieg', 'Muziko', 'Mizer',
+                       'SmartASCII', 'Nokk', 'Fluff', '[GM] Pie', 'Mythicangel', 'Loudnoises', 'Elehex',
                        'Ramtough', 'Arkine', 'Azlora', 'Cadia', 'Crocodile', 'Daeloth', 'Guatalupe', 'Kraunik',
                        'Lunexi', 'Nobody', 'Thethethethe', 'Vitali', 'Charta', 'Citrus', 'Odei', 'Onix',
                        'The Doctor', 'Hando_San', 'Tizer', 'Snuk', 'Arestia', 'Rusbando',
@@ -1635,6 +1666,8 @@ TIPS.rows = {
         .. 'Xbox: Xbox and other XInput controllers.\n'
         .. 'DualSense / DS4: PlayStation controllers.\n'
         .. 'Custom: something else is set, such as in the game\'s gamepad config tool.',
+    ['input.fishing.dpad'] = 'With a fish on the line, the D-pad\'s left and right fight it as the stick does.\n'
+        .. 'Off: only the movement controls do, as in the game.',
     ['client.fps.max'] = 'The most frames per second the game will draw.\n'
         .. 'Unlocked: no limit (V-Sync holds it to your screen). Above 60 FPS the game\'s animations and effects run fast.\n'
         .. 'It counts the frames before frame generation: 60 FPS with 2x shows 120.',
@@ -1800,6 +1833,7 @@ TIPS.rows = {
     ['graphics.drawdistance.enabled'] = 'On: the distances below apply. Off: the game\'s own.',
     ['graphics.drawdistance'] = 'How far away scenery (buildings, trees, ground) is drawn. 1x is the game\'s.',
     ['graphics.drawdistance.mobs'] = 'How far away players, NPCs and monsters are drawn. 1x is the game\'s.',
+    ['graphics.drawdistance.ship'] = 'How far away scenery is drawn on the ferries and the open sea routes, in place of Scenery. 1x is the game\'s.',
     ['graphics.drawdistance.target'] = 'How far away you can target them. As far as drawn reaches NPCs and doors behind walls.',
     ['graphics.drawdistance.full'] = 'Draws every piece of the zone in view out to the Scenery distance, instead of the game\'s '
         .. 'own lists of what can be seen from where you are.\n'
@@ -1847,6 +1881,7 @@ TIPS.rows = {
         .. 'Off: the shadow sways with the plant.',
     ['graphics.effects.sun_distance'] = 'How far from you shadows are drawn.',
     ['graphics.effects.sun_near'] = 'How far from you shadows stay extra sharp.',
+    ['graphics.effects.sun_mid'] = 'Sharper shadows a little way off, out this far from you. 0 is off. Costs about as much as the far shadows.',
     ['graphics.effects.sun_detail'] = 'How sharp nearby shadows are.\n'
         .. 'Higher is sharper and uses more video memory. 8192 uses 256 MB.',
     ['graphics.effects.sun_far_hold'] = 'Distant shadows of things that don\'t walk are redrawn every this many frames. Faster.\n'
@@ -1949,7 +1984,8 @@ TIPS.rows = {
     ['graphics.water.tint'] = 'Your own water colour. Game\'s means none picked.',
     ['graphics.water.detect'] = 'What counts as water: flat tiles, the game\'s water models, or all of it, with the water in the zone\'s own meshes told by where your footsteps splash.',
     ['graphics.water.pass'] = 'Draw the water after the world, so the bed shows through where it is shallow. Off, the water is a solid sheet.',
-    ['graphics.water.horizon'] = 'Experimental: draw the sea on past the edge of the zone to the horizon, where the game paints its sea on the sky. Off by default: it is a different sea from the game\'s, darker, with a step where its rings meet. Needs the water pass.',
+    ['graphics.water.horizon'] = 'Experimental: draw the sea on past the edge of the zone to the horizon, where the game paints its sea on the sky. Off by default: it is a different sea from the game\'s, darker, with a step where its rings meet. Needs the water pass.\n'
+        .. 'With VanaCore sea on, the sea goes past your draw distance, out to the horizon.',
     ['graphics.water.sea'] = "Replace the game's sea with one VanaCore sea that runs across the zone and on to the horizon. Ponds, lakes and streams stay as they are. Needs the water pass.",
     ['graphics.water.shadows'] = "Let the sun's shadows fall on VanaCore's water. Off, the water takes no shadow. Needs the water pass.",
     ['graphics.water.depth'] = 'How far into the water you can see, in yalms. Needs the water pass.',
@@ -1972,7 +2008,7 @@ TIPS.rows = {
     ['graphics.rain.ground'] = 'Wet patches on the ground in the rain, reflecting like a wet floor. Needs Reflections on.',
     ['graphics.rain.lens'] = 'Droplets on the lens while the rain reaches the camera: each lands as a hit and sits as a bead showing the scene upside down in it; the big ones slide off down a rivulet, the small ones dry. How many there are: 0 is none, 1 a wet windscreen.',
     ['graphics.rain.game'] = "Keep the game's own faint rain drawn under VanaCore's. Off, VanaCore's rain is the only rain.",
-    ['graphics.rain.thunder'] = 'Rain during thunder weather too, as a look: the weather itself stays thunder.',
+    ['graphics.rain.thunder'] = 'Rain during thunder weather too, in zones that have rain, as a look: the weather itself stays thunder.',
     ['graphics.rain.wet'] = 'Players, NPCs and monsters reflect like the wet ground while it rains, less in their creases. Needs Reflections on.',
     ['graphics.rain.sheen'] = 'How strong the reflection on them is. 0 is none.',
     ['graphics.rain.dry'] = 'How many seconds they take to dry once the rain stops.',
@@ -2145,6 +2181,19 @@ TIPS.rows = {
     ['client.buttons.text.y'] = 'Moves a flat button\'s label down, or up below 0.',
     ['client.buttons.selected.nudge'] = 'The selected button sits a pixel up and left, and presses in when picked. Off, it stays put.',
     ['client.buttons.selected.flash'] = 'A button flashes when picked.',
+    ['client.sliders.style'] = 'The Config windows\' sliders. Game: the game\'s bars. Flat: a plain bar, fill and handle in the colours below.',
+    ['client.sliders.track.color'] = 'The colour of a slider\'s bar.',
+    ['client.sliders.fill.color'] = 'The colour of a slider\'s fill, up to its value.',
+    ['client.sliders.selected.color'] = 'The fill of the slider the cursor is on.',
+    ['client.sliders.height'] = 'How thick a slider\'s bar and fill are.',
+    ['client.sliders.track.opacity'] = 'How solid a slider\'s bar is. At 0 only the fill and handle show.',
+    ['client.sliders.round'] = 'Rounds the ends of a slider\'s bar and fill.',
+    ['client.sliders.knob'] = 'The mark at a slider\'s value.',
+    ['client.sliders.knob.size'] = 'How big the mark at a slider\'s value is.',
+    ['client.sliders.knob.color'] = 'The colour of the mark at a slider\'s value.',
+    ['client.sliders.ends'] = 'The marks at each end of a slider. Game: the game\'s half dots.',
+    ['client.sliders.ends.size'] = 'How big the marks at each end of a slider are.',
+    ['client.sliders.ends.color'] = 'The colour of the marks at each end of a slider.',
     ['client.mainmenu.buttons'] = 'On: the main menu and the menus it opens use the settings below alone, whatever Global\'s are. Off: they look as Global says.',
     ['client.action.buttons'] = 'On: the Action Menu and its Magic and Abilities lists use the settings below alone, whatever Global\'s are. Off: they look as Global says.',
     -- Buttons > Main Menu: the main menu's and the menus it opens in its place (Magic, Party, Search, Config...), while its Enable is on
@@ -2882,6 +2931,9 @@ local COMMANDS = {
     { 'addons', 'The Addons page', 'Opens this window at the Addons page.' },
     { 'plugins', 'The Plugins page', 'Opens this window at the Plugins page.' },
     { 'pivot', 'The Pivot page', "Opens this window at the Pivot page: the DAT overlays and their order." },
+    { 'api', 'The API Explorer', 'Loads the API Explorer addon and shows its window, when it isn\'t loaded.\n'
+                                 .. 'Once loaded, /api shows or hides it (the addon\'s own /api).' },
+    { 'apiexplorer', 'The API Explorer', 'As /api.' },
     { sub = 'Always on' },
     { 'vana', 'The VanaCore window', 'Opens and closes this window. /vana help lists what else it takes.', kept = true },
     { 'addon', 'Load and unload addons', '/addon load, unload, reload and list.', kept = true },
@@ -3473,6 +3525,10 @@ local TABS = {
                 camera.set = function (value) vana.gamepad.set_camera(target, value) end
                 camera.lock_if = off
                 rows[#rows + 1] = camera
+                -- the fish fight takes the menus' left and right (the D-pad) when the movement's give none: [input] fishing.dpad
+                local fishing = toggle('Fish with the D-pad', 'input', 'fishing.dpad', true)
+                fishing.lock_if = off
+                rows[#rows + 1] = fishing
                 -- the one switch for the addons' windows (Party Finder, the Auction House): [addons] gamepad, which
                 -- they read; off, a window is the mouse's and the keyboard's and the pad stays the game's
                 local addons = toggle('XInput gamepad support in VanaCore addons (experimental)', 'addons', 'gamepad', false)
@@ -3715,12 +3771,12 @@ local TABS = {
                 -- otherwise, so autoclose locks while attached is off)
                 subheader('Console window'),
                 (function (row) row.rebuild = true return row end)(
-                    hinted(toggle('Keep the console window open', 'client', 'attached', false, true), 'shows the log; closing it closes the game')),
+                    toggle('Keep the console window open', 'client', 'attached', false, true)),
                 (function (row)
                     row.sub = true
                     row.lock_if = function () return (tonumber(vana.config.get('client', 'attached') or '') or 0) == 0 end
                     return row
-                end)(hinted(toggle('Close it when the game ends', 'client', 'autoclose', false, true), 'no "Press any key"')),
+                end)(toggle('Close it when the game ends', 'client', 'autoclose', false, true)),
                 -- (the shadows' redraw speed rows are Graphics > Shadows > GPU Redraw Options now)
                 subheader('Logging'),
                 toggle('Enable logs', 'logging', 'enabled', true),
@@ -4032,6 +4088,7 @@ local TABS = {
                 subheader('Distance'),
                 free(slider('Scenery', 'graphics', 'drawdistance', 5, 1, 10, 0.5, '%.1fx'), 0.1, 100),
                 free(slider('Characters', 'graphics', 'drawdistance.mobs', 5, 1, 10, 0.5, '%.1fx'), 0.1, 100),
+                free(slider('Boat rides', 'graphics', 'drawdistance.ship', 1, 1, 10, 0.5, '%.1fx'), 0.1, 100),
                 choice('Targeting', 'graphics', 'drawdistance.target', 'game', { { 'game', "Game's distance" }, { 'drawn', 'As far as drawn' } }),
                 toggle('Fill in far ground', 'graphics', 'drawdistance.fill', false),
                 toggle('Draw the whole zone in view', 'graphics', 'drawdistance.full', false),
@@ -4088,11 +4145,13 @@ local TABS = {
                 -- itself (Close-up and Look till then), Sun and weather (Conditions and Place the sun), GPU Redraw Options
                 needs_dx12(toggle('Plants cast shadows', FX, 'sun_plants', true)),
                 needs_dx12(resets(toggle('Keep plant shadows still', FX, 'sun_plants_still', true))),
-                -- the sharp close-up map round the player (gfx_d3d12.c sun_map) and how far it reaches; the zone's pieces the
+                -- the sharp close-up map round the player (gfx_d3d12.c sun_map) and how far it reaches, the middle map's reach; the zone's pieces the
                 -- camera's view leaves out drawn for the maps all the same (casters.cpp). The rest of the shadows' parts are ini
                 -- keys alone (sun_centre, sun_cache, sun_late, sun_cull, sun_fade: README), the rings in the Debug window
                 needs_dx12(toggle('Sharp shadows near you', FX, 'sun_sharp', true)),
-                slider('Sharp shadow range', FX, 'sun_near', 25, 3, 80, 1, '%d'),
+                slider('Sharp shadow range', FX, 'sun_near', 50, 3, 80, 1, '%d'),
+                -- a third map between the sharp one and the far one (gfx_sun_mid.h), 0 none
+                needs_dx12(slider('Middle shadow range', FX, 'sun_mid', 0, 0, 200, 5, '%d')),
                 needs_dx12(toggle('Shadows from things off screen', FX, 'sun_seek', true)),
                 -- on characters too: their own narrower blur (sun_soft_chars, ini alone, 0 by default) let a rocky monster's
                 -- shading flicker from frame to frame
@@ -5661,6 +5720,10 @@ local TABS = {
             for _, row in ipairs(button_tabs()) do
                 rows[#rows + 1] = row
             end
+            rows[#rows + 1] = header('Sliders')
+            for _, row in ipairs(slider_rows()) do
+                rows[#rows + 1] = row
+            end
             for _, row in ipairs({
                 header('Chat'),
                 subheader('Text'),
@@ -6892,17 +6955,21 @@ function M.reload_settings()
     print('VanaCore: the settings file taken up.')
 end
 
--- Client > Developer > API Explorer: the apiexplorer addon's window shown (/api show), the addon loaded first when it
--- isn't (its load runs within a frame or two: /api show waits for it, up to 2 seconds)
-function M.open_apiexplorer()
-    local function loaded()
-        for _, entry in ipairs(vana.addons.loaded and vana.addons.loaded() or {}) do
-            if entry.name:lower() == 'apiexplorer' then
-                return true
-            end
+-- Whether the apiexplorer addon is loaded (it answers /api itself then)
+function M.apiexplorer_loaded()
+    for _, entry in ipairs(vana.addons.loaded and vana.addons.loaded() or {}) do
+        if entry.name:lower() == 'apiexplorer' then
+            return true
         end
-        return false
     end
+    return false
+end
+
+-- Client > Developer > API Explorer, and /api before the addon is loaded (vana.lua): the apiexplorer addon's window shown
+-- (/api show), the addon loaded first when it isn't (its load runs within a frame or two: /api show waits for it, up to
+-- 2 seconds)
+function M.open_apiexplorer()
+    local loaded = M.apiexplorer_loaded
     if loaded() then
         vana.chat.run('/api show')
         return
@@ -7398,7 +7465,7 @@ M.DEBUG_VIEW = needs_dx(choice('Debug view', FX, 'debug', '0', {
     { '16', 'AO rings' }, { '32', 'Rain rings' }, { '15', 'Shadow rings' },
     { header = 'Shadows' },
     { '21', 'Edge-on fade' }, { '25', 'Facing the sun' }, { '27', 'Far shadow map' }, { '29', 'Round shadows on rock' },
-    { '22', 'Shadow maps alone' }, { '5', 'Shadows' }, { '23', 'Sharp map share' }, { '24', 'Smooth normals' },
+    { '22', 'Shadow maps alone' }, { '5', 'Shadows' }, { '23', 'Sharp & middle map share' }, { '24', 'Smooth normals' },
     { '28', 'Underside by smooth normal' },
     { header = 'World' },
     { '19', 'Character mask' }, { '26', 'Grass' } }))
