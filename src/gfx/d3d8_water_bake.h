@@ -85,7 +85,31 @@ static WaterBake* bake_find(uintptr_t key, uint32_t count, uint32_t prim, const 
             return b;
         first = first ? first : b, ++places;
     }
-    return places >= BAKE_PLACES ? first : NULL;
+    return places >= BAKE_PLACES || (first && first->moved) ? first : NULL;
+}
+
+/* The mesh (key, count, prim) drawn at a new place t (its box lo, hi) within half its size across (4 yalms at most) and a yalm up
+ * or down of one it's had: a model the game moves (its copies the zone lays don't stand on each other). Selbina's ferry was looked
+ * at afresh at each place it sailed through, its deck's water left behind at each, eight sheets half a yalm apart that stayed
+ * after it had gone, in squares, and fought each other's depth. Its entries' water let go and marked moved (1): bake_find gives
+ * the first of them from then on, never looked at again */
+#define BAKE_MOVED 4.0f
+static int bake_moving(uintptr_t key, uint32_t count, uint32_t prim, const float t[3], const float lo[3], const float hi[3])
+{
+    const float rx = fminf((hi[0] - lo[0]) * 0.5f, BAKE_MOVED), rz = fminf((hi[2] - lo[2]) * 0.5f, BAKE_MOVED);
+    int moved = 0;
+    for (int pass = 0; pass < 1 + moved; ++pass)
+        for (uint32_t h = bake_hash(key, count, prim), k = 0; k < BAKE_HASH && g_bake_ix[h]; ++k, h = (h + 1) & (BAKE_HASH - 1))
+        {
+            WaterBake* b = &g_bake[g_bake_ix[h] - 1];
+            if (b->key != key || b->count != count || b->prim != prim)
+                continue;
+            if (pass) /* (n 0: the pass and water_ground_under pass it by; its triangles stay in the pool, unseen) */
+                b->moved = 1, b->n = 0;
+            else if (fabsf(b->t[0] - t[0]) < rx && fabsf(b->t[2] - t[2]) < rz && fabsf(b->t[1] - t[1]) < 1.0f)
+                moved = 1;
+        }
+    return moved;
 }
 
 /* a box (lo, hi: in the world) reaching the collision's water: within its box in x and z, and not under the beds or more than 12

@@ -980,6 +980,8 @@ static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy,
                           * or over it by less than this: the chunk is the deep water's surface. Caedarva Mire's pond is that over
                           * most of it: taken only where its floor dipped 10 cm, the rest stayed the game's murk round squares of
                           * VanaCore's water */
+#define BAKE_ABOVE 3.0f /* a sheet mostly this far or more over the deep water's own floor (the surface) stands over the water, not in
+                         * it: Selbina's ferry's lower deck, 8 yalms over the sea, was VanaCore's water and its fill cells on the pier */
 #define BAKE_STRIDE 4 /* x, y, z, the bed's depth: negated for a chunk that writes depth (the scene's depth under its water is its
                        * own: the pixel function takes the vertex's), plus BAKE_FILL_TAG for a hole's cell (bake_fill) */
 #define BAKE_FILL_TAG 1000.0f
@@ -994,6 +996,7 @@ typedef struct WaterBake
     float t[3];        /* where it was drawn: its world matrix's translation (bake_find: one mesh at several places, an entry each) */
     int seed;          /* 1 an additive layer, 2 a pond's surface: its pond flooded from it (bake_flood), its own triangles not the water */
     int wet;           /* in g_bake_wet */
+    int moved;         /* its mesh is a model the game moves: no water (bake_moving) */
 } WaterBake;
 static WaterBake g_bake[BAKE_ENTRIES];
 static uint32_t g_bake_n, g_bake_nv, g_bake_cap, g_bake_buf_n;
@@ -1150,6 +1153,25 @@ static int bake_corner(const GfxDraw* d, int32_t row, uint32_t nverts, const flo
     return *t < 0 ? 0 : ((*t == 8 || *t == 9) && *dy >= BAKE_UNDER) || (*t == 9 && fabsf(*dy) < BAKE_LEVEL) ? 1 : 2;
 }
 #include "d3d8_water_fill.h" /* the holes in a stream's sheet made water (bake_fill) */
+/* A flat chunk (its highest point hi_y) taken whole by bake_build: a quarter of its corners over water floors - or, at the sea's
+ * level in a zone with a sea, over no floor within reach (the sea's bed lies deeper than the collision is looked for, 12 yalms,
+ * so the sea's chunks past the shallows have no floor under them at all) - and not most of those BAKE_ABOVE over the deep
+ * water's own floor (over the water, not its surface: a boat's deck) */
+static int bake_whole(const GfxDraw* d, uint32_t prim, uint32_t count, uint32_t nverts, const float* W, float hi_y)
+{
+    uint32_t tally[3] = { 0, 0, 0 }, above = 0; /* corners with no floor, over water, over another floor; BAKE_ABOVE over the deep water's own */
+    for (uint32_t k = 0; k < count; ++k)
+        for (int c = 0; c < 3; ++c)
+        {
+            float o[3], dy;
+            int t;
+            const int r = bake_corner(d, bake_row(d, prim == GFX_TRIANGLELIST ? 3 * k + (uint32_t)c : k + (uint32_t)c), nverts, W, o, &t, &dy);
+            ++tally[r], above += r == 1 && t == 9 && dy >= BAKE_ABOVE;
+        }
+    const int at_sea = g_sea.n >= SEA_LEAST && sea_zone() && fabsf(hi_y - g_sea.y) <= 1.5f; /* (the tiles set g_sea in any zone) */
+    return 4 * (tally[1] + (at_sea ? tally[0] : 0)) >= tally[0] + tally[1] + tally[2] && 2 * above <= tally[1];
+}
+
 /* The chunk's water triangles into the pool: its entry's at and n. A flat chunk (a sheet: the stream's surface, a pond's) with
  * a quarter of its corners over water floors is taken whole, each corner as deep as the floor under it (the deep channel's
  * water floor, the shallows' stone bed; where a bank's floor lies over it the ground hides it): the game's footsteps call a
@@ -1168,23 +1190,7 @@ static void bake_build(WaterBake* b, const GfxDraw* d, uint32_t prim, uint32_t c
     float other_dy = 0.0f, other_at[3] = { 0, 0, 0 }, first[3] = { 0, 0, 0 }, dmin = 1e30f, dmax = -1e30f, dsum = 0.0f;
     b->at = g_bake_nv, b->n = 0;
     /* a flat chunk: its corners' tally first, then all or nothing */
-    int whole = 0;
-    if (flat)
-    {
-        for (uint32_t k = 0; k < count; ++k)
-            for (int c = 0; c < 3; ++c)
-            {
-                float o[3];
-                int t;
-                float dy;
-                ++tally[bake_corner(d, bake_row(d, prim == GFX_TRIANGLELIST ? 3 * k + (uint32_t)c : k + (uint32_t)c), nverts, W, o, &t, &dy)];
-            }
-        /* at the sea's level, in a zone with a sea, corners over no floor within reach are over the sea: its bed lies deeper than the
-         * collision is looked for (12 yalms), so the sea's chunks past the shallows have no floor under them at all */
-        const int at_sea = g_sea.n >= SEA_LEAST && sea_zone() && fabsf(hi[1] - g_sea.y) <= 1.5f; /* (the tiles set g_sea in any zone) */
-        whole = 4 * (tally[1] + (at_sea ? tally[0] : 0)) >= tally[0] + tally[1] + tally[2];
-        tally[0] = tally[1] = tally[2] = 0;
-    }
+    const int whole = flat && bake_whole(d, prim, count, nverts, W, hi[1]);
     /* not a sheet: nothing of it (a bank's level ledge over the stream was taken as water, floating at its own height); one lying in
      * a pond flooded at its level: nothing of its own either, the flood's water is the pond's */
     if (!whole || bake_flooded(lo, hi))
@@ -1289,17 +1295,19 @@ static void water_ground(const GfxDraw* d, uint32_t prim, uint32_t count, uint32
             bake_left(d, prim, count, nverts, up_data, "no extent");
             return;
         }
+        if (kind == 1 && bake_moving(key, count, prim, &W[12], lo, hi)) /* (an additive layer's copies round a pond may lie close) */
+            return;
         bake_index(g_bake_n, key, count, prim);
         b = &g_bake[g_bake_n++];
         b->key = key, b->count = count, b->prim = prim, b->at = 0, b->n = 0, b->seen = 0, b->gen = g_sea.gen, b->seed = kind == 2;
-        b->wet = 0;
+        b->wet = 0, b->moved = 0;
         memcpy(b->lo, lo, sizeof b->lo), memcpy(b->hi, hi, sizeof b->hi), memcpy(b->t, &W[12], sizeof b->t);
         if (bake_reaches(lo, hi))
             bake_build(b, d, prim, count, nverts, lo, hi);
         if (b->n)
             bake_one_sheet(b), bake_wet(b);
     }
-    else if (!b->n && !b->seed && b->gen != g_sea.gen && g_sea.n >= SEA_LEAST)
+    else if (!b->n && !b->seed && !b->moved && b->gen != g_sea.gen && g_sea.n >= SEA_LEAST)
     {
         /* the sea's level known since it was looked at: a flat chunk at that level past the collision's reach is the sea's now */
         b->gen = g_sea.gen;

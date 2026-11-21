@@ -60,8 +60,9 @@ static void read_rain(When when)
 }
 
 // The weathers the zone's model DAT has (zoneweather), read once a zone and handed over each frame (vanacore_gfx_set_zone_weathers),
-// from track_focus: the rain in thunder weather (rain.thunder) falls only where the zone has rain or squall of its own. Oldton
-// and Newton Movalpolis have thunder and no rain, and it rained in their mines (a player, 2026-11-20).
+// from track_focus: VanaCore's rain falls only where the zone has rain or squall of its own, in the server's rain as in thunder
+// weather (rain.thunder). Oldton and Newton Movalpolis have thunder and no rain, and it rained in their mines (a player,
+// 2026-11-20); Phomiuna Aqueducts is given rain by the server and has none (2026-11-21).
 static void track_rain_weathers(unsigned zone)
 {
     static unsigned looked = ~0u;

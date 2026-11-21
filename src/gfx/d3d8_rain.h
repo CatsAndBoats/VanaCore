@@ -42,14 +42,22 @@ static void rain_set_zone(int zone) { g_rain_zone = zone; }
 
 void d3d8_set_zone_weathers(uint32_t mask) { g_rain_zone_weathers = mask; }
 
-/* Thunder weathers (14, 15) where rain would be wrong, left dry (rain.thunder): a zone whose model DAT has no rain or squall
- * weather (6, 7) never rains - Oldton and Newton Movalpolis' mines (it rained there, a player, 2026-11-20), Qufim Island,
- * Delkfutt's Tower, the Stellar Fulcrum... And by name, for when the DAT isn't read or has rain all the same: Qufim Island,
- * Behemoth's Dominion, Ru'Aun Gardens (above the clouds), Stellar Fulcrum, the Cloister of Storms, the Hall of the Gods (rain
- * in its DAT), Delkfutt's Tower, Dynamis-Qufim */
+/* A zone whose model DAT has no rain or squall weather (6, 7) never rains, whatever the server's weather: the game has no rain
+ * of its own there. Phomiuna Aqueducts (indoors) is given rain by the server, its DAT has none, and VanaCore's rain fell in it
+ * (a player, 2026-11-21); it is the only such zone in the server's weather table. 0: the DAT not read, so rain as given. */
+static int rain_zone_dry(void)
+{
+    return g_rain_zone_weathers != 0 && (g_rain_zone_weathers & (1u << 6 | 1u << 7)) == 0;
+}
+
+/* Thunder weathers (14, 15) where rain would be wrong, left dry (rain.thunder): a zone whose DAT has no rain (rain_zone_dry) -
+ * Oldton and Newton Movalpolis' mines (it rained there, a player, 2026-11-20), Qufim Island, Delkfutt's Tower, the Stellar
+ * Fulcrum... And by name, for when the DAT isn't read or has rain all the same: Qufim Island, Behemoth's Dominion, Ru'Aun
+ * Gardens (above the clouds), Stellar Fulcrum, the Cloister of Storms, the Hall of the Gods (rain in its DAT), Delkfutt's
+ * Tower, Dynamis-Qufim */
 static int rain_thunder_dry(int zone)
 {
-    if (g_rain_zone_weathers != 0 && (g_rain_zone_weathers & (1u << 6 | 1u << 7)) == 0)
+    if (rain_zone_dry())
         return 1;
     static const int dry[] = { 126, 127, 130, 179, 202, 251, 157, 158, 184, 41 };
     for (size_t i = 0; i < sizeof dry / sizeof dry[0]; ++i)
@@ -59,7 +67,7 @@ static int rain_thunder_dry(int zone)
 }
 
 /* how heavily it rains by the weather the server gave: rain 1, squall 1.6, thunder 0.6 and thunderstorms 1.4 (a look alone,
- * rain.thunder; not where rain_thunder_dry leaves it dry), 0 none; rain.force as rain */
+ * rain.thunder; not where rain_thunder_dry leaves it dry), 0 none and in a zone with no rain (rain_zone_dry); rain.force as rain */
 static float rain_heaviness(void)
 {
     if (g_rain_set.force)
@@ -68,8 +76,8 @@ static float rain_heaviness(void)
         return 0.0f;
     switch (g_rain_weather)
     {
-    case 6: return 1.0f;
-    case 7: return 1.6f;
+    case 6: return rain_zone_dry() ? 0.0f : 1.0f;
+    case 7: return rain_zone_dry() ? 0.0f : 1.6f;
     case 14: return g_rain_set.thunder && !rain_thunder_dry(g_rain_zone) ? 0.6f : 0.0f;
     case 15: return g_rain_set.thunder && !rain_thunder_dry(g_rain_zone) ? 1.4f : 0.0f;
     default: return 0.0f;
