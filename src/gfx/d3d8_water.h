@@ -1367,6 +1367,7 @@ static void water_ground_setup(GfxDraw* d, const GfxScene* s, int copies, GfxTex
  * scene's copies when the pass has them. No rect (the game's layers over it are its own water's). */
 static void water_ground_pass(const GfxScene* s, int copies, GfxTex* colour_copy, GfxTex* depth_copy, uint32_t w, uint32_t h)
 {
+    flood_pump(); /* a flood that stopped in open water carried on, a piece a frame (d3d8_water_fill.h) */
     if (g_bake_dirty && g_bake_nv)
     {
         gfx_buf_destroy(g_bake_buf);
