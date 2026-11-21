@@ -94,6 +94,7 @@ jobs:
       - name: Promote
         shell: pwsh
         env:
+          GITHUB_TOKEN: ${{ github.token }} # push_build.py reads cexi-addons' list of addons from GitHub
           R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

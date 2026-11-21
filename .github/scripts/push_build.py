@@ -55,24 +55,28 @@ KEY_ENTRIES = "launcher/changelog/{id}.txt"
 
 PUBLIC_ORIGIN = "https://launcher.catseyexi.com"
 
-# What other workflows publish into the vanacore build (substring matches, case-insensitive): plugins\vanacore\
-# (CatsEyeXI's plugins, released from their own repositories), addons\ashita\, which the addon updater publishes,
-# CatsEyeXI's VanaCore addons, which CatsAndBoats/cexi-addons publishes (its Publish to R2 workflow), and the VanaCore
-# native addons the addon updater publishes into addons\vanacore\ ("native": true in addons.json). A push never
-# uploads or deletes them; --externals-from copies them from another build on R2 (vcdev takes vanacore's).
-EXTERNAL = [
-    "plugins\\vanacore\\", "addons\\ashita\\",
-    "addons\\vanacore\\partyfinder-vanacore\\", "addons\\vanacore\\auctionhouse-vanacore\\",
-    "addons\\vanacore\\clawmark-vanacore\\", "addons\\vanacore\\yunagearopt\\",
+# What other workflows publish into the vanacore build (substring matches, case-insensitive). A push never uploads or
+# deletes them; --externals-from copies them from another build on R2 (vcdev takes vanacore's):
+#   plugins\vanacore\              CatsEyeXI's plugins, released from their own repositories
+#   addons\ashita\                 the launcher repository's addon updater
+#   addons\vanacore\yunagearopt\   the addon updater's VanaCore native addons ("native": true in its addons.json)
+#   addons\vanacore\<addon>\       every addon folder in CatsAndBoats/cexi-addons' addons/vanacore/ (its Publish to R2
+#                                  workflow), read from GitHub at each run (cexi_addons()), with CEXI_ADDONS_KNOWN
+EXTERNAL_FIXED = [
+    "plugins\\vanacore\\", "addons\\ashita\\", "addons\\vanacore\\yunagearopt\\",
 ]
+CEXI_ADDONS_REPO = "CatsAndBoats/cexi-addons"
+# cexi-addons' addons as of 2026-11-21: always taken as external, GitHub's list or not, so one that GitHub can't be asked
+# about (or that leaves cexi-addons, its copy on R2 kept) is never pushed over or deleted
+CEXI_ADDONS_KNOWN = ["auctionhouse-vanacore", "clawmark-vanacore", "partyfinder-vanacore", "vanamaps"]
 
-# manager.json's deploy_ignore on the machine that releases, plus EXTERNAL. Ignored paths are neither uploaded nor
+# manager.json's deploy_ignore on the machine that releases. These and the external paths are neither uploaded nor
 # deleted.
 DEPLOY_IGNORE = [
     "TEMP\\", "USER\\", "Vekien\\", "Vekien_", "Premium_", "defaults\\", "default.txt", "scripts\\",
     "config\\", "cache\\shaders", "cache\\flicker.txt", "cache\\flicker_gfx.txt", "cache\\pipelines.d3d12.v1",
     "logs\\vanacore.log", "vanacore.ini",
-] + EXTERNAL
+]
 
 # Files a build on R2 has that no package does: never deleted by a push, uploaded when the folder has one (a
 # promotion's). DLSS 5's DLL is NVIDIA's and not released yet, so it isn't in the repository or the package; it was
@@ -326,6 +330,27 @@ def add_unique(lst, files):
             seen.add(f.lower())
 
 
+def cexi_addons():
+    """The addon folders in cexi-addons' addons/vanacore/ on GitHub (its main branch), with CEXI_ADDONS_KNOWN: (names,
+    True), or (CEXI_ADDONS_KNOWN, False) when GitHub couldn't be read. GITHUB_TOKEN, when set, is sent: GitHub allows
+    an anonymous caller 60 requests an hour."""
+    url = f"https://api.github.com/repos/{CEXI_ADDONS_REPO}/contents/addons/vanacore?ref=main"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "VanaCore-push-build"}
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as resp:
+            entries = json.loads(resp.read().decode("utf-8"))
+        names = {e["name"] for e in entries if e.get("type") == "dir"}
+        if names:
+            return sorted(names | set(CEXI_ADDONS_KNOWN)), True
+        log(f"  ! {CEXI_ADDONS_REPO} lists no addons in addons/vanacore")
+    except Exception as e:
+        log(f"  ! couldn't read {CEXI_ADDONS_REPO}'s addons from GitHub: {e}")
+    return list(CEXI_ADDONS_KNOWN), False
+
+
 def _try(fn, arg):
     """None when fn(arg) ran, else what it raised."""
     try:
@@ -378,7 +403,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="list what would be pushed and change nothing")
     ap.add_argument("--deletes", action="store_true", help="also remove files the folder no longer has")
     ap.add_argument("--externals-from", metavar="BUILD",
-                    help="also bring the EXTERNAL files (plugins, the addon updater's addons) up to BUILD's")
+                    help="also bring the external files (plugins, the addon updater's and cexi-addons' addons) up to BUILD's")
     ap.add_argument("--promote-from", metavar="BUILD",
                     help="push BUILD's files as they are on R2 (fetched into --folder, which must be empty or new)")
     args = ap.parse_args()
@@ -397,9 +422,15 @@ def main():
     prefix = build["folder"].replace("\\", "/")
     folder = os.path.abspath(args.folder)
     state_key = KEY_STATE.format(tag=tag, name=name)
-    ignore = normalise_ignore(DEPLOY_IGNORE)
+    cexi, cexi_live = cexi_addons()
+    external_paths = EXTERNAL_FIXED + [f"addons\\vanacore\\{n}\\" for n in cexi]
+    log(f"Other repositories' files, never pushed or deleted here: plugins\\vanacore, addons\\ashita, yunagearopt and "
+        f"cexi-addons' {', '.join(cexi)}" + ("" if cexi_live else " (GitHub not read: the known ones only)"))
+    if args.deletes and not cexi_live:
+        die(f"--deletes needs {CEXI_ADDONS_REPO}'s list of addons from GitHub, which couldn't be read: nothing pushed")
+    ignore = normalise_ignore(DEPLOY_IGNORE + external_paths)
     keep = normalise_ignore(KEEP)
-    external = normalise_ignore(EXTERNAL)
+    external = normalise_ignore(external_paths)
 
     # A promotion: the source build's files, as R2 has them, into the folder, then pushed as any folder is
     if args.promote_from:
@@ -457,6 +488,10 @@ def main():
     # 2. Local files against the state
     log(f"Build {tag} - {name}: {folder} -> {prefix}/")
     local = scan(folder, ignore)
+    # an addon moving to cexi-addons: the package may still have it, and cexi-addons' copy is the one players get
+    for n in cexi:
+        if os.path.isdir(os.path.join(folder, "addons", "vanacore", n)):
+            log(f"  note: addons\\vanacore\\{n} is cexi-addons' now: the package's copy isn't pushed (take it out of VanaCore)")
     if not local:
         die(f"{folder} holds no files to push")
     with cf.ThreadPoolExecutor(max_workers=16) as pool:
