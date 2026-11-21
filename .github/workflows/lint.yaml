@@ -8,15 +8,9 @@ name: Lint C++
 # rewritten (gfx_d3d11.c fx_source) and compiled with Windows' d3dcompiler_47.dll; one that doesn't rewrite or compile
 # leaves Direct3D 11 without its effects (0.8.142 to 0.8.152 shipped that way).
 # The reports (build/lint) are uploaded as a workflow artifact, kept 1 day.
+# Runs on pull requests only (and by hand from the Actions tab), not on pushes to main.
 on:
   pull_request:
-    paths:
-      - src/**
-      - tools/lint/**
-      - lint.bat
-      - .github/workflows/lint.yaml
-  push:
-    branches: [main]
     paths:
       - src/**
       - tools/lint/**
