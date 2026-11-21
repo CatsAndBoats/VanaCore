@@ -1,0 +1,5 @@
+EXPORTS
+    VanaCoreInstall
+    VanaCoreRunGame
+    VanaCoreGetPluginApi
+    VanaCoreOpenPackageW

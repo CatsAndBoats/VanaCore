@@ -1,0 +1,546 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{DF58C759-6546-42A6-BFAC-9462EFFC465F}</ProjectGuid>
+    <RootNamespace>VanaCoreCore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\VanaCore.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <TargetName>VanaCore.Core</TargetName>
+    <!-- LuaJIT, built from third_party\luajit by third_party\build-luajit.cmd before the first compile. -->
+    <LuaJitDir>$(MSBuildThisFileDirectory)..\..\build\obj\luajit\$(Configuration)\</LuaJitDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(LuaJitDir)src;$(MSBuildThisFileDirectory)..\..\third_party\imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <ModuleDefinitionFile>VanaCore.Core.def</ModuleDefinitionFile>
+      <!-- VanaCore.Core.map beside the DLL: /vana stats' sampler names VanaCore's own functions from it -->
+      <GenerateMapFile>true</GenerateMapFile>
+      <!-- imm32: ImGui's text boxes place the IME's window (Japanese input) -->
+      <AdditionalDependencies>$(LuaJitDir)lua51.lib;d3d11.lib;d3d12.lib;dxgi.lib;d3dcompiler.lib;dxguid.lib;delayimp.lib;imm32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- Direct3D 12 (renderer=d3d12) exists from Windows 10: loaded only when it's used, so VanaCore.Core
+           still loads without it -->
+      <DelayLoadDLLs>d3d11.dll;d3d12.dll;dxgi.dll;d3dcompiler_47.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+    </Link>
+    <PostBuildEvent>
+      <Message>Copying addons, scripts and fonts to $(OutDir)</Message>
+      <!-- Addons: newer files replace older ones. Scripts: only those not there yet, so a player's
+           own edits (boot.txt) survive a rebuild. -->
+      <Command>xcopy /D /E /I /Y /Q "$(MSBuildThisFileDirectory)..\..\addons" "$(OutDir)addons" &gt;nul
+if errorlevel 1 exit /b 1
+robocopy "$(MSBuildThisFileDirectory)..\..\scripts" "$(OutDir)scripts" /E /XC /XN /XO /NJH /NJS /NP /NFL /NDL &gt;nul
+if errorlevel 8 exit /b 1
+xcopy /D /E /I /Y /Q "$(MSBuildThisFileDirectory)..\..\fonts" "$(OutDir)fonts" &gt;nul
+if errorlevel 1 exit /b 1
+exit /b 0</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <LuaJitSource Include="..\..\third_party\luajit\src\*.c;..\..\third_party\luajit\src\*.h;..\..\third_party\luajit\src\*.dasc;..\..\third_party\build-luajit.cmd" />
+  </ItemGroup>
+  <!-- Rebuilds LuaJIT when any of its sources (or the script) is newer than the library. -->
+  <Target Name="BuildLuaJit" BeforeTargets="ClCompile;ResourceCompile" Inputs="@(LuaJitSource)" Outputs="$(LuaJitDir)lua51.lib">
+    <Exec Command="&quot;$(MSBuildThisFileDirectory)..\..\third_party\build-luajit.cmd&quot; $(Configuration) &quot;$(MSBuildThisFileDirectory)..\..\build\obj\luajit\$(Configuration)&quot;" />
+  </Target>
+  <ItemGroup>
+    <ClCompile Include="addon_fault.cpp" />
+    <ClCompile Include="addon_trace.cpp" />
+    <ClCompile Include="addons.cpp" />
+    <ClCompile Include="addonpkg.cpp" />
+    <ClCompile Include="addonpkg_link.cpp" />
+    <ClCompile Include="addonpkg_lua.cpp" />
+    <ClCompile Include="addonpkg_win.cpp" />
+    <ClCompile Include="zipread.cpp" />
+    <ClCompile Include="aliases.cpp" />
+    <ClCompile Include="alliancelist.cpp" />
+    <ClCompile Include="castbar.cpp" />
+    <ClCompile Include="hudwin.cpp" />
+    <ClCompile Include="tpbar.cpp" />
+    <ClCompile Include="partylist.cpp" />
+    <ClCompile Include="partyrows.cpp" />
+    <ClCompile Include="noblink.cpp" />
+    <ClCompile Include="fishing.cpp" />
+    <ClCompile Include="autologin.cpp" />
+    <ClCompile Include="chatpages.cpp" />
+    <ClCompile Include="helpbar.cpp" />
+    <ClCompile Include="buffwin.cpp" />
+    <ClCompile Include="buttons.cpp" />
+    <ClCompile Include="buttonspace.cpp" />
+    <ClCompile Include="outline.cpp" />
+    <ClCompile Include="addonbox.cpp" />
+    <ClCompile Include="targetwin.cpp" />
+    <ClCompile Include="mapwin.cpp" />
+    <ClCompile Include="binds.cpp" />
+    <ClCompile Include="camera.cpp" />
+    <ClCompile Include="framepacing.cpp" />
+    <ClCompile Include="gearload.cpp" />
+    <ClCompile Include="hideui.cpp" />
+    <ClCompile Include="itemcount.cpp" />
+    <ClCompile Include="itemlist.cpp" />
+    <ClCompile Include="spelllist.cpp" />
+    <ClCompile Include="itemrarity.cpp" />
+    <ClCompile Include="itemtips.cpp" />
+    <ClCompile Include="tipicons.cpp" />
+    <ClCompile Include="winimage.cpp" />
+    <ClCompile Include="itemslot.cpp" />
+    <ClCompile Include="jplabels.cpp" />
+    <ClCompile Include="macrobar.cpp" />
+    <ClCompile Include="macrotext.cpp" />
+    <ClCompile Include="labeltext.cpp" />
+    <ClCompile Include="listtext.cpp" />
+    <ClCompile Include="netstat.cpp" />
+    <ClCompile Include="discord.cpp" />
+    <ClCompile Include="uispace.cpp" />
+    <ClCompile Include="uiscale.cpp" />
+    <ClCompile Include="statuswindow.cpp" />
+    <ClCompile Include="profilewin.cpp" />
+    <ClCompile Include="equipstats.cpp" />
+    <ClCompile Include="entityhp.cpp" />
+    <ClCompile Include="equipdesc.cpp" />
+    <ClCompile Include="chat.cpp" />
+    <ClCompile Include="chattabs.cpp" />
+    <ClCompile Include="chatfont.cpp" />
+    <ClCompile Include="chatline.cpp" />
+    <ClCompile Include="clipboard.cpp" />
+    <ClCompile Include="commands.cpp" />
+    <ClCompile Include="configmenu.cpp" />
+    <ClCompile Include="menuhover.cpp" />
+    <ClCompile Include="singlemenu.cpp" />
+    <ClCompile Include="sliders.cpp" />
+    <ClCompile Include="equipfirst.cpp" />
+    <ClCompile Include="namechars.cpp" />
+    <ClCompile Include="menulog.cpp" />
+    <ClCompile Include="partymenu.cpp" />
+    <ClCompile Include="compat\ashita\core.cpp" />
+    <ClCompile Include="compat\ashita\d3dx.cpp" />
+    <ClCompile Include="compat\ashita\fonts.cpp" />
+    <ClCompile Include="compat\plugin_move.cpp" />
+    <ClCompile Include="compat\ashita\gui.cpp">
+      <!-- Not gui.obj: gui.cpp makes that. -->
+      <ObjectFileName>$(IntDir)ashita_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="compat\ashita\host.cpp" />
+    <ClCompile Include="compat\ashita\memory.cpp" />
+    <ClCompile Include="compat\ashita\paths.cpp" />
+    <ClCompile Include="compat\ashita\resources.cpp" />
+    <ClCompile Include="compat\windower\host.cpp">
+      <!-- Not host.obj: compat\ashita\host.cpp makes that. -->
+      <ObjectFileName>$(IntDir)windower_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="compat\windower\legacy.cpp">
+      <ObjectFileName>$(IntDir)windower_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="compat\windower\objects.cpp">
+      <ObjectFileName>$(IntDir)windower_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="compat\windower\state.cpp">
+      <ObjectFileName>$(IntDir)windower_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="craftlog.cpp" />
+    <ClCompile Include="crash.cpp" />
+    <!-- renderer=d3d9: every Direct3D call the game makes runs through it, so optimized in Debug too
+         (as VanaCore.Gfx is) -->
+    <ClCompile Include="d3d9.cpp">
+      <Optimization Condition="'$(Configuration)'=='Debug'">MaxSpeed</Optimization>
+      <BasicRuntimeChecks Condition="'$(Configuration)'=='Debug'">Default</BasicRuntimeChecks>
+    </ClCompile>
+    <ClCompile Include="dats.cpp" />
+    <ClCompile Include="dat_textures.cpp" />
+    <ClCompile Include="bumpmap.cpp" />
+    <ClCompile Include="casters.cpp" />
+    <ClCompile Include="distance.cpp" />
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="framerate.cpp" />
+    <ClCompile Include="frametime.cpp" />
+    <ClCompile Include="game.cpp" />
+    <ClCompile Include="game_files.cpp" />
+    <ClCompile Include="gameevents.cpp" />
+    <ClCompile Include="gameui.cpp" />
+    <ClCompile Include="gamewin.cpp" />
+    <ClCompile Include="gmicons.cpp" />
+    <ClCompile Include="graphics.cpp" />
+    <ClCompile Include="grass_assets.cpp" />
+    <ClCompile Include="grass_floors.cpp" />
+    <ClCompile Include="gui.cpp" />
+    <ClCompile Include="layout.cpp" />
+    <ClCompile Include="image.cpp" />
+    <ClCompile Include="imports.cpp" />
+    <ClCompile Include="client.cpp" />
+    <ClCompile Include="clients.cpp" />
+    <ClCompile Include="ini.cpp" />
+    <ClCompile Include="inicache.cpp" />
+    <ClCompile Include="ipc.cpp" />
+    <ClCompile Include="input.cpp" />
+    <ClCompile Include="loader.cpp" />
+    <ClCompile Include="lod.cpp" />
+    <ClCompile Include="mcp.cpp" />
+    <ClCompile Include="mcp_tools.cpp" />
+    <ClCompile Include="json.cpp" />
+    <ClCompile Include="disasm.cpp" />
+    <ClCompile Include="nameplates.cpp" />
+    <ClCompile Include="widgets.cpp" />
+    <ClCompile Include="nameplates_debug.cpp" />
+    <ClCompile Include="damagetext.cpp" />
+    <ClCompile Include="log.cpp" />
+    <ClCompile Include="lua_api.cpp" />
+    <ClCompile Include="lua_ashita.cpp" />
+    <ClCompile Include="lua_entity.cpp" />
+    <ClCompile Include="lua_maxhp.cpp" />
+    <ClCompile Include="maxhp_ask.cpp" />
+    <ClCompile Include="lua_gamewin.cpp" />
+    <ClCompile Include="lua_imgui.cpp" />
+    <ClCompile Include="lua_net.cpp" />
+    <ClCompile Include="net.cpp" />
+    <ClCompile Include="overlay.cpp" />
+    <ClCompile Include="others.cpp" />
+    <ClCompile Include="dsound_follow.cpp" />
+    <ClCompile Include="packetflow.cpp" />
+    <ClCompile Include="sound.cpp" />
+    <ClCompile Include="packetwatch.cpp" />
+    <ClCompile Include="packets.cpp" />
+    <ClCompile Include="pivot.cpp" />
+    <ClCompile Include="plugin_fault.cpp" />
+    <ClCompile Include="plugin_memory.cpp" />
+    <ClCompile Include="plugins.cpp" />
+    <ClCompile Include="pluginapi.cpp" />
+    <ClCompile Include="registry.cpp" />
+    <ClCompile Include="scan.cpp" />
+    <ClCompile Include="sigs.cpp" />
+    <ClCompile Include="font_folder.cpp" />
+    <ClCompile Include="game_config.cpp" />
+    <ClCompile Include="screenshot.cpp" />
+    <ClCompile Include="abtest.cpp" />
+    <ClCompile Include="zoneload.cpp" />
+    <ClCompile Include="debugrec.cpp" />
+    <ClCompile Include="perf.cpp" />
+    <ClCompile Include="phraselist.cpp" />
+    <ClCompile Include="raise.cpp" />
+    <ClCompile Include="hwmon.cpp" />
+    <ClCompile Include="sampler.cpp" />
+    <ClCompile Include="stats.cpp" />
+    <ClCompile Include="vanaui.cpp" />
+    <ClCompile Include="mousediag.cpp" />
+    <ClCompile Include="gamepad.cpp" />
+    <ClCompile Include="session.cpp" />
+    <ClCompile Include="settings.cpp" />
+    <ClCompile Include="shutdown.cpp" />
+    <ClCompile Include="gamesave.cpp" />
+    <ClCompile Include="text.cpp" />
+    <ClCompile Include="trusts.cpp" />
+    <ClCompile Include="ui.cpp" />
+    <ClCompile Include="usercaches.cpp" />
+    <ClCompile Include="vanaclock.cpp" />
+    <ClCompile Include="water.cpp" />
+    <ClCompile Include="window.cpp" />
+    <ClCompile Include="zoneweather.cpp" />
+    <ClCompile Include="zonefloor.cpp" />
+    <ClCompile Include="zonemesh.cpp" />
+    <ClCompile Include="zone_casters.cpp" />
+    <ClCompile Include="zonebatch.cpp" />
+    <ClCompile Include="occlusion.cpp" />
+    <ClCompile Include="zonelines.cpp" />
+    <ClCompile Include="sparkles.cpp" />
+    <ClCompile Include="groundmarks.cpp" />
+  </ItemGroup>
+  <!-- LuaSocket's C half (third_party\luasocket, its Windows sources), as it is: socket.core and mime.core for addons,
+       linked in (VanaCore's LuaJIT is static, so a module DLL couldn't link to it) and not exported -->
+  <ItemGroup>
+    <ClCompile Include="..\..\third_party\luasocket\src\auxiliar.c;..\..\third_party\luasocket\src\buffer.c;..\..\third_party\luasocket\src\compat.c;..\..\third_party\luasocket\src\except.c;..\..\third_party\luasocket\src\inet.c;..\..\third_party\luasocket\src\io.c;..\..\third_party\luasocket\src\luasocket.c;..\..\third_party\luasocket\src\mime.c;..\..\third_party\luasocket\src\options.c;..\..\third_party\luasocket\src\select.c;..\..\third_party\luasocket\src\tcp.c;..\..\third_party\luasocket\src\timeout.c;..\..\third_party\luasocket\src\udp.c;..\..\third_party\luasocket\src\wsocket.c">
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>LUASOCKET_API=;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemGroup>
+  <!-- AsmJit (third_party\asmjit, its x86 assembler only) and AsmTK (third_party\asmtk, AsmJit's text parser), as they
+       are, for Ashita addons' ashita.memory.assembler (asm_text.cpp): their own warning level, objects in a folder of
+       their own (AsmJit's assembler.cpp, string.cpp, ... aren't VanaCore's) -->
+  <ItemGroup>
+    <ClCompile Include="..\..\third_party\asmjit\asmjit\core\*.cpp;..\..\third_party\asmjit\asmjit\support\*.cpp;..\..\third_party\asmjit\asmjit\x86\*.cpp;..\..\third_party\asmtk\asmtk\*.cpp">
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\..\third_party\asmjit;$(MSBuildThisFileDirectory)..\..\third_party\asmtk;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASMJIT_STATIC;ASMTK_STATIC;ASMJIT_NO_AARCH64;ASMJIT_NO_UJIT;ASMJIT_NO_COMPILER;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)asmjit\%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="asm_text.cpp">
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\..\third_party\asmjit;$(MSBuildThisFileDirectory)..\..\third_party\asmtk;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASMJIT_STATIC;ASMTK_STATIC;ASMJIT_NO_AARCH64;ASMJIT_NO_UJIT;ASMJIT_NO_COMPILER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemGroup>
+  <!-- stb_image's zlib decoder alone (third_party\stb\stb_zlib.c), as it is: addon packages' zips (zipread.cpp) -->
+  <ItemGroup>
+    <ClCompile Include="..\..\third_party\stb\stb_zlib.c">
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+    </ClCompile>
+  </ItemGroup>
+  <!-- Dear ImGui (third_party\imgui), as it is: its own warning level -->
+  <ItemGroup>
+    <ClCompile Include="..\..\third_party\imgui\imgui.cpp;..\..\third_party\imgui\imgui_demo.cpp;..\..\third_party\imgui\imgui_draw.cpp;..\..\third_party\imgui\imgui_tables.cpp;..\..\third_party\imgui\imgui_widgets.cpp">
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\shared\vanacore\boot_info.hpp" />
+    <ClInclude Include="..\shared\vanacore\version.hpp" />
+    <ClInclude Include="addons.hpp" />
+    <ClInclude Include="addonpkg.hpp" />
+    <ClInclude Include="addonpkg_link.hpp" />
+    <ClInclude Include="addonpkg_lua.hpp" />
+    <ClInclude Include="zipread.hpp" />
+    <ClInclude Include="asm_text.hpp" />
+    <ClInclude Include="abtest.hpp" />
+    <ClInclude Include="zoneload.hpp" />
+    <ClInclude Include="debugrec.hpp" />
+    <ClInclude Include="perf.hpp" />
+    <ClInclude Include="phraselist.hpp" />
+    <ClInclude Include="raise.hpp" />
+    <ClInclude Include="hwmon.hpp" />
+    <ClInclude Include="sampler.hpp" />
+    <ClInclude Include="stats.hpp" />
+    <ClInclude Include="stats_report.hpp" />
+    <ClInclude Include="vanaui.hpp" />
+    <ClInclude Include="mousediag.hpp" />
+    <ClInclude Include="addon_fault.hpp" />
+    <ClInclude Include="addon_trace.hpp" />
+    <ClInclude Include="addon_trace_report.hpp" />
+    <ClInclude Include="aliases.hpp" />
+    <ClInclude Include="alliancelist.hpp" />
+    <ClInclude Include="castbar.hpp" />
+    <ClInclude Include="hudwin.hpp" />
+    <ClInclude Include="hudwin_windows.hpp" />
+    <ClInclude Include="hudwin_up.h" />
+    <ClInclude Include="hudwin_outline.h" />
+    <ClInclude Include="hudwin_under.h" />
+    <ClInclude Include="hudwin_place.h" />
+    <ClInclude Include="hudwin_comment.h" />
+    <ClInclude Include="tpbar.hpp" />
+    <ClInclude Include="partylist.hpp" />
+    <ClInclude Include="partyrows.hpp" />
+    <ClInclude Include="noblink.hpp" />
+    <ClInclude Include="fishing.hpp" />
+    <ClInclude Include="autologin.hpp" />
+    <ClInclude Include="chatpages.hpp" />
+    <ClInclude Include="helpbar.hpp" />
+    <ClInclude Include="buffwin.hpp" />
+    <ClInclude Include="buttons.hpp" />
+    <ClInclude Include="buttonspace.hpp" />
+    <ClInclude Include="outline.hpp" />
+    <ClInclude Include="addonbox.hpp" />
+    <ClInclude Include="compat\plugin_move.hpp" />
+    <ClInclude Include="targetwin.hpp" />
+    <ClInclude Include="mapwin.hpp" />
+    <ClInclude Include="binds.hpp" />
+    <ClInclude Include="gamepad.hpp" />
+    <ClInclude Include="shutdown.hpp" />
+    <ClInclude Include="gamesave.hpp" />
+    <ClInclude Include="camera.hpp" />
+    <ClInclude Include="camera_walls.h" />
+    <ClInclude Include="framepacing.hpp" />
+    <ClInclude Include="gearload.hpp" />
+    <ClInclude Include="hideui.hpp" />
+    <ClInclude Include="itemcount.hpp" />
+    <ClInclude Include="itemlist.hpp" />
+    <ClInclude Include="spelllist.hpp" />
+    <ClInclude Include="itemrarity.hpp" />
+    <ClInclude Include="itemtips.hpp" />
+    <ClInclude Include="tipicons.hpp" />
+    <ClInclude Include="winimage.hpp" />
+    <ClInclude Include="itemslot.hpp" />
+    <ClInclude Include="jplabels.hpp" />
+    <ClInclude Include="jplabels_data.h" />
+    <ClInclude Include="chatfont_wide.h" />
+    <ClInclude Include="text_fit.h" />
+    <ClInclude Include="text_replay.h" />
+    <ClInclude Include="lua_api_gradient.h" />
+    <ClInclude Include="macrobar.hpp" />
+    <ClInclude Include="macrotext.hpp" />
+    <ClInclude Include="labeltext.hpp" />
+    <ClInclude Include="listtext.hpp" />
+    <ClInclude Include="netstat.hpp" />
+    <ClInclude Include="discord.hpp" />
+    <ClInclude Include="uispace.hpp" />
+    <ClInclude Include="uiscale.hpp" />
+    <ClInclude Include="statuswindow.hpp" />
+    <ClInclude Include="profilewin.hpp" />
+    <ClInclude Include="equipstats.hpp" />
+    <ClInclude Include="entityhp.hpp" />
+    <ClInclude Include="entityhp_track.h" />
+    <ClInclude Include="equipdesc.hpp" />
+    <ClInclude Include="equipstats_check.h" />
+    <ClInclude Include="equipstats_dump.h" />
+    <ClInclude Include="equipstats_sets.h" />
+    <ClInclude Include="chat.hpp" />
+    <ClInclude Include="chat_place.h" />
+    <ClInclude Include="chat_clock.h" />
+    <ClInclude Include="chatfont.hpp" />
+    <ClInclude Include="chattabs.hpp" />
+    <ClInclude Include="chatline.hpp" />
+    <ClInclude Include="mcp.hpp" />
+    <ClInclude Include="mcp_tools.hpp" />
+    <ClInclude Include="json.hpp" />
+    <ClInclude Include="disasm.hpp" />
+    <ClInclude Include="clipboard.hpp" />
+    <ClInclude Include="commands.hpp" />
+    <ClInclude Include="configmenu.hpp" />
+    <ClInclude Include="menuhover.hpp" />
+    <ClInclude Include="singlemenu.hpp" />
+    <ClInclude Include="sliders.hpp" />
+    <ClInclude Include="equipfirst.hpp" />
+    <ClInclude Include="namechars.hpp" />
+    <ClInclude Include="menulog.hpp" />
+    <ClInclude Include="partymenu.hpp" />
+    <ClInclude Include="compat\ashita\abi.hpp" />
+    <ClInclude Include="compat\ashita\backend.hpp" />
+    <ClInclude Include="compat\ashita\host.hpp" />
+    <ClInclude Include="compat\windower\abi.hpp" />
+    <ClInclude Include="compat\windower\host.hpp" />
+    <ClInclude Include="compat\windower\objects.hpp" />
+    <ClInclude Include="craftlog.hpp" />
+    <ClInclude Include="crash.hpp" />
+    <ClInclude Include="d3d8.hpp" />
+    <ClInclude Include="d3d9.hpp" />
+    <ClInclude Include="ini.hpp" />
+    <ClInclude Include="inicache.hpp" />
+    <ClInclude Include="ipc.hpp" />
+    <ClInclude Include="dat_buf.hpp" />
+    <ClInclude Include="dats.hpp" />
+    <ClInclude Include="dat_textures.hpp" />
+    <ClInclude Include="bumpmap.hpp" />
+    <ClInclude Include="casters.hpp" />
+    <ClInclude Include="distance.hpp" />
+    <ClInclude Include="framerate.hpp" />
+    <ClInclude Include="frametime.hpp" />
+    <ClInclude Include="game.hpp" />
+    <ClInclude Include="game_files.hpp" />
+    <ClInclude Include="gameevents.hpp" />
+    <ClInclude Include="gametext.hpp" />
+    <ClInclude Include="gameui.hpp" />
+    <ClInclude Include="gmicons.hpp" />
+    <ClInclude Include="gamewin.hpp" />
+    <ClInclude Include="graphics.hpp" />
+    <ClInclude Include="grass_assets.hpp" />
+    <ClInclude Include="grass_floors.hpp" />
+    <ClInclude Include="zonemesh.hpp" />
+    <ClInclude Include="zone_casters.hpp" />
+    <ClInclude Include="zonebatch.hpp" />
+    <ClInclude Include="occlusion.hpp" />
+    <ClInclude Include="gui.hpp" />
+    <ClInclude Include="layout.hpp" />
+    <None Include="compat\ashita\gui_v416.inc" />
+    <ClInclude Include="image.hpp" />
+    <ClInclude Include="imports.hpp" />
+    <ClInclude Include="input.hpp" />
+    <ClInclude Include="input_background.hpp" />
+    <ClInclude Include="loader.hpp" />
+    <ClInclude Include="lod.hpp" />
+    <ClInclude Include="nameplates.hpp" />
+    <ClInclude Include="widgets.hpp" />
+    <ClInclude Include="nameplates_debug.hpp" />
+    <ClInclude Include="damagetext.hpp" />
+    <ClInclude Include="damagetext_look.h" />
+    <ClInclude Include="damagetext_life.h" />
+    <ClInclude Include="log.hpp" />
+    <ClInclude Include="lua_api.hpp" />
+    <ClInclude Include="lua_ashita.hpp" />
+    <ClInclude Include="lua_entity.hpp" />
+    <ClInclude Include="lua_fields.hpp" />
+    <ClInclude Include="lua_maxhp.hpp" />
+    <ClInclude Include="maxhp_ask.hpp" />
+    <ClInclude Include="lua_gamewin.hpp" />
+    <ClInclude Include="lua_imgui.hpp" />
+    <ClInclude Include="lua_net.hpp" />
+    <ClInclude Include="net.hpp" />
+    <None Include="lua_imgui.inc" />
+    <None Include="addonpkg.manifest" />
+    <ClInclude Include="overlay.hpp" />
+    <ClInclude Include="others.hpp" />
+    <ClInclude Include="dsound_follow.hpp" />
+    <ClInclude Include="packetflow.hpp" />
+    <ClInclude Include="sound.hpp" />
+    <ClInclude Include="packetwatch.hpp" />
+    <ClInclude Include="packets.hpp" />
+    <ClInclude Include="pivot.hpp" />
+    <ClInclude Include="plugin_fault.hpp" />
+    <ClInclude Include="plugin_memory.hpp" />
+    <ClInclude Include="plugins.hpp" />
+    <ClInclude Include="pluginapi.hpp" />
+    <ClInclude Include="registry.hpp" />
+    <ClInclude Include="scan.hpp" />
+    <ClInclude Include="sigs.hpp" />
+    <ClInclude Include="font_folder.hpp" />
+    <ClInclude Include="game_config.hpp" />
+    <ClInclude Include="screenshot.hpp" />
+    <ClInclude Include="resource.hpp" />
+    <ClInclude Include="session.hpp" />
+    <ClInclude Include="client.hpp" />
+    <ClInclude Include="clients.hpp" />
+    <ClInclude Include="settings.hpp" />
+    <ClInclude Include="text.hpp" />
+    <ClInclude Include="textcache.hpp" />
+    <ClInclude Include="trusts.hpp" />
+    <ClInclude Include="ui.hpp" />
+    <ClInclude Include="usercaches.hpp" />
+    <ClInclude Include="vanaclock.hpp" />
+    <ClInclude Include="water.hpp" />
+    <ClInclude Include="window.hpp" />
+    <ClInclude Include="zoneweather.hpp" />
+    <ClInclude Include="zonefloor.hpp" />
+    <ClInclude Include="zonelines.hpp" />
+    <ClInclude Include="sparkles.hpp" />
+    <ClInclude Include="groundmarks.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="VanaCore.Core.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="VanaCore.Core.def" />
+    <None Include="lua\compat\ashita.lua" />
+    <None Include="lua\compat\windower.lua" />
+    <None Include="lua\net.lua" />
+    <None Include="lua\settings.lua" />
+    <None Include="lua\vana.lua" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- src\gfx: Direct3D 8 on Direct3D 12 (graphics.cpp) -->
+    <ProjectReference Include="..\gfx\VanaCore.Gfx.vcxproj">
+      <Project>{6C1E2B4A-3F7D-4E59-9A2B-8D0C5E7F1A36}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

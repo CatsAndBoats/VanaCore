@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The graphics library (static, C): Direct3D 8 for the game on Direct3D 12, ported from xi-on-mac
+     (runtime/portable: d3d8.c, gfx_d3d12.c, gfx_hlsl*.c) with native/ in place of its recompiler
+     runtime. Linked into VanaCore.Core. -->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{6C1E2B4A-3F7D-4E59-9A2B-8D0C5E7F1A36}</ProjectGuid>
+    <RootNamespace>VanaCoreGfx</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\VanaCore.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <TargetName>VanaCore.Gfx</TargetName>
+    <!-- a library only VanaCore.Core links: not beside the game's files -->
+    <OutDir>$(MSBuildThisFileDirectory)..\..\build\obj\$(ProjectName)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <!-- native\ first: its runtime.h, thunk.h, gwin.h, plat.h, user32.h stand in for upstream's -->
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)native;$(MSBuildThisFileDirectory);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VANACORE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ForcedIncludeFiles>vc_compat.h</ForcedIncludeFiles>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <!-- the ported files are kept close to upstream, which builds at /W3 -->
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <!-- Optimized in Debug too: every Direct3D call the game makes runs through this code (thousands a
+       frame), and unoptimized it cost ~4x (2026-09-26: 41 against 175 frames a second on the game's
+       measured call mix). It's C, so it links with the Debug C++ code; still the debug CRT, still
+       debug information. -->
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="d3d8.c" />
+    <ClCompile Include="d3d8_sun.c" />
+    <ClCompile Include="gfx_d3d11.c" />
+    <ClCompile Include="gfx_d3d12.c" />
+    <ClCompile Include="gfx_dispatch.c" />
+    <ClCompile Include="gfx_hlsl.c" />
+    <ClCompile Include="gfx_hlsl_shaders.c" />
+    <ClCompile Include="floors.c" />
+    <ClCompile Include="zonemesh.c" />
+    <ClCompile Include="gfx_shared.c" />
+    <ClCompile Include="gfx_watch_values.c" />
+    <ClCompile Include="grass.c" />
+    <ClCompile Include="snow.c" />
+    <ClCompile Include="sky.c" />
+    <ClCompile Include="native\native.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="d3d8.h" />
+    <ClInclude Include="d3d8_cap.h" />
+    <ClInclude Include="d3d8_casters.h" />
+    <ClInclude Include="d3d8_water.h" />
+    <ClInclude Include="d3d8_water_fill.h" />
+    <ClInclude Include="d3d8_water_bake.h" />
+    <ClInclude Include="d3d8_water_memo.h" />
+    <ClInclude Include="d3d8_water_level.h" />
+    <ClInclude Include="d3d8_water_sea.h" />
+    <ClInclude Include="d3d8_water_ocean.h" />
+    <ClInclude Include="d3d8_chatfont.h" />
+    <ClInclude Include="d3d8_chatfont_big.h" />
+    <ClInclude Include="d3d8_chatfont_report.h" />
+    <ClInclude Include="d3d8_chatfont_under.h" />
+    <ClInclude Include="d3d8_chatfont_words.h" />
+    <ClInclude Include="d3d8_chatfont_wide.h" />
+    <ClInclude Include="d3d8_chatfont_jp.h" />
+    <ClInclude Include="d3d8_chatfont_labels.h" />
+    <ClInclude Include="d3d8_night.h" />
+    <ClInclude Include="d3d8_sun.h" />
+    <ClInclude Include="d3d8_tips.h" />
+    <ClInclude Include="d3d8_winimage.h" />
+    <ClInclude Include="d3d8_corners.h" />
+    <ClInclude Include="floors.h" />
+    <ClInclude Include="zonemesh.h" />
+    <ClInclude Include="snow.h" />
+    <ClInclude Include="sky.h" />
+    <ClInclude Include="gfx.h" />
+    <ClInclude Include="gfx_backend.h" />
+    <ClInclude Include="gfx_hlsl_water.h" />
+    <ClInclude Include="gfx_d3d11_glow.h" />
+    <ClInclude Include="gfx_d3d11_smooth.h" />
+    <ClInclude Include="gfx_d3d12_batch.h" />
+    <ClInclude Include="gfx_d3d12_cmask.h" />
+    <ClInclude Include="gfx_d3d12_floors.h" />
+    <ClInclude Include="gfx_d3d12_measure.h" />
+    <ClInclude Include="gfx_d3d12_sky.h" />
+    <ClInclude Include="gfx_d3d12_occl.h" />
+    <ClInclude Include="gfx_sun_bounds.h" />
+    <ClInclude Include="gfx_sun_cache.h" />
+    <ClInclude Include="gfx_sun_layers.h" />
+    <ClInclude Include="gfx_sun_slice.h" />
+    <ClInclude Include="gfx_rename.h" />
+    <ClInclude Include="gfx_hlsl.h" />
+    <ClInclude Include="gfx_shared.h" />
+    <ClInclude Include="grass_centre.h" />
+    <ClInclude Include="grass_keep.h" />
+    <ClInclude Include="grass_moss.h" />
+    <ClInclude Include="grass_layers.h" />
+    <ClInclude Include="grass_color.h" />
+    <ClInclude Include="grass_tufts.h" />
+    <ClInclude Include="vanacore_gfx.h" />
+    <ClInclude Include="native\gthread.h" />
+    <ClInclude Include="native\gwin.h" />
+    <ClInclude Include="native\plat.h" />
+    <ClInclude Include="native\runtime.h" />
+    <ClInclude Include="native\thunk.h" />
+    <ClInclude Include="native\user32.h" />
+    <ClInclude Include="native\vc_compat.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

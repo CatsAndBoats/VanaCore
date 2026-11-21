@@ -1,0 +1,4 @@
+// VanaCore.exe's icon (Explorer, the taskbar, its console window): the logo, assets\logo.png cut out
+// of its white (assets\logo_cutout.png), at every size Windows asks for. The lowest id is the one
+// Windows shows.
+1 ICON "VanaCore.ico"

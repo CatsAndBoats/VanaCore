@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VanaCore.Dlss.exe: NVIDIA DLSS and AMD FSR for VanaCore, in a 64-bit helper (neither has a 32-bit build; FFXI is
+     32-bit). Into build\<Configuration>\dlss\ with nvngx_dlss.dll and AMD's FSR DLLs: a folder of its own, so its
+     64-bit DLLs (the C runtime the NGX library needs, /MD) never sit where the game's 32-bit process looks for its own. -->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{3E9B2C71-8A4D-4F06-B5C2-7D1E9A0F4C38}</ProjectGuid>
+    <RootNamespace>VanaCoreDlss</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\VanaCore.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <TargetName>VanaCore.Dlss</TargetName>
+    <OutDir>$(MSBuildThisFileDirectory)..\..\build\$(Configuration)\dlss\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)..\..\build\obj\$(ProjectName)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\..\third_party\dlss\include;$(MSBuildThisFileDirectory)..\..\third_party\fsr;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- the NGX library is built against the C runtime's DLL -->
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(MSBuildThisFileDirectory)..\..\third_party\dlss\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>nvsdk_ngx_d.lib;d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <PostBuildEvent>
+      <Message>Copying nvngx_dlss.dll and AMD's FSR DLLs to $(OutDir)</Message>
+      <Command>xcopy /D /Y /Q "$(MSBuildThisFileDirectory)..\..\third_party\dlss\bin\nvngx_dlss*.dll" "$(OutDir)" &gt;nul &amp;&amp; xcopy /D /Y /Q "$(MSBuildThisFileDirectory)..\..\third_party\fsr\bin\amd_fidelityfx_*_dx12.dll" "$(OutDir)" &gt;nul</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="dlss_helper.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="dlss_ipc.h" />
+  </ItemGroup>
+  <!-- NVIDIA's DLSS SDK isn't in the repository (its licence allows it only inside an application): fetched from
+       NVIDIA's own repository by third_party\dlss\fetch-dlss.ps1 when a file this build needs is missing. -->
+  <PropertyGroup>
+    <DlssDir>$(MSBuildThisFileDirectory)..\..\third_party\dlss\</DlssDir>
+  </PropertyGroup>
+  <Target Name="FetchDlssSdk" BeforeTargets="PrepareForBuild"
+          Condition="!Exists('$(DlssDir)include\nvsdk_ngx_helpers.h') Or !Exists('$(DlssDir)lib\nvsdk_ngx_d.lib') Or !Exists('$(DlssDir)bin\nvngx_dlss.dll') Or !Exists('$(DlssDir)bin\nvngx_dlssg.dll') Or !Exists('$(DlssDir)LICENSE.txt')">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(DlssDir)fetch-dlss.ps1&quot;" />
+  </Target>
+  <!-- AMD's FSR DLLs aren't in the repository either (69 MB; the headers are, in third_party\fsr): fetched from AMD's
+       own repository by third_party\fsr\fetch-fsr.ps1 when one is missing. The helper loads them by name, so the
+       build itself doesn't need them; the copy above does. -->
+  <PropertyGroup>
+    <FsrDir>$(MSBuildThisFileDirectory)..\..\third_party\fsr\</FsrDir>
+  </PropertyGroup>
+  <Target Name="FetchFsrSdk" BeforeTargets="PrepareForBuild"
+          Condition="!Exists('$(FsrDir)bin\amd_fidelityfx_loader_dx12.dll') Or !Exists('$(FsrDir)bin\amd_fidelityfx_upscaler_dx12.dll') Or !Exists('$(FsrDir)bin\amd_fidelityfx_framegeneration_dx12.dll')">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(FsrDir)fetch-fsr.ps1&quot;" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
