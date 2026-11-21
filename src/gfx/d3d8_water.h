@@ -881,6 +881,7 @@ static int water_keep(GfxDraw* d, uint32_t prim, uint32_t count, int kind)
         if (cc)
         {
             water_pass_draw(d, cc, dc, w, h, &g_scene.s);
+            water_mirror_bind(d);
             g_water_as_is = 0;
             return 0;
         }
@@ -954,7 +955,6 @@ static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy,
     float* tn = d->u.texm[6];
     tn[4] = s->proj[10], tn[5] = s->proj[14], tn[6] = s->proj[11] < 0.0f ? -1.0f : 1.0f, tn[7] = minz;
     tn[8] = maxz - minz, tn[9] = (float)w, tn[10] = (float)h;
-    water_mirror_bind(d);
 }
 
 /* --- the game's water baked into its ground ------------------------------------------------------------------------ */
@@ -1358,7 +1358,10 @@ static void water_ground_setup(GfxDraw* d, const GfxScene* s, int copies, GfxTex
     if (g_water_set.view) /* the debug view: cyan */
         water_view(d, 0x00FFFFu);
     else if (copies)
+    {
         water_pass_draw(d, colour_copy, depth_copy, w, h, s), d->fs.water = 3;
+        water_mirror_bind(d); /* (the water's draws alone: the rain's pass sets its draw up by water_pass_draw too) */
+    }
 }
 
 /* The ground's water drawn as VanaCore's water, at the pass's end: the chunks drawn this frame, each its triangles from the
@@ -1460,7 +1463,10 @@ static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s)
         GfxDraw* d = &k->d;
         d->caster = 0, d->sought = 0, d->piece = 0, d->piece_draw = 0;
         if (copies)
+        {
             water_pass_draw(d, colour_copy, depth_copy, w, h, s);
+            water_mirror_bind(d);
+        }
         gfx_draw(d);
     }
     if (floors)
