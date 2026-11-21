@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""Pushes a build folder to R2 the way CatsEyeXI-Manager's Build Release > PUSH does: the CI copy of
-D:\\catseyexi_builds\\push-build.py (release-vanacore.bat's), for .github/workflows/release.yaml.
+"""Pushes a build folder to R2 the way CatsEyeXI-Manager's Build Release > PUSH does, for .github/workflows/release.yaml
+(a build, to vcdev) and .github/workflows/promote.yaml (vcdev, to vanacore).
 
-    push_build.py vanacore --folder <dir>             push the folder as the vanacore build
-    push_build.py vanacore --folder <dir> --dry-run   list what would be pushed, change nothing
-    push_build.py vanacore --folder <dir> --deletes   also remove files the folder no longer has
+    push_build.py vcdev/vanacore --folder <dir>       push the folder as the vcdev build (VanaCore's test build)
+    push_build.py vcdev/vanacore --folder <dir> --externals-from vanacore/vanacore
+                                                      ... and bring its EXTERNAL files up to vanacore's
+    push_build.py vanacore/vanacore --promote-from vcdev/vanacore
+                                                      push vcdev's files, as they are on R2, as the vanacore build
+    --dry-run                                         list what would be pushed, change nothing
+    --deletes                                         also remove files the folder no longer has
+
+A build is its launcher.json entry's tag/name (vcdev/vanacore, vanacore/vanacore), or its name when that's unique.
+vcdev is VanaCore's test build: the release workflow pushes every build there, and testers get it by setting the
+launcher's custom game build to vcdev (its builds then replace the same-named vanacore one). vanacore is what every
+player gets: promote.yaml copies vcdev's files to it, the exact files tested, once a build is ready.
 
 The same steps as push-build.py, in the Manager's order:
 
@@ -46,19 +55,30 @@ KEY_ENTRIES = "launcher/changelog/{id}.txt"
 
 PUBLIC_ORIGIN = "https://launcher.catseyexi.com"
 
-# manager.json's deploy_ignore on the machine that releases (substring matches, case-insensitive), plus
-# plugins\vanacore\ (CatsEyeXI's plugins, released from their own repositories), addons\ashita\, which
-# the addon updater publishes into the vanacore build, CatsEyeXI's VanaCore addons, which
-# CatsAndBoats/cexi-addons publishes (its Publish to R2 workflow), and the VanaCore native addons
-# the addon updater publishes into addons\vanacore\ ("native": true in addons.json). Ignored paths
-# are neither uploaded nor deleted.
+# What other workflows publish into the vanacore build (substring matches, case-insensitive): plugins\vanacore\
+# (CatsEyeXI's plugins, released from their own repositories), addons\ashita\, which the addon updater publishes,
+# CatsEyeXI's VanaCore addons, which CatsAndBoats/cexi-addons publishes (its Publish to R2 workflow), and the VanaCore
+# native addons the addon updater publishes into addons\vanacore\ ("native": true in addons.json). A push never
+# uploads or deletes them; --externals-from copies them from another build on R2 (vcdev takes vanacore's).
+EXTERNAL = [
+    "plugins\\vanacore\\", "addons\\ashita\\",
+    "addons\\vanacore\\partyfinder-vanacore\\", "addons\\vanacore\\auctionhouse-vanacore\\",
+    "addons\\vanacore\\clawmark-vanacore\\", "addons\\vanacore\\yunagearopt\\",
+]
+
+# manager.json's deploy_ignore on the machine that releases, plus EXTERNAL. Ignored paths are neither uploaded nor
+# deleted.
 DEPLOY_IGNORE = [
     "TEMP\\", "USER\\", "Vekien\\", "Vekien_", "Premium_", "defaults\\", "default.txt", "scripts\\",
     "config\\", "cache\\shaders", "cache\\flicker.txt", "cache\\flicker_gfx.txt", "cache\\pipelines.d3d12.v1",
     "logs\\vanacore.log", "vanacore.ini",
-    "plugins\\vanacore\\", "addons\\ashita\\",
-    "addons\\vanacore\\partyfinder-vanacore\\", "addons\\vanacore\\auctionhouse-vanacore\\",
-    "addons\\vanacore\\yunagearopt\\",
+] + EXTERNAL
+
+# Files a build on R2 has that no package does: never deleted by a push, uploaded when the folder has one (a
+# promotion's). DLSS 5's DLL is NVIDIA's and not released yet, so it isn't in the repository or the package; it was
+# put on R2 by hand.
+KEEP = [
+    "dlss\\nvngx_dlssnr.dll",
 ]
 
 UPLOAD_WORKERS = 8
@@ -306,6 +326,37 @@ def add_unique(lst, files):
             seen.add(f.lower())
 
 
+def _try(fn, arg):
+    """None when fn(arg) ran, else what it raised."""
+    try:
+        fn(arg)
+        return None
+    except Exception as e:
+        return e
+
+
+def find_build(launcher, spec):
+    """The launcher.json build named spec: its tag/name, or its name when that's unique."""
+    want = spec.lower()
+    matches = [b for b in launcher["builds"]
+               if want in (b["name"].lower(), f"{b['tag']}/{b['name']}".lower())]
+    if len(matches) != 1:
+        names = ", ".join(f"{b['tag']}/{b['name']}" for b in launcher["builds"])
+        die(f"expected one build named '{spec}' in launcher.json, found {len(matches)} (builds: {names})")
+    return matches[0]
+
+
+def fetch(r2, prefix, rel, want):
+    """A file of a build on R2 (S3, not the public URL, so never a stale CDN copy), checked against its state's hash."""
+    data = r2.get(f"{prefix}/{rel.replace(chr(92), '/')}")
+    if data is None:
+        raise RuntimeError(f"{rel} is in the state but not on R2")
+    got = hashlib.sha1(data).hexdigest()[:6]
+    if got.lower() != want.lower():
+        raise RuntimeError(f"{rel} on R2 hashes {got}, its state says {want}")
+    return data
+
+
 def config_from_env():
     env = {"r2_api": "R2_S3_ENDPOINT", "r2_access_key": "R2_ACCESS_KEY_ID",
            "r2_secret_key": "R2_SECRET_ACCESS_KEY", "r2_bucket": "R2_BUCKET"}
@@ -326,6 +377,10 @@ def main():
     ap.add_argument("--folder", required=True, help="the folder to push, as the build's root")
     ap.add_argument("--dry-run", action="store_true", help="list what would be pushed and change nothing")
     ap.add_argument("--deletes", action="store_true", help="also remove files the folder no longer has")
+    ap.add_argument("--externals-from", metavar="BUILD",
+                    help="also bring the EXTERNAL files (plugins, the addon updater's addons) up to BUILD's")
+    ap.add_argument("--promote-from", metavar="BUILD",
+                    help="push BUILD's files as they are on R2 (fetched into --folder, which must be empty or new)")
     args = ap.parse_args()
 
     cfg = config_from_env()
@@ -336,27 +391,71 @@ def main():
     if raw is None:
         die("launcher/launcher.json isn't on R2")
     launcher = loads(raw)
-    want = args.build.lower()
-    matches = [b for b in launcher["builds"]
-               if want in (b["name"].lower(), f"{b['tag']}/{b['name']}".lower())]
-    if len(matches) != 1:
-        names = ", ".join(f"{b['tag']}/{b['name']}" for b in launcher["builds"])
-        die(f"expected one build named '{args.build}' in launcher.json, found {len(matches)} (builds: {names})")
-    build = matches[0]
+    build = find_build(launcher, args.build)
     tag, name = build["tag"], build["name"]
     map_key = f"{tag}_{name}"
     prefix = build["folder"].replace("\\", "/")
     folder = os.path.abspath(args.folder)
     state_key = KEY_STATE.format(tag=tag, name=name)
+    ignore = normalise_ignore(DEPLOY_IGNORE)
+    keep = normalise_ignore(KEEP)
+    external = normalise_ignore(EXTERNAL)
+
+    # A promotion: the source build's files, as R2 has them, into the folder, then pushed as any folder is
+    if args.promote_from:
+        source = find_build(launcher, args.promote_from)
+        if (source["tag"], source["name"]) == (tag, name):
+            die("a build can't be promoted to itself")
+        if os.path.isdir(folder) and os.listdir(folder):
+            die(f"--promote-from fetches into --folder, which must be empty: {folder}")
+        source_prefix = source["folder"].replace("\\", "/")
+        source_state = parse_state(r2.get(KEY_STATE.format(tag=source["tag"], name=source["name"])))
+        wanted = {rel: h for rel, h in source_state.items() if not is_ignored(rel, ignore)}
+        if not wanted:
+            die(f"{source['tag']}/{source['name']} has no files on R2 to promote")
+        # A whole build only: one that was never pushed whole (vcdev before its first release) would take every
+        # file it hasn't from the build it's promoted to, with --deletes
+        lacking = [f for f in ("VanaCore.exe", "VanaCore.Core.dll") if f.lower() not in {k.lower() for k in wanted}]
+        if lacking:
+            die(f"{source['tag']}/{source['name']} on R2 has no {', '.join(lacking)}: not a whole build, not promoted")
+        log(f"Fetching {len(wanted)} file(s) of {source['tag']}/{source['name']} from R2 into {folder}...")
+
+        def get_one(rel):
+            data = fetch(r2, source_prefix, rel, wanted[rel])
+            path = os.path.join(folder, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(data)
+
+        with cf.ThreadPoolExecutor(max_workers=UPLOAD_WORKERS) as pool:
+            failed = [f"{rel}: {e}" for rel, e in zip(wanted, pool.map(lambda r: _try(get_one, r), wanted)) if e]
+        if failed:
+            die("fetching failed, nothing pushed:\n  " + "\n  ".join(failed))
+
     if not os.path.isdir(folder):
         die(f"build folder not found: {folder}")
 
     remote = parse_state(r2.get(state_key))
     remote_lower = {k.lower(): k for k in remote}
 
+    # The EXTERNAL files another build has that this one hasn't (or has otherwise), and those it has that the other
+    # doesn't: copied or deleted with the push
+    ext_copy, ext_delete, ext_source = [], [], None
+    if args.externals_from:
+        source = find_build(launcher, args.externals_from)
+        if (source["tag"], source["name"]) == (tag, name):
+            die("a build can't take its external files from itself")
+        ext_source = (source["folder"].replace("\\", "/"),
+                      {k: v for k, v in parse_state(r2.get(KEY_STATE.format(tag=source["tag"], name=source["name"]))).items()
+                       if is_ignored(k, external)})
+        theirs_lower = {k.lower(): k for k in ext_source[1]}
+        ext_copy = sorted((k for k, v in ext_source[1].items()
+                           if k.lower() not in remote_lower or remote[remote_lower[k.lower()]].lower() != v.lower()),
+                          key=str.lower)
+        ext_delete = sorted((k for k in remote if is_ignored(k, external) and k.lower() not in theirs_lower), key=str.lower)
+
     # 2. Local files against the state
     log(f"Build {tag} - {name}: {folder} -> {prefix}/")
-    ignore = normalise_ignore(DEPLOY_IGNORE)
     local = scan(folder, ignore)
     if not local:
         die(f"{folder} holds no files to push")
@@ -367,7 +466,7 @@ def main():
     changed = sorted((r for r in local if r.lower() in remote_lower
                       and remote[remote_lower[r.lower()]].lower() != hashes[r].lower()), key=str.lower)
     deleted = sorted((k for k in remote if not os.path.exists(os.path.join(folder, k))
-                      and not is_ignored(k, ignore)), key=str.lower)
+                      and not is_ignored(k, ignore) and not is_ignored(k, keep)), key=str.lower)
     push_deletes = deleted if args.deletes else []
 
     log(f"{len(local)} local files, {len(remote)} in the remote state: "
@@ -376,8 +475,13 @@ def main():
     for label, files in (("new", new), ("changed", changed), ("deleted", deleted)):
         for f in files:
             log(f"  {label:8} {f}")
+    if args.externals_from:
+        log(f"External files from {args.externals_from}: {len(ext_copy)} to copy, {len(ext_delete)} to delete")
+        for label, files in (("copy", ext_copy), ("delete", ext_delete)):
+            for f in files:
+                log(f"  {label:8} {f}")
 
-    if not (new or changed or push_deletes):
+    if not (new or changed or push_deletes or ext_copy or ext_delete):
         log("Nothing to push.")
         return 0
     if args.dry_run:
@@ -418,11 +522,31 @@ def main():
         for rel in push_deletes:
             r2.delete(f"{prefix}/{rel.replace(chr(92), '/')}")
 
+    if ext_copy:
+        log(f"Copying {len(ext_copy)} external file(s) from {args.externals_from}...")
+
+        def copy_one(rel):
+            data = fetch(r2, ext_source[0], rel, ext_source[1][rel])
+            r2.put(f"{prefix}/{rel.replace(chr(92), '/')}", data=data)
+
+        with cf.ThreadPoolExecutor(max_workers=UPLOAD_WORKERS) as pool:
+            failed = [f"{rel}: {e}" for rel, e in zip(ext_copy, pool.map(lambda r: _try(copy_one, r), ext_copy)) if e]
+        if failed:
+            die("copying the external files failed, state and launcher.json left as they were:\n  " + "\n  ".join(failed))
+    if ext_delete:
+        log(f"Deleting {len(ext_delete)} external file(s) {args.externals_from} no longer has...")
+        for rel in ext_delete:
+            r2.delete(f"{prefix}/{rel.replace(chr(92), '/')}")
+
     # 4. The build's state
     for rel in upload:
         remote[remote_lower.get(rel.lower(), rel)] = hashes[rel]
-    for rel in push_deletes:
+    for rel in ext_copy:
+        remote[remote_lower.get(rel.lower(), rel)] = ext_source[1][rel]
+    for rel in push_deletes + ext_delete:
         remote.pop(rel, None)
+    upload = upload + ext_copy
+    push_deletes = push_deletes + ext_delete
     log("Uploading build state...")
     r2.put(state_key, data=make_state(remote))
     purged = purge(cfg, state_key)
@@ -455,8 +579,8 @@ def main():
               [{"filename": f, "action": "deleted"} for f in push_deletes]
     r2.put(KEY_ENTRIES.format(id=change_id), data=dumps(entries).encode("utf-8"))
 
-    log(f"Pushed {tag} - {name}: {len(upload)} uploaded ({len(new)} new, {len(changed)} changed), "
-        f"{len(push_deletes)} deleted.")
+    log(f"Pushed {tag} - {name}: {len(upload)} uploaded ({len(new)} new, {len(changed)} changed, "
+        f"{len(ext_copy)} external), {len(push_deletes)} deleted.")
     if not purged:
         log("! Cloudflare cache was NOT fully purged (see above): players may see the old launcher.json / "
             "build state until it expires. Purge it from the Manager (Cloudflare tab) or re-run.")
