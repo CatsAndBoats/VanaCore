@@ -63,7 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $drafts = @(gh api --paginate "repos/${{ github.repository }}/releases" | ConvertFrom-Json | ForEach-Object { $_ } |
+          $drafts = @(gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
             Where-Object { $_.draft -and $_.name -like 'VanaCore *' } | Sort-Object { [datetime]$_.created_at } -Descending)
           if (-not $drafts) { throw 'No draft release: run release.yaml with push (and release ticked) first, or untick release here' }
           $draft = $drafts[0]

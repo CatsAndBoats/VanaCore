@@ -7,7 +7,8 @@ run-name: VanaCore release to vcdev (${{ inputs.deploy }})
 #
 # All of it runs in one job on one machine, so nothing is handed between jobs and no workflow artifact is kept.
 #
-#   version   reads src/shared/vanacore/version.hpp: the build is <version>.<run number>
+#   version   src/shared/vanacore/version.hpp's, as it is: the build, the release and its tag (v<version>) are named
+#             by it alone. A version already released (published) isn't pushed again: set a new one first
 #   build     build-release.bat, then signing
 #   deploy    pushes the package to vcdev (.github/scripts/push_build.py): "dry run" lists what would go up, "push"
 #             uploads it. It also brings vcdev's plugins and addons that other repositories publish to the vanacore
@@ -56,6 +57,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout version.hpp
@@ -67,11 +70,21 @@ jobs:
       - name: Read the version
         id: version
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $source = Get-Content src/shared/vanacore/version.hpp -Raw
           $base = [regex]::Match($source, 'kVersion\[\] = L"([^"]+)"').Groups[1].Value
           if (-not $base) { throw 'No kVersion in src/shared/vanacore/version.hpp' }
-          $version = "$base.${{ github.run_number }}"
+          $version = $base
+          # A version already published on GitHub is what players have: a push of it again would be a different build
+          # under the same name. Set a new version in version.hpp first. (A draft of it is replaced: that build was
+          # never released.)
+          if ('${{ inputs.deploy }}' -eq 'push') {
+            $published = @(gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
+              Where-Object { -not $_.draft -and $_.tag_name -eq "v$version" })
+            if ($published) { throw "VanaCore $version is released already (v$version): set a new version in src/shared/vanacore/version.hpp" }
+          }
           "version=$version" >> $env:GITHUB_OUTPUT
           "## VanaCore $version" >> $env:GITHUB_STEP_SUMMARY
 
@@ -228,6 +241,10 @@ jobs:
           )
           $notes += $(if ($commits.Count -gt 0) { $commits } else { '- (none)' })
           $notes | Set-Content -Path build/package/notes.md -Encoding utf8
+          # this version's earlier draft, of a build vcdev no longer holds, gives way to this one
+          gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
+            Where-Object { $_.draft -and $_.name -eq "VanaCore $version" } |
+            ForEach-Object { gh api -X DELETE "repos/${{ github.repository }}/releases/$($_.id)"; "Replaced the earlier draft of VanaCore $version" }
           gh release create $tag "build/package/VanaCore-$version.zip" --draft `
             --target $env:GITHUB_SHA --title "VanaCore $version" --notes-file build/package/notes.md
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

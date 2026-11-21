@@ -36,7 +36,7 @@ NVIDIA's DLSS SDK isn't in the repository (its licence allows it only inside an 
 build-release.bat
 ```
 
-On GitHub, **VanaCore Release** (`.github/workflows/vanacore.yaml`, run from the Actions tab) does the same on a Windows runner and uploads the package; with **release** ticked it also makes a GitHub release, a pre-release unless unticked, tagged `vanacore-v<version>.<run number>` (the version is `src/shared/vanacore/version.hpp`'s), with `VanaCore-<version>.zip`, `VanaCore-<version>-symbols.zip` and the VanaCore commits since the last VanaCore release. It's never marked the repository's latest release, which stays the launcher's.
+On GitHub, **VanaCore Release (vcdev)** (`.github/workflows/release.yaml`, run from the Actions tab) does the same on a Windows runner, signs it and pushes it to the vcdev build on R2 (the test build: testers set the launcher's custom game build to `vcdev`), and makes a draft GitHub release, `VanaCore <version>` with `VanaCore-<version>.zip` and the changes since the last release. The version is `src/shared/vanacore/version.hpp`'s as it is; a version already released isn't pushed again. **VanaCore Promote** (`.github/workflows/promote.yaml`) then copies vcdev's files to the vanacore build every player gets and publishes that draft, tagged `v<version>`, as the latest release.
 
 ## Run
 Everything comes from `vanacore.ini` next to `VanaCore.exe` (see `vanacore.example.ini`). Relative paths in it are from `VanaCore.exe`'s folder.
