@@ -3065,7 +3065,8 @@ typedef struct PipeKey
     uint8_t x8, cull, fill, topo; /* topo: D3D12_PRIMITIVE_TOPOLOGY_TYPE */
 } PipeKey;
 
-#define PIPE_FAILED ((void*)1)
+static char g_pipe_failed; /* PIPE_FAILED: a pipeline that failed to build, at an address no pipeline has ((void*)1 before) */
+#define PIPE_FAILED ((void*)&g_pipe_failed)
 #define PIPE_MAGIC 0x31443344u /* "D3D1" */
 static int mirror_wanted(void); static void mirror_blend(D3D12_RENDER_TARGET_BLEND_DESC* c); /* gfx_d3d12_mirror.h: the water's */
 
@@ -16145,11 +16146,9 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
                 if (world != depth)
                     tex_state(world, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
                 /* input 10: the characters' depth from the camera (sun_map_view), with sun_soft_chars */
-                if (!sunm)
-                    u.smapn2[2] = 0.0f;
                 /* input 11: the characters' mask from the stencil (cmask_pass), for ao_chars' share; input 7: the middle map (sun_mid) */
                 if (!sunm)
-                    u.smapm2[1] = 0.0f;
+                    u.smapn2[2] = 0.0f, u.smapm2[1] = 0.0f;
                 int32_t ao_in[12] = { world->srv, sunm ? g_fx.smap.srv : -1, sunm && u.smapn2[1] > 0.0f ? g_fx.smapn.srv : -1,
                     -1, -1, -1, -1, u.smapm2[1] > 0.0f ? g_fx.smapm.srv : -1, depth->srv, -1,
                     u.smapn2[2] > 0.0f ? g_fx.smapv.srv : -1, use_cm ? g_fx.cmask.srv : -1 };

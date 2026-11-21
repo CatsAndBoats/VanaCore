@@ -32,7 +32,7 @@ namespace {
 constexpr char kGauge[] = "menu    gauge";
 constexpr int kTexels = 64; // the picture's texels a side: the parts' corners are compared in them
 struct Texels {
-    int u0, v0, u1, v1;
+    int u0, v0, u1, v1; // cppcheck-suppress unusedStructMember ; made by texels_of and compared whole (operator==)
     bool operator==(const Texels&) const = default;
 };
 constexpr Texels kBar = {0, 0, 64, 8}, kLeftEnd = {0, 8, 4, 16}, kRightEnd = {4, 8, 8, 16}, kFill = {0, 1, 64, 7};
@@ -240,19 +240,6 @@ const Found* found(const char* quad)
 }
 
 // --- drawing ---
-
-void* device_of(const char* quad)
-{
-    const char* texture = *reinterpret_cast<char* const*>(quad + kTexture);
-    void* d3d = texture != nullptr ? *reinterpret_cast<void* const*>(texture + kD3d) : nullptr;
-    if (d3d == nullptr && texture != nullptr)
-        d3d = *reinterpret_cast<void* const*>(texture + kD3dElse);
-    void* device = nullptr;
-    if (d3d == nullptr || FAILED(d3d8::call(d3d, kGetDevice, &device)) || device == nullptr)
-        return nullptr;
-    d3d8::call<ULONG>(device, d3d8::slot::Release);
-    return device;
-}
 
 // A size x size A8R8G8B8 picture on `device`, white, each texel's alpha as `alpha` says (its centre's x and y)
 template <typename Alpha>
@@ -483,6 +470,20 @@ Mark mark_of(const wchar_t* ini, const wchar_t* key, Mark fallback)
 }
 
 } // namespace
+
+// (buttons.cpp's white_for asks too)
+void* device_of(const char* quad)
+{
+    const char* texture = *reinterpret_cast<char* const*>(quad + kTexture);
+    void* d3d = texture != nullptr ? *reinterpret_cast<void* const*>(texture + kD3d) : nullptr;
+    if (d3d == nullptr && texture != nullptr)
+        d3d = *reinterpret_cast<void* const*>(texture + kD3dElse);
+    void* device = nullptr;
+    if (d3d == nullptr || FAILED(d3d8::call(d3d, kGetDevice, &device)) || device == nullptr)
+        return nullptr;
+    d3d8::call<ULONG>(device, d3d8::slot::Release);
+    return device;
+}
 
 void reload(const wchar_t* ini)
 {

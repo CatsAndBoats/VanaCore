@@ -42,4 +42,8 @@ void on_frame();
 // flat style has it (or left out), else false for the game to draw it.
 bool on_quad(const char* quad, int x, int y, float sx, float sy, std::uint32_t colour);
 
+// The Direct3D device the game's texture of `quad` is on (the texture's Direct3D texture at +40h, else +44h), not AddRef'd;
+// nullptr while the quad has no texture yet. For a picture of VanaCore's own made on the same device (buttons.cpp's too).
+void* device_of(const char* quad);
+
 } // namespace vanacore::sliders

@@ -66,7 +66,6 @@ constexpr int kTakeAway = 2;
 constexpr int kBlendOver = 1 << 2 | 1 << 6; // itemslot.cpp's (A 0, B 1, D 1): blended over what's under it
 constexpr std::uint32_t kGold = 0x805020, kGoldOff = 0x402810, kNeutral = 0x808080;
 constexpr int kOpaque = 0x80; // a corner's alpha, doubled as it's drawn
-constexpr int kGetDevice = 3;
 
 // The window draw's buttons (FUN_101173D0's loop over its pieces), seen live 2026-11-05. The cursor's button is drawn a
 // unit up and left of its place (dec eax; dec edi), and while it flashes (window +5Eh above 0: picked) by FUN_10119B80
@@ -308,14 +307,9 @@ void __fastcall plain_hook(void* shape, void* edx, PlainArgs args)
 // The white picture on the device of the game's texture of `quad`, made the first time (and again on another device)
 void* white_for(const char* quad)
 {
-    const char* texture = *reinterpret_cast<char* const*>(quad + kTexture);
-    void* d3d = texture != nullptr ? *reinterpret_cast<void* const*>(texture + kD3d) : nullptr;
-    if (d3d == nullptr && texture != nullptr)
-        d3d = *reinterpret_cast<void* const*>(texture + kD3dElse);
-    void* device = nullptr;
-    if (d3d == nullptr || FAILED(d3d8::call(d3d, kGetDevice, &device)) || device == nullptr)
+    void* device = sliders::device_of(quad);
+    if (device == nullptr)
         return nullptr;
-    d3d8::call<ULONG>(device, d3d8::slot::Release);
     if (device == g_white_device && g_white != nullptr)
         return g_white;
     g_white = nullptr; // made on another device: went with it
