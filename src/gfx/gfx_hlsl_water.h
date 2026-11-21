@@ -40,6 +40,8 @@ static void water_tex(char* tex, char* smp, size_t n, int i)
     snprintf(smp, n, "smp[si[%d].%c]", i >> 2, c);
 }
 
+#include "gfx_hlsl_water_rain.h" /* emit_water_rain_functions, emit_water_rain: the rain's drops landing on the water (stage 2) */
+
 /* the functions the water's pixel function calls, at file scope before it: a hash, a value noise with its gradient over a
  * 64-cell period, and the view-space z a depth value stands for */
 static void emit_water_functions(Sb* b)
@@ -84,11 +86,13 @@ static void emit_water_functions(Sb* b)
         "  if (d >= 0.999999 || !(z * zp.z > 0.0)) return zs * 1000.0;\n"
         "  return z;\n"
         "}\n");
+    emit_water_rain_functions(b);
 }
 
 /* the settings, where the pixel stands and the surface's slope from the swell and the ripples: g (the world's x and z), fp (the
- * world distance a pixel covers), foam_n (the ripples' height, for the foam) */
-static void emit_water_surface(Sb* b, int water)
+ * world distance a pixel covers), foam_n (the ripples' height, for the foam); rain: the rain's drops land on it too
+ * (gfx_hlsl_water_rain.h), wrain their brightness (0 without) */
+static void emit_water_surface(Sb* b, int water, int rain)
 {
     static const struct
     {
@@ -184,6 +188,10 @@ static void emit_water_surface(Sb* b, int water)
         "      float fc = saturate(0.5 / (6.0 * fp) - 1.0), fc2 = saturate(0.24 / (6.0 * fp) - 1.0), fc3 = saturate(0.11 / (6.0 * fp) - 1.0);\n"
         "      g += (nc.yz * fc + 0.5 * nc2.yz * fc2 + 0.25 * nc3.yz * fc3) * (0.045 * foot);\n"
         "      foot_n = nc.x * 0.5 + nc2.x * 0.3 * fc2 + nc3.x * 0.2 * fc3 + (1.0 - fc2) * 0.15 + (1.0 - fc3) * 0.1; } }\n"
+        "  float wrain = 0.0;\n");
+    if (rain)
+        emit_water_rain(b);
+    sb_printf(b,
         /* and flatter at grazing angles (under about 15 degrees): the big swells' slopes flipped the reflection between the sky
          * and the body there, high-contrast bands across the far sea (Lower Jeuno, waves 3, size 4) */
         "%s"
@@ -492,6 +500,9 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
         "  col.rgb = saturate(col.rgb * clamp(1.0 + 2.5 * q_relo * rel, 0.6, 1.8) + spcb * (0.22 * q_relo * q1.w) * edge);\n"
         /* the camera under the surface (the third-person camera dipping into a stream; hs is the surface's height over it): a
          * translucent sheet, as the game's is, over the scene as drawn, with no sky in it */
+        /* the rain's rings and hits (wrain, emit_water_rain; 0 without): lighter toward the drops' grey, as the rain's pass
+         * lays its rings on the ground, and no more at the shore than the water itself */
+        "  col.rgb = lerp(col.rgb, min(max(u.fogcolor.rgb * 0.6 + 0.25, 0.42) * 0.85, col.rgb * 1.6 + 0.12), saturate(wrain) * 0.45 * edge);\n"
         "  if (hs > 0.0) col.rgb = lerp(sc_raw, shallow * 1.4, 0.45);\n"
         "",
         ocean ? "  q_relo = min(q_relo, 0.3);\n" : "");
@@ -516,11 +527,12 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
 }
 
 /* the pixel function's body for a draw made VanaCore's water (GfxFsKey.water): 1 in its place, 2 the water pass, 3 the
- * ground's water in the pass; fog the draw's pixel fog mode (GfxFsKey.fog); mirror: the world mirrored in the water is in
- * stage 3 (d3d8_water_mirror.h) */
-static void emit_water_fs(Sb* b, const GfxVsKey* vk, int water, int fog, int mirror)
+ * ground's water in the pass; fog the draw's pixel fog mode (GfxFsKey.fog); look's bit 0: the world mirrored in the water is
+ * in stage 3 (d3d8_water_mirror.h), bit 1: the rain lands on it, its shelter map in stage 2 (d3d8_rain.h rain_water_bind) */
+static void emit_water_fs(Sb* b, const GfxVsKey* vk, int water, int fog, int look)
 {
-    emit_water_surface(b, water);
+    const int mirror = look & 1;
+    emit_water_surface(b, water, water >= 2 && (look & 2));
     emit_water_light(b, vk);
     if (water >= 2)
         emit_water_depth(b, vk, water >= 3, fog, water == 4, mirror);

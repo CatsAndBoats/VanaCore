@@ -328,6 +328,7 @@ typedef struct VanaRain
     float puddles; /* the puddles' share of them: low ground and corners (rain.puddles, 0 none) */
     float reach;   /* how far round the camera the rain falls at all (rain.far) */
     int view;      /* the rain red over the picture in grey (Debug view 31) */
+    float water;   /* the drops' rings on VanaCore's water (rain.water, 0 none) */
 } VanaRain;
 void vanacore_gfx_set_rain(const VanaRain* settings);
 /* the weather (0x057's id) each frame, and whether a packet has given one yet */

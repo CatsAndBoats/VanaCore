@@ -761,7 +761,7 @@ static void emit_ff_fs(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
     }
     if (k->water && !depth_only(vk) && !vk->rhw)
     {
-        emit_water_fs(b, vk, k->water, k->fog, k->st[3].tex != 0);
+        emit_water_fs(b, vk, k->water, k->fog, (k->st[3].tex != 0) | (k->st[2].tex != 0) << 1);
         emit_fs_tail(b, k, vk, "col");
         return;
     }

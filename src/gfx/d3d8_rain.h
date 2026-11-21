@@ -8,7 +8,7 @@
  * the draw's keys. It is no file of its own. */
 #pragma once
 
-static RainSettings g_rain_set = { 1, 1.0f, 1.0f, 45.0f, 0, 1, 1.0f, 1.0f, 1, 1, 0, 0.5f, 1.0f, 1, 1, 0, 16.0f, 1.0f, 1.0f, 150.0f, 0 };
+static RainSettings g_rain_set = { 1, 1.0f, 1.0f, 45.0f, 0, 1, 1.0f, 1.0f, 1, 1, 0, 0.5f, 1.0f, 1, 1, 0, 16.0f, 1.0f, 1.0f, 150.0f, 0, 1.0f };
 /* the wet ground's mask for the floor reflections (rain_mask_draw): the scene's size, red the wet ground, green the puddles,
  * blue how open to the sky */
 static GfxTex* g_rain_mask;
@@ -529,6 +529,32 @@ static void rain_mask_draw(GfxDraw* d, GfxTex* color, GfxTex* depth, uint32_t w,
 static void rain_mask_lost(void)
 {
     gfx_tex_destroy(g_rain_mask), g_rain_mask = NULL;
+}
+
+/* The drops landing on VanaCore's water (rain.water), from the water's own draws in its pass (d3d8_water.h, after
+ * water_pass_draw and water_mirror_bind): the rain's pass lays its rings by the scene's depth from before the water (the
+ * copies), and the drops land on the zone's collision - over water both are the bed, so nothing of the rain showed on a lake.
+ * The water's pixel function makes the rings itself (gfx_hlsl_water_rain.h emit_water_rain; the draw's key says so by a
+ * texture in stage 2), from texture matrix 2's bytes 5-14 (0-4 are the mirror's): how strong (the rain's heaviness times
+ * rain.splash and rain.water), the clock, how many (the heaviness times rain.density), the splash reach, whether stage 2 is
+ * the shelter map (else the colour copy stands in: a stage needs a texture), the map's reference height, its corner and 1
+ * over its width. The map is the pass's from the frame before (cover_update), which moves a few rows a frame */
+static void rain_water_bind(GfxDraw* d)
+{
+    if (!g_rain_set.rain || !(g_rain_set.water > 0.0f) || !(g_rain_set.splash > 0.0f) || !d->tex[6])
+        return;
+    rain_tick();
+    if (g_rain_fall <= 0.001f)
+        return;
+    const int map = g_cover.tex && g_cover.ready && g_rain_set.shelter;
+    d->tex[2] = map ? g_cover.tex : d->tex[6];
+    d->fs.st[2].tex = 1, d->fs.st[2].ncoord = 2;
+    d->samp[2] = (GfxSampler){ 3, 3, 3, 1, 1, 0, 1, 0, 0, 0, { 0, 0 }, 0 }; /* CLAMP, POINT */
+    float* m = d->u.texm[2];
+    m[5] = saturate_f(g_rain_fall) * fminf(g_rain_set.splash, 3.0f) * g_rain_set.water;
+    m[6] = (float)g_rain_clock, m[7] = g_rain_fall * g_rain_set.density, m[8] = fminf(g_rain_set.range, g_rain_set.reach);
+    m[9] = map ? 1.0f : 0.0f, m[11] = g_cover.oy;
+    m[12] = g_cover.ox, m[13] = g_cover.oz, m[14] = 1.0f / (COVER_N * COVER_CELL);
 }
 
 static void rain_pass(GfxTex* color, GfxTex* depth, const GfxScene* s)

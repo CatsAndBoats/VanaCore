@@ -391,6 +391,7 @@ static void water_shade(GfxDraw* d, const float lo[3], const float hi[3], const 
     tn[11] = g_water_set.clarity < 0.5f ? 0.5f : g_water_set.clarity, tn[12] = g_water_set.refraction, tn[13] = g_water_set.shore;
     tn[14] = g_water_set.foam, tn[15] = pool ? g_water_set.ripples * 0.5f : g_water_set.ripples;
     d->u.texm[5][0] = (float)g_water_set.probe; /* matrix 5's byte 0: the probe (water.probe), 0 otherwise */
+    memset(d->u.texm[2], 0, 64); /* matrix 2: the mirror's and the rain's, set on the pass's draws (water_mirror_bind, rain_water_bind); none here */
     d->u.texm[5][2] = g_water_set.caustics, d->u.texm[5][3] = g_water_set.relief; /* bytes 2 and 3 */
     water_feet_set(d->u.texm[5], lo, hi);
     if (rect && g_water_tiles < WATER_RECTS)
@@ -798,6 +799,7 @@ static struct
 } g_water_late;
 static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy, uint32_t w, uint32_t h, const GfxScene* s);
 static void water_mirror_bind(GfxDraw* d); /* d3d8_water_mirror.h: the world mirrored in the water, on one of the pass's draws */
+static void rain_water_bind(GfxDraw* d);   /* d3d8_rain.h: the rain's drops landing on it, after water_mirror_bind */
 static int g_wmirror_lost; /* ... the device was lost since its mirror was made: the back end's texture went with it */
 
 /* A draw kept for the pass reads the game's textures and buffers as they were when it was kept; the game may release them
@@ -882,6 +884,7 @@ static int water_keep(GfxDraw* d, uint32_t prim, uint32_t count, int kind)
         {
             water_pass_draw(d, cc, dc, w, h, &g_scene.s);
             water_mirror_bind(d);
+            rain_water_bind(d);
             g_water_as_is = 0;
             return 0;
         }
@@ -1369,6 +1372,7 @@ static void water_ground_setup(GfxDraw* d, const GfxScene* s, int copies, GfxTex
     {
         water_pass_draw(d, colour_copy, depth_copy, w, h, s), d->fs.water = 3;
         water_mirror_bind(d); /* (the water's draws alone: the rain's pass sets its draw up by water_pass_draw too) */
+        rain_water_bind(d);
     }
 }
 
@@ -1474,6 +1478,7 @@ static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s)
         {
             water_pass_draw(d, colour_copy, depth_copy, w, h, s);
             water_mirror_bind(d);
+            rain_water_bind(d);
         }
         gfx_draw(d);
     }

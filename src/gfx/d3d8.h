@@ -118,6 +118,7 @@ typedef struct RainSettings
     float puddles; /* ... and its puddles, in the low ground and the corners, near mirrors (rain.puddles, 0 to 2) */
     float reach;   /* how far round the camera the rain falls at all, yalms (rain.far, Rain Range, 52 to 500) */
     int view;      /* 1 the rain red and the rest of the picture grey, 2 the rain's rings (32; Debug view 31, /vana debug's Rain; this session only) */
+    float water;   /* the drops' rings on VanaCore's water (rain.water, 0 none to 3; d3d8_rain.h rain_water_bind) */
 } RainSettings;
 void d3d8_set_rain(const RainSettings* settings);
 /* the zone's whole collision (vanacore_gfx_set_collision), for the rain's shelter map; NULL or zone 0: none */
