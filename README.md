@@ -234,6 +234,7 @@ grown past its allowance in `tools\lint\baseline.json`.
 - [docs/reference.md](docs/reference.md): everything VanaCore does, with every `vanacore.ini` setting.
 - [docs/addons/](docs/addons/README.md): writing addons, and the whole `vana` Lua API.
 - [docs/plugins/](docs/plugins/README.md): what Ashita plugins can ask of VanaCore.
+- [docs/tech/d3d12-frame-order.html](docs/tech/d3d12-frame-order.html): one Direct3D 12 frame in order, and when the grass, glow, shadows and effects come in.
 - [vanacore.example.ini](vanacore.example.ini): every setting with its default.
 
 ## Contributing
