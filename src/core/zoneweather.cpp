@@ -59,7 +59,6 @@ Read read_weathers(const std::wstring& path)
     if (file == INVALID_HANDLE_VALUE)
         return out;
     LARGE_INTEGER size{};
-    std::uint32_t& mask = out.sky;
     if (GetFileSizeEx(file, &size)) {
         std::vector<std::array<char, 4>> folders;
         long long pos = 0;
@@ -89,7 +88,7 @@ Read read_weathers(const std::wstring& path)
                     if (weather < 0)
                         continue;
                     if (std::memcmp(folders[i - 1].data(), "weat", 4) == 0)
-                        mask |= 1u << weather;
+                        out.sky |= 1u << weather;
                     break;
                 }
             } else if (kind == 0x20 && std::memcmp(id.data(), "rai", 3) == 0 && folders.size() >= 2 &&
