@@ -202,44 +202,59 @@ jobs:
         run: |
           $version = $env:VERSION
           $tag = "v$version"
-          # Everything that reached the branch since the last published release (a draft has no tag yet), or its last
-          # 30 commits before the first, read along the branch's own line (--first-parent): a merged pull request is
-          # one line with its number and title, a commit pushed straight to the branch is one line of its own, and the
-          # commits inside a pull request aren't listed again. Any other merge (the branch brought up to date with
-          # another) is replaced by the commits it brought in.
-          $previous = git tag --list 'v*' --sort=-creatordate | Select-Object -First 1
-          # @( ) around the whole if: a one-item array comes out of it as a bare string, and splatting a string
-          # (git log @range) passes its characters
-          $range = @(if ($previous) { "$previous..HEAD" } else { '-n', '30', 'HEAD' })
-          $commits = @()
-          $rs = [char]0x1e
-          $us = [char]0x01
-          $log = (git log @range --first-parent --pretty="format:%h$us%p$us%s$us%b$rs") -join "`n"
-          foreach ($entry in $log.Split($rs) | Where-Object { $_.Trim() }) {
-            $hash, $parents, $subject, $body = $entry.Trim().Split($us)
-            $parents = @($parents -split ' ' | Where-Object { $_ })
-            if ($parents.Count -lt 2) {
-              $commits += "- $subject ($hash)"
-            } elseif ($subject -match '^Merge pull request #(\d+) from ') {
-              # the pull request's title is the first line of the merge commit's message body
-              $title = ($body -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
-              if (-not $title) { $title = $subject }
-              $commits += "- $($title.Trim()) (#$($Matches[1]), $hash)"
-            } else {
-              $commits += @(git log "$($parents[0])..$($parents[1])" --no-merges --pretty=format:'- %s (%h)')
+          # The release's text: "Version <version>", then what changed under New, Changed, Fixed and Misc. Nothing on
+          # installing: the README has that.
+          $notes = @("## Version $version", '')
+          # CHANGELOG.md's "## <version>" section, written with the version bump
+          $changelog = if (Test-Path CHANGELOG.md) { Get-Content CHANGELOG.md -Raw -Encoding utf8 } else { '' }
+          $section = [regex]::Match($changelog, "(?ms)^## v?$([regex]::Escape($version))(?![\d.])[^\r\n]*\r?\n(.*?)(?=^## |\z)")
+          if ($section.Success -and $section.Groups[1].Value.Trim()) {
+            $notes += $section.Groups[1].Value.Trim()
+          } else {
+            # Without one, the commits since the last published release (a draft has no tag yet), or the branch's
+            # last 30 before the first, sorted into the four by their wording. Read along the branch's own line
+            # (--first-parent): a merged pull request is one line with its number and title, a commit pushed straight
+            # to the branch one of its own; any other merge is replaced by the commits it brought in. A version bump
+            # ("VanaCore 0.9.4") isn't listed: the release is named by it.
+            $previous = git tag --list 'v*' --sort=-creatordate | Select-Object -First 1
+            # @( ) around the whole if: a one-item array comes out of it as a bare string, and splatting a string
+            # (git log @range) passes its characters
+            $range = @(if ($previous) { "$previous..HEAD" } else { '-n', '30', 'HEAD' })
+            $commits = @()
+            $rs = [char]0x1e
+            $us = [char]0x01
+            $bump = '^(- )?VanaCore \d+(\.\d+)+( \(\w+\))?$'
+            $log = (git log @range --first-parent --pretty="format:%h$us%p$us%s$us%b$rs") -join "`n"
+            foreach ($entry in $log.Split($rs) | Where-Object { $_.Trim() }) {
+              $hash, $parents, $subject, $body = $entry.Trim().Split($us)
+              $parents = @($parents -split ' ' | Where-Object { $_ })
+              if ($subject -match $bump) { continue }
+              if ($parents.Count -lt 2) {
+                $commits += "- $subject ($hash)"
+              } elseif ($subject -match '^Merge pull request #(\d+) from ') {
+                # the pull request's title is the first line of the merge commit's message body
+                $title = ($body -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+                if (-not $title) { $title = $subject }
+                $commits += "- $($title.Trim()) (#$($Matches[1]), $hash)"
+              } else {
+                $commits += @(git log "$($parents[0])..$($parents[1])" --no-merges --pretty=format:'- %s (%h)' |
+                  Where-Object { $_ -notmatch $bump })
+              }
             }
+            $groups = [ordered]@{ New = @(); Changed = @(); Fixed = @(); Misc = @() }
+            foreach ($line in $commits) {
+              $kind = if ($line -match '^- (README|Docs?|CI|Lint|Release|Promote|Tools|Contributing|Third-party|Synced)\b') { 'Misc' }
+                elseif ($line -match "(?i)\b(no longer|isn't|aren't|doesn't|don't|wasn't|weren't|again|fix(es|ed)?|crash(es|ed)?)\b") { 'Fixed' }
+                elseif ($line -match '(?i)\b(new|can now|added)\b') { 'New' }
+                else { 'Changed' }
+              $groups[$kind] += $line
+            }
+            foreach ($kind in $groups.Keys) {
+              if ($groups[$kind].Count) { $notes += "### $kind"; $notes += $groups[$kind]; $notes += '' }
+            }
+            if (-not $commits.Count) { $notes += 'No changes.' }
+            "No CHANGELOG.md section for $version, so the release lists the commits, sorted by their wording." >> $env:GITHUB_STEP_SUMMARY
           }
-          $notes = @(
-            "VanaCore $version, x86.",
-            '',
-            "**Install:** download VanaCore-$version.zip and unzip it. The VanaCore folder inside has everything it needs:",
-            'copy `vanacore.example.ini` to `vanacore.ini`, set your server and game folders in it, and run `VanaCore.exe`.',
-            'See the README''s [Running it](https://github.com/${{ github.repository }}#running-it) for the details, and',
-            '[DLSS 5](https://github.com/${{ github.repository }}#dlss-5) for that, which isn''t included.',
-            '',
-            $(if ($previous) { "Changes since $($previous -replace '^v', ''):" } else { 'Recent changes:' })
-          )
-          $notes += $(if ($commits.Count -gt 0) { $commits } else { '- (none)' })
           $notes | Set-Content -Path build/package/notes.md -Encoding utf8
           # this version's earlier draft, of a build vcdev no longer holds, gives way to this one
           gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
