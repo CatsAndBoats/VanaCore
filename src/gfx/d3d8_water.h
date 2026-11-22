@@ -308,7 +308,8 @@ static void water_view(GfxDraw* d, uint32_t rgb)
  * Held for the zone (d3d8_set_water_floors lets them go), their directions in the world (g_water_sun_w) and turned into each
  * water draw's view: the lit draws come and go with what the camera sees (Caedarva Mire has its trees in every frame; where
  * none but the characters' are in view there are none), and held for 30 frames in the lit draw's view the water lost its sun
- * and glint once the camera turned from them, and the sun turned with the camera while it was held */
+ * and glint once the camera turned from them, and the sun turned with the camera while it was held. The water's sun itself is
+ * the shadows' now (water_sun): from these, its ambient, and its light until the sun is first picked */
 static GfxLight g_water_sun[2];
 static float g_water_sun_w[2][3];
 static float g_water_ambient[4];
@@ -344,6 +345,35 @@ static void water_lights(const GfxDraw* d, uint32_t up_data)
         g_water_nsun = n, memcpy(g_water_ambient, d->u.ambient, sizeof g_water_ambient);
 }
 
+/* The water's sun, on a draw the game drew unlit (water_shade): the shadows' (d3d8_sun_world), with the last lit draw's ambient
+ * (water_lights); its lights before the first pick. FFXI lights each object with directional lights of its own (d3d8_sun.c): where
+ * the walls are unlit (Lower Jeuno) the last lit draw was a prop by the camera, and its light, so the glint, came and went as the
+ * camera moved (a player's video, 17:53, 2026-11-22) */
+static void water_sun(GfxDraw* d, const float* V)
+{
+    float sun[3], col[4];
+    const int pick = d3d8_sun_world(sun, col);
+    if (!pick && !g_water_nsun)
+        return;
+    const uint32_t n = pick ? 1 : g_water_nsun;
+    for (uint32_t i = 0; i < n; ++i)
+    {
+        d->u.light[i] = g_water_sun[i], d->vs.light_type[i] = 3;
+        const float* w = pick ? sun : g_water_sun_w[i];
+        for (int j = 0; j < 3; ++j) /* the world's direction into this draw's view (V) */
+            d->u.light[i].dir[j] = w[0] * V[j] + w[1] * V[4 + j] + w[2] * V[8 + j];
+        water_unit3(d->u.light[i].dir);
+    }
+    if (pick) /* the picked light's colour; the borrowed lights' ambient all on it, as the water had it from them */
+        memcpy(d->u.light[0].diffuse, col, sizeof col), memcpy(d->u.light[0].specular, col, sizeof col);
+    for (uint32_t i = 1; pick && i < g_water_nsun; ++i)
+        for (int c = 0; c < 4; ++c)
+            d->u.light[0].ambient[c] += g_water_sun[i].ambient[c];
+    d->vs.nlights = (uint8_t)n;
+    if (g_water_nsun)
+        memcpy(d->u.ambient, g_water_ambient, sizeof g_water_ambient);
+}
+
 /* VanaCore's water on the draw (mode 1): gfx_hlsl_water.h in place of its stages, opaque and writing depth (a tile is
  * already; a layer of the game's is made so, and lit as the world is: water_lights); its world position and the time in
  * texture matrix 7, the settings after them, the picked colour and the pass's settings in matrix 6, the draw's world matrix in
@@ -352,19 +382,8 @@ static void water_lights(const GfxDraw* d, uint32_t up_data)
  * (g_water_rects). Drawn in its place, or kept for the pass (water_keep). */
 static void water_shade(GfxDraw* d, const float lo[3], const float hi[3], const float* W, const float* V, int rect)
 {
-    if (!d->vs.lighting && g_water_nsun)
-    {
-        for (uint32_t i = 0; i < g_water_nsun; ++i)
-        {
-            d->u.light[i] = g_water_sun[i], d->vs.light_type[i] = 3;
-            const float* w = g_water_sun_w[i];
-            for (int j = 0; j < 3; ++j) /* the world's direction into this draw's view (V) */
-                d->u.light[i].dir[j] = w[0] * V[j] + w[1] * V[4 + j] + w[2] * V[8 + j];
-            water_unit3(d->u.light[i].dir);
-        }
-        d->vs.nlights = (uint8_t)g_water_nsun;
-        memcpy(d->u.ambient, g_water_ambient, sizeof g_water_ambient);
-    }
+    if (!d->vs.lighting)
+        water_sun(d, V);
     if (!g_water_tiles) /* the frame's first moves the waves' time on, for all of them */
     {
         const uint64_t now = gfx_now_ns();

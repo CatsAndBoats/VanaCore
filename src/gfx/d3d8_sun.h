@@ -10,6 +10,9 @@ void d3d8_sun_vote(const float w[3], const float color[4], float weight, uint32_
 /* Once a frame (`frame`), before the world's effects: the votes counted, the sun picked, into the scene (its camera's view): its
  * direction, colour and first draw, the GfxScene.indoors, warping and vana_minute. Returns how many lights were voted for this frame. */
 uint32_t d3d8_sun_pick(GfxScene* sc, uint32_t frame);
+/* The light the last d3d8_sun_pick put into the scene (the sun, or the moon by night): its world direction toward it (unit) and its
+ * diffuse colour, held while the pick has none. 0 before the first pick (VanaCore's water: d3d8_water.h water_shade) */
+int d3d8_sun_world(float dir[3], float color[4]);
 /* How far into the Vana'diel night it is, outdoors, 0 by day to 1 ([graphics.effects] night: d3d8.c night_light), as the last
  * d3d8_sun_pick eased it */
 float d3d8_night(void);

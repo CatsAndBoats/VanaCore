@@ -388,6 +388,20 @@ static int clock_pick(const float* b, int new_place)
     return 0;
 }
 
+/* the sun (or the moon) the last pick put into the scene, in the world, toward it, and its diffuse colour (d3d8_sun_world); held
+ * while the pick has none */
+static float g_pick_dir[3], g_pick_color[4];
+static int g_pick_have;
+
+int d3d8_sun_world(float dir[3], float color[4])
+{
+    if (!g_pick_have)
+        return 0;
+    memcpy(dir, g_pick_dir, sizeof g_pick_dir);
+    memcpy(color, g_pick_color, sizeof g_pick_color);
+    return 1;
+}
+
 /* once a frame, before the world's effects: the votes counted, the sun picked, into the scene (its
  * camera's view) */
 uint32_t d3d8_sun_pick(GfxScene* sc, uint32_t frame)
@@ -454,6 +468,9 @@ uint32_t d3d8_sun_pick(GfxScene* sc, uint32_t frame)
         return slots;
     sc->sun_dir[0] = v[0] / len, sc->sun_dir[1] = v[1] / len, sc->sun_dir[2] = v[2] / len, sc->sun_dir[3] = 1.0f;
     memcpy(sc->sun_color, g_sun_votes[g_sun_pick].color, 16);
+    memcpy(g_pick_dir, g_sun_votes[g_sun_pick].dir, sizeof g_pick_dir);
+    memcpy(g_pick_color, g_sun_votes[g_sun_pick].color, sizeof g_pick_color);
+    g_pick_have = 1;
     if (!sc->sun_draw)
         sc->sun_draw = g_sun_votes[g_sun_pick].draw;
     return slots;
