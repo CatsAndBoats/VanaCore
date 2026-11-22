@@ -3155,6 +3155,17 @@ bool top_chat(short* rect)
     }
 }
 
+bool log_window(const void* ctrl)
+{
+    if (ctrl == nullptr)
+        return false;
+    __try {
+        return chat_ctrl(0) == ctrl || chat_ctrl(1) == ctrl;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 namespace {
 
 bool read(void* out, std::uintptr_t address, size_t size)

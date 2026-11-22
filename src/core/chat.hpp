@@ -91,6 +91,9 @@ bool outline(int which, double* moved_x = nullptr, double* moved_y = nullptr);
 // frame as drawn (left, top, right, bottom, the interface's units). False while neither is shown.
 bool top_chat(short* rect);
 
+// Whether window `ctrl` is one of the chat logs' (log 1 or 2, while shown)
+bool log_window(const void* ctrl);
+
 // The chat line (what's being typed): whether it's open, and its text as the game keeps it
 // (Shift-JIS, with auto-translate phrases and colour codes). False if the game's input line
 // wasn't found.

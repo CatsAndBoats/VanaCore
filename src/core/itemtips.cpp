@@ -9,6 +9,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "chat.hpp"
 #include "hudwin.hpp"
 #include "imports.hpp"
 #include "log.hpp"
@@ -288,7 +289,9 @@ void restore(const Grown* grown, char* window)
 // taller, across it, goes down to 2 under the box (the game's own 8 into its frame put the box's last line on the gil
 // window's title, 2026-11-10: "doesn't feel like it's at the bottom"), by its own SetLocate; one moved here already
 // is moved by the difference, back up for none; the game putting one back is seen and it's moved again. Not the HUD
-// Manager's windows (placed by their own rules), nor the details
+// Manager's windows (placed by their own rules), nor the details, nor the chat logs: a log whose top was near a taller
+// box's game bottom (a tall log, a large interface) went down under it while the cursor was on an item in the inventory
+// (Grape Daifuku's 14 rows; reported 2026-11-22, gone with tips.extended off), and chat.move put it back each frame
 constexpr std::ptrdiff_t kWinState = 0x10, kWinX = 0x52, kWinY = 0x54; // a window: its state, its place (as SetLocate put it)
 constexpr std::uint32_t kClosed = 0xE;
 constexpr int kUnderAbove = 12, kUnderBelow = 8; // a top this far into or under the game's bottom of the box: under it
@@ -358,7 +361,8 @@ void lower_walk(const char* manager, const Box* boxes, int n)
     int count = 0, nodes = 0;
     for (const char* node = read<char*>(manager); node != nullptr && nodes < kNodesMost; node = read<char*>(node), ++nodes) {
         char* window = read<char*>(node + kNodeWindow);
-        if (window == nullptr || read<std::uint32_t>(window + kWinState) == kClosed || details_window(window) || hudwin::own(window))
+        if (window == nullptr || read<std::uint32_t>(window + kWinState) == kClosed || details_window(window) || hudwin::own(window) ||
+            chat::log_window(window))
             continue;
         const int was = lowered_by(window);
         const int by = under(window, read<short>(window + kRect + 2) - was, boxes, n);
