@@ -62,5 +62,6 @@ static void read_water(When when)
     if ((water.enabled != 0) != said && when != When::Quiet)
         log::write(water.enabled ? L"Graphics: VanaCore's water on (water)" : L"Graphics: the game's water (water=0)");
     said = water.enabled != 0;
+    water::read_zones(g_dir); // the zones it's off in (data\water_zones.json), before the settings take the zone's mode
     vanacore_gfx_set_water(&water);
 }

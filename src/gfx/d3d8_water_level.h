@@ -107,11 +107,29 @@ static int sea_level(float* y)
  * SEA_SHIP_LEAST across or more are the sea's there, and VanaCore's sea plane goes on to the horizon from them */
 #define SEA_SHIP_LEAST 200.0f
 static int g_water_ship;
+/* The zones VanaCore's water is never drawn in (d3d8_set_water_zones_off: data\water_zones.json's "water": false), the game's own
+ * left as with water=0 (g_water_zone_off); the zone the player is in, -1 before the first */
+#define WATER_OFF_MOST 1024
+static uint16_t g_water_off[WATER_OFF_MOST];
+static unsigned g_water_off_n;
+static int g_water_zone_now = -1;
 static void water_set_zone(int zone)
 {
+    g_water_zone_now = zone;
     g_water_ship = zone == 46 || zone == 47 || zone == 220 || zone == 221 || zone == 227 || zone == 228;
-    g_water_zone_off = zone == 72; /* Alzadaal Undersea Ruins: the game's own floors (g_water_zone_off) */
+    g_water_zone_off = 0;
+    for (unsigned i = 0; i < g_water_off_n && !g_water_zone_off; ++i)
+        g_water_zone_off = g_water_off[i] == zone;
     g_water_mode = g_water_set.enabled && !g_water_zone_off ? 1 : 0;
+}
+
+void d3d8_set_water_zones_off(const uint16_t* zones, unsigned n)
+{
+    g_water_off_n = 0;
+    for (unsigned i = 0; zones && i < n && g_water_off_n < WATER_OFF_MOST; ++i)
+        g_water_off[g_water_off_n++] = zones[i];
+    if (g_water_zone_now >= 0) /* the zone the player is in, again with the new list */
+        water_set_zone(g_water_zone_now);
 }
 static void sea_note(const float lo[3], const float hi[3], int own)
 {

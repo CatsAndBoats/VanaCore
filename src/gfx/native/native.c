@@ -781,6 +781,7 @@ void vanacore_gfx_set_water(const VanaWater* in)
         in->clarity, in->refraction, in->shore, in->foam, in->ripples, in->ripple_size, in->log, in->probe, in->horizon, in->falls, in->caustics, in->relief, in->shadows, in->sea };
     d3d8_set_water(&s);
 }
+void vanacore_gfx_set_water_zones_off(const uint16_t* zones, unsigned n) { d3d8_set_water_zones_off(zones, n); }
 int vanacore_gfx_water_loading(int on) { return d3d8_water_loading(on); }
 unsigned vanacore_gfx_water_buffers(void) { return d3d8_water_buffers(); }
 void vanacore_gfx_set_window_opacity(float all, float chat) { d3d8_set_window_opacity(all, chat); }

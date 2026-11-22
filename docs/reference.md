@@ -454,6 +454,8 @@ In `[graphics.effects]` (xi-on-mac's `fx.txt` keys; each 0 turns that effect off
 
 `effects`, `aspect`, `vsync`, `antialias`, `background`, `resolution`, `[graphics.effects]`, `[ui] aspect`, `[window]` and `[ffxi] mode` and `resolution.game` (as the window's size) apply while the game runs: VanaCore looks at its copy of `vanacore.ini` twice a second (see `[client] ini.upstream` above for edits to the file itself) and applies what changed (`Graphics: settings reloaded from vanacore.ini: ...`). The rest are read when the game starts.
 
+Some zones keep the game's own water whatever `[graphics] water` says: `addons\vanacore\vana\data\water_zones.json` (VanaCore's own, not a setting) lists them, `{ "zones": { "72": { "name": "Alzadaal Undersea Ruins", "water": false } } }`: Alzadaal's glowing floors and the Sea of Al'Taieu's four zones. VanaCore's water isn't run at all there. The file is read again once it changes, at the next zone change (`Water: VanaCore's water off in N zones` in the log).
+
 A full-screen game (`[ffxi] mode=fullscreen`) is shown in a borderless window covering its monitor, at the desktop's own resolution, with the frame drawn at it (`[graphics] resolution`).
 
 ### Window

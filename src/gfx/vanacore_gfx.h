@@ -360,6 +360,9 @@ typedef struct VanaWater
     int sea;        /* water.sea: VanaCore's own sea plane in place of the game's sea tiles (1, the default) */
 } VanaWater;
 void vanacore_gfx_set_water(const VanaWater* settings);
+/* The zones (the game's zone ids) VanaCore's water is never drawn in, the game's own left there as with water off; copied, and
+ * the zone the player is in taken again with them. NULL or 0 none. */
+void vanacore_gfx_set_water_zones_off(const uint16_t* zones, unsigned n);
 /* The game's water models (from XI on Anything): 1 while the calling thread loads a map model under one of a zone DAT's
  * water directories, 0 when it's done; the vertex buffers the thread makes meanwhile are that water's. Any thread (it sets
  * the caller's own flag). Returns what it was, to put back after. */

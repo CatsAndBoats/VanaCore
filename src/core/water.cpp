@@ -5,13 +5,18 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <mutex>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "../gfx/vanacore_gfx.h"
 #include "game.hpp"
 #include "imports.hpp"
+#include "json.hpp"
 #include "log.hpp"
 #include "packets.hpp"
 #include "scan.hpp"
@@ -224,6 +229,40 @@ void set_log(bool on)
 void set_wanted(bool on)
 {
     g_wanted = on;
+}
+
+void read_zones(const std::wstring& dir)
+{
+    // read again only when the file has changed (a settings apply, a zone change); none: water in every zone
+    static bool read = false;
+    static FILETIME read_time = {};
+    const std::wstring path = dir + L"\\addons\\vanacore\\vana\\data\\water_zones.json";
+    WIN32_FILE_ATTRIBUTE_DATA at = {};
+    const bool there = GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &at) != 0;
+    const FILETIME time = there ? at.ftLastWriteTime : FILETIME{};
+    if (read && CompareFileTime(&time, &read_time) == 0)
+        return;
+    read = true, read_time = time;
+    std::vector<std::uint16_t> off;
+    std::ifstream f(path, std::ios::binary);
+    std::ostringstream text;
+    json::Value v;
+    std::string error;
+    if (!there || !f || !(text << f.rdbuf()))
+        log::write(L"Water: no %ls: VanaCore's water in every zone", path.c_str());
+    else if (!json::parse(text.str(), v, error) || !v.is_object())
+        log::write(L"Water: %ls isn't a JSON object (%hs): VanaCore's water in every zone", path.c_str(), error.c_str());
+    else if (const json::Value* zones = v.find("zones"); zones != nullptr && zones->is_object())
+        for (const auto& [key, z] : zones->object) {
+            const int id = std::atoi(key.c_str());
+            const json::Value* water = z.is_object() ? z.find("water") : nullptr;
+            if (id > 0 && id < 0x10000 && water != nullptr && water->is_bool() && !water->boolean)
+                off.push_back(static_cast<std::uint16_t>(id));
+        }
+    vanacore_gfx_set_water_zones_off(off.empty() ? nullptr : off.data(), static_cast<unsigned>(off.size()));
+    if (there)
+        log::write(L"Water: VanaCore's water off in %u zones, the game's own there (data\\water_zones.json)",
+                   static_cast<unsigned>(off.size()));
 }
 
 } // namespace vanacore::water

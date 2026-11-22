@@ -1,0 +1,9 @@
+{
+  "zones": {
+    "33": { "name": "Al'Taieu", "water": false },
+    "34": { "name": "Grand Palace of Hu'Xzoi", "water": false },
+    "35": { "name": "The Garden of Ru'Hmet", "water": false },
+    "36": { "name": "Empyreal Paradox", "water": false },
+    "72": { "name": "Alzadaal Undersea Ruins", "water": false }
+  }
+}

@@ -156,6 +156,7 @@ typedef struct WaterSettings
     int sea;        /* water.sea: the game's sea tiles dropped and VanaCore's one sea plane drawn in their place (d3d8_water_sea.h) */
 } WaterSettings;
 void d3d8_set_water(const WaterSettings* settings);
+void d3d8_set_water_zones_off(const uint16_t* zones, unsigned n);
 /* The zone's floors as the grass gets them (grass_set_floors): where the collision's water floors lie, so the ground's triangles
  * over them can be drawn as VanaCore's water where a zone bakes the water's look into the ground (d3d8_water.h water_ground).
  * zone 0, or NULL: none. */
