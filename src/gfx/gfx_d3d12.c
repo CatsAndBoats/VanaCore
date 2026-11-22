@@ -4606,9 +4606,14 @@ static int caster_only_indices(const GfxDraw* d, Caster* rec, uint32_t n)
     return 1;
 }
 
+/* A draw of the caster pass's or of the zone's own meshes (zonemesh.c), into the sun's maps alone. Not with sun_seek 0: only what
+ * the game drew for the camera casts then. The zone's meshes came on all the same, an eighth of them a frame (ZM_ROUND), and
+ * sun_pass_only (sun_seek's) is what keeps each part drawn every frame: without it each eighth was in the maps one frame in 8 and
+ * the shadows flickered, under the trees and on them (Wajaom Woodlands, a player's report, 2026-11-22). VanaCore's temporal pass
+ * evened it out; DLSS and FSR, with that pass off, showed it */
 static void caster_only(const GfxDraw* d)
 {
-    if (g_fxs.fx == 0.0f || g_fxs.sun <= 0.0f || d->prim == GFX_TRIANGLEFAN)
+    if (g_fxs.fx == 0.0f || g_fxs.sun <= 0.0f || g_fxs.sun_seek == 0.0f || d->prim == GFX_TRIANGLEFAN)
         return;
     Caster* rec = caster_new(d);
     if (!rec)
