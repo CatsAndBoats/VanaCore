@@ -115,17 +115,6 @@ template <typename T> T at(const void* base, std::ptrdiff_t offset)
     return value;
 }
 
-bool config_window(const char* layout)
-{
-    const char* name = layout + kLayoutName;
-    if (std::memcmp(name, "menu    ", 8) != 0)
-        return false;
-    for (const char* window : kWindows)
-        if (std::strncmp(name + 8, window, std::strlen(window)) == 0)
-            return !chatfont::main_menu_window(layout) && !chatfont::action_menu_window(layout);
-    return false;
-}
-
 bool read_rect(const void* window, short (&rect)[4])
 {
     __try {
@@ -376,6 +365,17 @@ void draw_text(void* device, unsigned width, unsigned height, const Text& t)
 }
 
 } // namespace
+
+bool config_window(const char* layout)
+{
+    const char* name = layout + kLayoutName;
+    if (std::memcmp(name, "menu    ", 8) != 0)
+        return false;
+    for (const char* window : kWindows)
+        if (std::strncmp(name + 8, window, std::strlen(window)) == 0)
+            return !chatfont::main_menu_window(layout) && !chatfont::action_menu_window(layout);
+    return false;
+}
 
 Window::Window(const void* window, const char* layout) : was_(g_now.window)
 {

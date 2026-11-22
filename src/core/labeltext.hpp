@@ -23,6 +23,10 @@
 // list itself and the lists it opens (Windows, Log) are the main menu's: not taken.
 namespace vanacore::labeltext {
 
+// Whether `layout` (a window's, its +4) is a Config window's: "menu    conf...", "cfilter", "fxfilter", "textcol...", not the
+// Config list itself nor its Windows and Log lists (the main menu's). Its name read as it is: the caller makes sure it can be.
+bool config_window(const char* layout);
+
 // Around the game's drawing of a window (chat.cpp's window draw), its layout (the window's +4; null none): a Config window
 // ("menu    conf...", "cfilter", "fxfilter", "textcol...") told apart, whose labels are taken. Its texts of a draw before
 // are let go, and those of another window that stand under it.

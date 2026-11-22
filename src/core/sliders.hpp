@@ -31,8 +31,10 @@ private:
 };
 
 // Around a game window's draw (itemslot.cpp's enter_window and leave_window): its sliders kept while it's drawn; at leave,
-// the knob of each that had no fill drawn (a value of 0) drawn at its start.
-void enter_window();
+// the knob of each that had no fill drawn (a value of 0) drawn at its start. Only a Config window's (labeltext.cpp's, by
+// its layout's name): the party list's HP, MP and TP bars are the same picture, end, bar and end, and were drawn flat with
+// a knob (seen 2026-11-22: a white dot on a party member's MP bar at 0).
+void enter_window(const void* window);
 void leave_window();
 
 // Once a frame on the game's thread: sliders kept outside any window dropped.

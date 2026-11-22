@@ -992,7 +992,7 @@ void install(const wchar_t* ini)
 const void* enter_window(const void* ctrl)
 {
     buttons::enter_window(ctrl); // [client] buttons.*: its style; flat, the window's labels drawn after its boxes
-    sliders::enter_window();     // [client] sliders.*: its sliders kept while it's drawn
+    sliders::enter_window(ctrl); // [client] sliders.*: a Config window's sliders kept while it's drawn
     const void* outer = g_window;
     g_window = static_cast<const char*>(ctrl);
     return outer;

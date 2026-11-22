@@ -11,6 +11,7 @@
 
 #include "d3d8.hpp"
 #include "itemslot.hpp"
+#include "labeltext.hpp"
 #include "text.hpp"
 
 namespace vanacore::sliders {
@@ -101,7 +102,28 @@ constexpr int kRowsAtMost = 64, kDepthAtMost = 8;
 Row g_rows[kRowsAtMost] = {};
 int g_row_count = 0;
 int g_marks[kDepthAtMost] = {};
+bool g_config[kDepthAtMost] = {}; // each a Config window (only theirs are sliders: the HP bars are the same picture)
 int g_depth = 0;
+
+constexpr std::ptrdiff_t kWinLayout = 4; // a window's layout
+
+// Whether the window being drawn is a Config window
+bool in_config()
+{
+    return g_depth > 0 && g_depth <= kDepthAtMost && g_config[g_depth - 1];
+}
+
+bool config_window(const void* window)
+{
+    if (window == nullptr)
+        return false;
+    __try {
+        const char* layout = *reinterpret_cast<const char* const*>(static_cast<const char*>(window) + kWinLayout);
+        return layout != nullptr && labeltext::config_window(layout);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
 
 // The pictures drawn with, made on the game's device: white, and a white dot (its edge soft over a texel); a stand-in for
 // the game's texture each (its Direct3D texture at +40h and +44h), and the quad copied to draw with (a slider's own)
@@ -516,8 +538,8 @@ bool active()
 
 Shape::Shape(const void* shape) : scanned_(false)
 {
-    if (!g_style.flat || shape == nullptr || g_found_count != 0)
-        return; // (a shape drawn inside another's: the outer one's parts kept)
+    if (!g_style.flat || shape == nullptr || g_found_count != 0 || !in_config())
+        return; // (a shape drawn inside another's: the outer one's parts kept; outside a Config window: no sliders)
     scan(static_cast<const char*>(shape));
     scanned_ = true;
 }
@@ -528,10 +550,12 @@ Shape::~Shape()
         g_found_count = g_layout_count = 0;
 }
 
-void enter_window()
+void enter_window(const void* window)
 {
-    if (g_depth < kDepthAtMost)
+    if (g_depth < kDepthAtMost) {
         g_marks[g_depth] = g_row_count;
+        g_config[g_depth] = g_style.flat && config_window(window);
+    }
     ++g_depth;
 }
 
