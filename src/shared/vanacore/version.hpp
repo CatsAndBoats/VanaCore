@@ -2,6 +2,6 @@
 
 namespace vanacore {
 
-inline constexpr wchar_t kVersion[] = L"0.9.1";
+inline constexpr wchar_t kVersion[] = L"0.9.2";
 
 } // namespace vanacore
