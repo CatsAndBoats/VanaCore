@@ -38,12 +38,13 @@ class Unfit(Exception):
     """The sources aren't in a form this check can read (it, or they, need fixing)."""
 
 
-def literal(src: str, name: str, start: int = 0) -> str:
-    """The string a `static const char NAME[] =` holds: its adjacent literals joined, comments between them skipped."""
-    m = re.compile(r"static const char " + re.escape(name) + r"\[\] =").search(src, start)
-    if not m:
-        raise Unfit(f"no `static const char {name}[]`")
-    i, out = m.end(), []
+IDENT = re.compile(r"[A-Za-z_]\w*")
+
+
+def literals(src: str, i: int, name: str, to_semicolon: bool, seen: tuple[str, ...] = ()) -> str:
+    """Adjacent string literals from src[i] joined, comments between them skipped and a macro of literals alone spliced in
+    (macro_literal): up to the `;` (to_semicolon) or the end of src (a macro's body)."""
+    out = []
     while i < len(src):
         if src.startswith("/*", i):
             i = src.index("*/", i) + 2
@@ -61,13 +62,38 @@ def literal(src: str, name: str, start: int = 0) -> str:
                     out.append(src[i])
                     i += 1
             i += 1
-        elif src[i] == ";":
+        elif src[i] == ";" and to_semicolon:
             return "".join(out)
         elif src[i].isspace():
             i += 1
+        elif (m := IDENT.match(src, i)) and m.group(0) not in seen:
+            out.append(macro_literal(m.group(0), seen + (name,)))
+            i = m.end()
         else:
             raise Unfit(f"{name}: {src[i:i + 40]!r} between its literals (a #if?)")
-    raise Unfit(f"{name}: no end")
+    if to_semicolon:
+        raise Unfit(f"{name}: no end")
+    return "".join(out)
+
+
+def macro_literal(name: str, seen: tuple[str, ...] = ()) -> str:
+    """The string a `#define NAME` of string literals alone holds (its lines joined by their backslashes), found in
+    src/gfx's sources: gfx_hlsl.h's GRASS_RINGS_HLSL is spliced into FX_HLSL_2 so."""
+    define = re.compile(r"^#define " + re.escape(name) + r"\b[ \t]*((?:.*\\\r?\n)*.*)$", re.M)
+    for path in sorted((ROOT / "src" / "gfx").glob("*.[ch]")):
+        m = define.search(path.read_text(encoding="utf-8", errors="replace"))
+        if m:
+            body = re.sub(r"\\\r?\n", " ", m.group(1))
+            return literals(body, 0, name, False, seen)
+    raise Unfit(f"{name}: between the literals, and no #define of string literals for it in src/gfx")
+
+
+def literal(src: str, name: str, start: int = 0) -> str:
+    """The string a `static const char NAME[] =` holds: its adjacent literals joined, comments between them skipped."""
+    m = re.compile(r"static const char " + re.escape(name) + r"\[\] =").search(src, start)
+    if not m:
+        raise Unfit(f"no `static const char {name}[]`")
+    return literals(src, m.end(), name, True)
 
 
 def function(src: str, signature: str) -> str:
