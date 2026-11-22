@@ -5548,7 +5548,9 @@ void gfx_scene_world_depth(GfxTex* depth)
     g_fx.wdepth_of = g_fx.wdepth_glow = NULL;
     /* ... and Render visual 26's grass; and the glow laid again over the grass (gfx_glow_over_grass), which alone leaves the rest */
     const int lines = (g_fxs.outline > 0.0f && g_fxs.outline_nograss != 0.0f) || (int)g_fxs.debug == 26;
-    const int others = g_fxs.fx != 0.0f && (g_fxs.ao > 0.0f || lines);
+    /* ... and the sun's shadows on the tufts (fx_ao): without it each tuft was shaded as ground by its blades' own angle, the
+     * grass grey all over, with occlusion off (2026-11-22) */
+    const int others = g_fxs.fx != 0.0f && (g_fxs.ao > 0.0f || g_fxs.sun > 0.0f || lines);
     if (!g_dev || !(others || g_fx.glow_kept_serial == g_serial) || !depth || depth->use != GFX_USE_DEPTH || depth->type != GFX_TEX_2D ||
         !depth->srv)
         return;

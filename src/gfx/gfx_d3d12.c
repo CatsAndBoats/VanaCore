@@ -15581,8 +15581,8 @@ int gfx_wait_step(unsigned bit, char* words, int size)
 #include "gfx_d3d12_measure.h" /* cf_off, comp_measure: the composite's features measured (vanacore_gfx_measure) */
 #endif
 
-/* gfx.h: the scene's depth before the grass, copied whole (Direct3D copies depth no other way) for this scene's occlusion and
- * contact shadows, its ink lines without the grass, and the reflections, which trace the world without it (gfx_scene_done) */
+/* gfx.h: the scene's depth before the grass, copied whole (Direct3D copies depth no other way) for its occlusion, contact shadows,
+ * sun's shadows on the tufts (fx_ao: else shaded as ground by their blades' angle, grey), lines without the grass and reflections */
 void gfx_scene_world_depth(GfxTex* depth)
 {
     BATCH_SETTLE();
@@ -15592,7 +15592,7 @@ void gfx_scene_world_depth(GfxTex* depth)
     lines = (g_fxs.outline > 0.0f && g_fxs.outline_nograss != 0.0f) || (int)g_fxs.debug == 26; /* ... and Render visual 26's grass */
 #endif
     /* ... and VanaCore's glow laid again over the grass (gfx_glow_over_grass), which alone leaves the others as they were */
-    const int others = (g_fxs.fx != 0.0f && (g_fxs.ao > 0.0f || g_fxs.refl > 0.0f || lines)) || mask_wanted();
+    const int others = (g_fxs.fx != 0.0f && (g_fxs.ao > 0.0f || g_fxs.refl > 0.0f || g_fxs.sun > 0.0f || lines)) || mask_wanted();
     if (!g_dev || !(others || g_fx.glow_kept_serial == g_serial) || !depth || depth->use != GFX_USE_DEPTH || depth->type != GFX_TEX_2D ||
         depth->srv < 0)
         return;
