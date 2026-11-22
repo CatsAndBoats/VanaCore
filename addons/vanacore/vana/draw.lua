@@ -178,7 +178,7 @@ end
 
 -- Segoe UI for the text (every Windows has it), ImGui's own (Agave with Font Awesome merged in) for the icons.
 -- Added in the first frame the window draws, used from the next: ImGui takes a new font up between frames.
-M.fonts = { ready = false, text = nil, semi = nil, bold_italic = nil, semi_italic = nil, italic = nil, icons = nil }
+M.fonts = { ready = false, text = nil, semi = nil, bold = nil, bold_italic = nil, semi_italic = nil, italic = nil, icons = nil }
 local fonts = M.fonts
 
 local function windows_fonts()
@@ -190,8 +190,8 @@ function M.load_fonts()
     fonts.icons = imgui.GetFont()
     fonts.text = imgui.AddFontFromFileTTF(dir .. 'segoeui.ttf', 18)
     fonts.semi = imgui.AddFontFromFileTTF(dir .. 'seguisb.ttf', 18)
-    -- a section's heading (bold italic), a sub-panel's (semibold italic) and an addon's name in the list of pages
-    -- (italic); a Windows without them gets the semibold (the regular for the italic)
+    -- a section's heading (bold italic), a sub-panel's (semibold italic), an addon's name in the list of pages (italic)
+    -- and Client > VanaCore's version (bold); a Windows without them gets the semibold (the regular for the italic)
     local function optional(file, fallback)
         local found = io and io.open and io.open(dir .. file, 'rb')
         if not found then
@@ -203,6 +203,7 @@ function M.load_fonts()
     fonts.bold_italic = optional('segoeuiz.ttf')
     fonts.semi_italic = optional('seguisbi.ttf')
     fonts.italic = optional('segoeuii.ttf', fonts.text)
+    fonts.bold = optional('segoeuib.ttf')
 end
 
 -- A font list's pick in its own font (data.lua font_list's `face`, a file in Windows' Fonts): nil until it's there, then

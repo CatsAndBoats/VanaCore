@@ -2996,12 +2996,18 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         local entry = live_value(row)
         -- row.delete ({ tip, run }): a delete icon at the end of the row (True Font's Custom Fonts), its text before it
         local edge = row.delete ~= nil and right - S(26) or right
-        M.text_mid(dl, lx, cy, row.label, P.dim, fonts.text, BODY)
+        if not row.big then
+            M.text_mid(dl, lx, cy, row.label, P.dim, fonts.text, BODY)
+        end
         local room = edge - lx - M.measure(row.label, fonts.text, BODY) - S(16)
         local full = entry.text .. (entry.aside ~= nil and ('  ' .. entry.aside) or '')
         local size = M.measure(full, fonts.text, BODY) > room and SMALL or BODY
-        if row.big then -- (Client > VanaCore's Version: larger, in the accent)
-            M.text_right_mid(dl, edge, cy, entry.text, P.accent, fonts.semi, BODY + 4)
+        if row.big then -- (Client > VanaCore's Version: its label in grey and its value larger, bold, in bright yellow, centred)
+            local bold, gap = fonts.bold or fonts.semi, S(8)
+            local lw, vw = M.measure(row.label, fonts.text, BODY), M.measure(entry.text, bold, BODY + 4)
+            local x = math.floor((lx + edge - lw - gap - vw) / 2)
+            M.text_mid(dl, x, cy, row.label, P.dim, fonts.text, BODY)
+            M.text_mid(dl, x + lw + gap, cy, entry.text, '#FFE04A', bold, BODY + 4)
         elseif entry.aside ~= nil then
             M.text_right_mid(dl, edge, cy, entry.aside, P.dim, fonts.text, size)
             M.text_right_mid(dl, edge - M.measure(entry.aside, fonts.text, size) - S(6), cy, entry.text, P.text, fonts.text, size)
@@ -3490,7 +3496,8 @@ end
 local function draw_section(page, sec, x, y, w, over_title, rows)
     local ry = y
     local ctx = { off = false, panel_off = false } -- (panel_off: the heading's switch or effect, for each sub-panel's: draw_row)
-    if sec.head ~= nil then
+    -- (a bare heading isn't drawn but in a search's results: Client > VanaCore's, the banner under it says it)
+    if sec.head ~= nil and not (sec.head.bare and st.search[1] == '') then
         local off = draw_heading(page, sec, x, y, w, over_title)
         ctx.off, ctx.panel_off = off, off
         ry = y + S(HEAD_H) + S(2)

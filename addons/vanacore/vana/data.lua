@@ -2971,7 +2971,8 @@ local TABS = {
         name = 'About',
         rows = function ()
             return {
-                header('VanaCore'),
+                -- (its heading not drawn: the banner says it; a search still shows it. vana.lua's draw_section)
+                (function (row) row.bare = true return row end)(header('VanaCore')),
                 banner('A modern launcher and client for FINAL FANTASY XI.'),
                 subheader('Info'),
                 -- the version first, its value larger (big: vana.lua's info row); Window scale after it
