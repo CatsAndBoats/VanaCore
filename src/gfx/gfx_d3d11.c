@@ -247,6 +247,8 @@ typedef struct FxSettings
     float outline_nograss;
     /* the lines' width on characters: Direct3D 12's only (the characters' depth), the world's width here */
     float outline_width_chars;
+    /* ... and with outline_nograss, the grass's own lines (gfx_grass_lines) */
+    float outline_grass, outline_width_grass, outline_depth_grass, outline_fade_grass;
     /* depth of field around the player; dof_sky 1 leaves the sky (its clouds, the sun and moon) sharp */
     float dof, dof_focus, dof_player, dof_range, dof_far, dof_near, dof_sky;
     /* anti-aliasing: 1 FXAA on the finished scene (runs with the effects off too) */
@@ -2493,7 +2495,8 @@ typedef struct FxU
         plight[4], plight2[4], /* the player's light (gfx_player_light) */
         gmc[4], gmx[4], gmz[4], gm[4 * GFX_GROUND_MARKS][4], /* the rings of light on the ground (ground_marks) */
         rain[4], /* (Direct3D 12's rain wet ground, gfx_d3d12.c: 0 here) */
-        lmatm[16], smapm[4], smapm2[4]; // cppcheck-suppress unusedStructMember ; Direct3D 12's middle shadow map (sun_mid): 0 here, none
+        lmatm[16], smapm[4], smapm2[4], // cppcheck-suppress unusedStructMember ; Direct3D 12's middle shadow map (sun_mid): 0 here, none
+        toon4[4]; /* the lines on VanaCore's grass (gfx_grass_lines) */
 } FxU;
 
 /* the sun's shadow map: 32-bit depth, read through its view */
@@ -2712,6 +2715,10 @@ static const struct
     { "outline_fade", offsetof(FxSettings, outline_fade), 60.0f },
     { "outline_nograss", offsetof(FxSettings, outline_nograss), 1.0f },
     { "outline_width_chars", offsetof(FxSettings, outline_width_chars), 0.0f },
+    { "outline_grass", offsetof(FxSettings, outline_grass), 0.0f },
+    { "outline_width_grass", offsetof(FxSettings, outline_width_grass), 0.0f },
+    { "outline_depth_grass", offsetof(FxSettings, outline_depth_grass), 0.0f },
+    { "outline_fade_grass", offsetof(FxSettings, outline_fade_grass), 0.0f },
     { "bands", offsetof(FxSettings, bands), 0.0f },
     { "band_soft", offsetof(FxSettings, band_soft), 0.15f },
     { "smooth", offsetof(FxSettings, smooth), 0.0f },
@@ -5857,6 +5864,9 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         u.toon3[1] = sr < 2.0f ? 2.0f : sr > 6.0f ? 6.0f : sr;
         /* ... and VanaCore's grass left out of the lines, given this scene's depth before it (gfx_scene_world_depth) */
         u.toon3[2] = g_fxs.outline_nograss != 0.0f && g_fx.wdepth && g_fx.wdepth_of == depth && g_fx.wdepth_serial == g_serial ? 1.0f : 0.0f;
+        if (u.toon3[2] > 0.0f) /* ... with its own lines (outline_grass) */
+            gfx_grass_lines(g_fxs.outline_grass, g_fxs.outline_width_grass, g_fxs.outline_depth_grass, g_fxs.outline_fade_grass, vh,
+                u.toon, u.toon2, u.toon4);
         /* depth of field: its widest blur dof pixels on a 1080-line screen, as the lines are */
         float dr = g_fxs.dof * vh / 1080.0f;
         u.dof[0] = dr > 48.0f ? 48.0f : dr;

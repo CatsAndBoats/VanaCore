@@ -463,6 +463,9 @@ typedef struct FxSettings
     /* ... and 1 (the default) leaves VanaCore's grass out of the lines: none on it, and the world's found as if it weren't there
      * (fx_comp, from the depth before the grass) */
     float outline_nograss;
+    /* ... and with it, the grass's own lines: how dark (a share of outline's, 0 none), their width, how big a jump in depth makes
+     * one and the distance they're gone by (0: the world's, outline_width, outline_depth, outline_fade) (fx_comp, toon4) */
+    float outline_grass, outline_width_grass, outline_depth_grass, outline_fade_grass;
     /* depth of field around the player; dof_sky 1 leaves the sky (its clouds, the sun and moon) sharp */
     float dof, dof_focus, dof_player, dof_range, dof_far, dof_near, dof_sky;
     /* anti-aliasing: 1 FXAA on the finished scene (runs with the effects off too) */
@@ -5008,6 +5011,7 @@ static const char FX_HLSL_1[] =
     "  float4x4 lmatm; // the middle cascade (sun_mid, input 7): view space to its map\n"
     "  float4 smapm;  // its texel in world units, depth bias, penumbra, slope\n"
     "  float4 smapm2; // its depth units, 1 when it is there\n"
+    "  float4 toon4;  // the lines on VanaCore's grass (toon3.z): share of toon.x (0 none), width, threshold, fade\n"
     "};\n"
     "cbuffer CU : register(b0) { FxU u; };\n"
     "cbuffer FB : register(b1) { uint4 fti[2]; uint4 fsi[2]; };\n"
@@ -5838,8 +5842,9 @@ static const char FX_HLSL_1[] =
     "  return d > 0.0 ? 1.0 / d : 0.0;\n"
     "}\n"
     /* how much of an ink line the pixel at px (P, dist from the camera) is, 0..1; depth is input k (a literal: Direct3D 11's
-     * inputs fold to one texture); chr, the pixel is a character's (char_line) */
-    "float outline_at(uint k, float2 px, float3 P, float dist, float lw, bool chr) {\n"
+     * inputs fold to one texture); chr, the pixel is a character's (char_line); th the silhouette's threshold, fade the distance
+     * the lines are gone by (toon.z and toon2.x: the world's; toon4.z and toon4.w: the grass's) */
+    "float outline_at(uint k, float2 px, float3 P, float dist, float lw, bool chr, float th, float fade) {\n"
     "  float2 ax = float2(lw, 0.0), ay = float2(0.0, lw);\n"
     "  float izc = 1.0 / dist;\n"
     /* a silhouette: nearer than its neighbors across it on average, by more than a plane would be
@@ -5847,7 +5852,7 @@ static const char FX_HLSL_1[] =
      * the near side, so the line is on the object and not the wall behind it */
     "  float sil = max(-(inv_dist(k, px - ax) + inv_dist(k, px + ax) - 2.0 * izc),\n"
     "                  -(inv_dist(k, px - ay) + inv_dist(k, px + ay) - 2.0 * izc)) / izc;\n"
-    "  float e = smoothstep(u.toon.z, 2.0 * u.toon.z, sil);\n"
+    "  float e = smoothstep(th, 2.0 * th, sil);\n"
     /* a crease: the surface turns by more than the threshold between this pixel and a neighbor on
      * the same surface (one across a silhouette doesn't count) */
     "  if (u.toon.w > 0.0 && e < 1.0) {\n"
@@ -5869,7 +5874,7 @@ static const char FX_HLSL_1[] =
     "    e = max(e, smoothstep(u.toon.w, 1.5 * u.toon.w, cr));\n"
     "  }\n"
     /* gone by the fade distance, so far scenery doesn't turn to scribble */
-    "  return e * (1.0 - smoothstep(0.5 * u.toon2.x, u.toon2.x, dist));\n"
+    "  return e * (1.0 - smoothstep(0.5 * fade, fade, dist));\n"
     "}\n"
     /* brightness in toon2.y steps between black and white (hue and saturation kept), each step's edge
      * softened over toon2.z of a step; black stays black and white white */
@@ -7296,16 +7301,19 @@ static const char FX_HLSL_2[] =
     "  if (z != 0.0 && u.toon2.y > 0.0) c.rgb = band(c.rgb);\n"
     "  if (u.toon.x > 0.0) {\n"
     "    float e = 0.0;\n"
-    /* VanaCore's grass left out (toon3.z, outline_nograss; input 8 the depth before it): a pixel it covers takes no line, the
-     * others theirs from the world alone */
+    /* VanaCore's grass apart (toon3.z, outline_nograss; input 8 the depth before it): a pixel it covers takes the grass's own
+     * lines (toon4: outline_grass, 0 none) from the whole depth, the others theirs from the world alone */
     "    bool ng = u.toon3.z > 0.0;\n"
-    "    if (z != 0.0 && !(ng && texel(8, px).r != texel(2, px).r)) {\n"
+    "    bool gp = ng && texel(8, px).r != texel(2, px).r;\n"
+    "    if (z != 0.0 && gp && u.toon4.x > 0.0) {\n"
+    "      e = u.toon4.x * outline_at(2, i.pos.xy, view_pos(i.pos.xy, z), z * u.hand.x, u.toon4.y, false, u.toon4.z, u.toon4.w);\n"
+    "    } else if (z != 0.0 && !gp) {\n"
     "      float3 P = view_pos(i.pos.xy, z);\n"
     "      float lw = u.toon.y;\n"
     "      bool chr = u.toon3.w > 0.0 && char_line(i.pos.xy, P, z * u.hand.x);\n"
     "      if (chr) lw = u.toon3.w;\n"
-    "      e = ng ? outline_at(8, i.pos.xy, P, z * u.hand.x, lw, chr)\n"
-    "             : outline_at(2, i.pos.xy, P, z * u.hand.x, lw, chr);\n"
+    "      e = ng ? outline_at(8, i.pos.xy, P, z * u.hand.x, lw, chr, u.toon.z, u.toon2.x)\n"
+    "             : outline_at(2, i.pos.xy, P, z * u.hand.x, lw, chr, u.toon.z, u.toon2.x);\n"
     "    }\n"
     "    if (dbg == 6) return float4(1.0 - e, 1.0 - e, 1.0 - e, c.a);\n"
     "    c.rgb *= 1.0 - u.toon.x * e;\n"
@@ -7893,7 +7901,8 @@ typedef struct FxU
         post4[4], plight[4], plight2[4], // cppcheck-suppress unusedStructMember ; filled by gfx_player_light, read by the shader
         gmc[4], gmx[4], gmz[4], gm[4 * GFX_GROUND_MARKS][4], /* the rings of light on the ground (ground_marks) */
         rain[4], /* the rain's wet ground for the floor reflections (fx_ssr): how wet, rain.reflect, rain.puddles, its mask's slot + 1 */
-        lmatm[16], smapm[4], smapm2[4]; /* the middle map (sun_mid, gfx_sun_mid.h) */
+        lmatm[16], smapm[4], smapm2[4], /* the middle map (sun_mid, gfx_sun_mid.h) */
+        toon4[4]; /* the lines on VanaCore's grass (outline_grass): share of the lines' strength, width, threshold, fade */
 } FxU;
 
 /* the sun's shadow map: depth, read through its SRV */
@@ -8213,6 +8222,10 @@ static const struct
     { "outline_crease", offsetof(FxSettings, outline_crease), 0.25f },
     { "outline_fade", offsetof(FxSettings, outline_fade), 60.0f },
     { "outline_nograss", offsetof(FxSettings, outline_nograss), 1.0f },
+    { "outline_grass", offsetof(FxSettings, outline_grass), 0.0f },
+    { "outline_width_grass", offsetof(FxSettings, outline_width_grass), 0.0f },
+    { "outline_depth_grass", offsetof(FxSettings, outline_depth_grass), 0.0f },
+    { "outline_fade_grass", offsetof(FxSettings, outline_fade_grass), 0.0f },
     { "bands", offsetof(FxSettings, bands), 0.0f },
     { "band_soft", offsetof(FxSettings, band_soft), 0.15f },
     { "smooth", offsetof(FxSettings, smooth), 0.0f },
@@ -15581,63 +15594,7 @@ int gfx_wait_step(unsigned bit, char* words, int size)
 #include "gfx_d3d12_measure.h" /* cf_off, comp_measure: the composite's features measured (vanacore_gfx_measure) */
 #endif
 
-/* gfx.h: the scene's depth before the grass, copied whole (Direct3D copies depth no other way) for its occlusion, contact shadows,
- * sun's shadows on the tufts (fx_ao: else shaded as ground by their blades' angle, grey), lines without the grass and reflections */
-void gfx_scene_world_depth(GfxTex* depth)
-{
-    BATCH_SETTLE();
-    g_fx.wdepth_of = g_fx.wdepth_glow = NULL;
-    int lines = 0;
-#ifdef VANACORE
-    lines = (g_fxs.outline > 0.0f && g_fxs.outline_nograss != 0.0f) || (int)g_fxs.debug == 26; /* ... and Render visual 26's grass */
-#endif
-    /* ... and VanaCore's glow laid again over the grass (gfx_glow_over_grass), which alone leaves the others as they were */
-    const int others = (g_fxs.fx != 0.0f && (g_fxs.ao > 0.0f || g_fxs.refl > 0.0f || g_fxs.sun > 0.0f || lines)) || mask_wanted();
-    if (!g_dev || !(others || g_fx.glow_kept_serial == g_serial) || !depth || depth->use != GFX_USE_DEPTH || depth->type != GFX_TEX_2D ||
-        depth->srv < 0)
-        return;
-    if (!g_fx.wdepth || g_fx.wdepth->w != depth->w || g_fx.wdepth->h != depth->h || g_fx.wdepth->dxfmt != depth->dxfmt)
-    {
-        gfx_tex_destroy(g_fx.wdepth);
-        g_fx.wdepth = gfx_tex_create(GFX_TEX_2D, depth->fmt, depth->w, depth->h, 1, GFX_USE_DEPTH);
-    }
-    if (!g_fx.wdepth || g_fx.wdepth->srv < 0)
-        return;
-    gfx_copy(depth, 0, 0, 0, 0, depth->w, depth->h, g_fx.wdepth, 0, 0, 0, 0);
-    g_fx.wdepth_of = others ? depth : NULL, g_fx.wdepth_glow = depth, g_fx.wdepth_serial = g_serial;
-}
-
-/* gfx.h: the scene's colour and depth copied for VanaCore's water pass (d3d8_water.h water_pass). The depth is the one the target
- * was last drawn with (depth_seen: the scratch one of its size when the game's is larger), so the copy is what its world was
- * drawn against; the colour copy is a plain sampled texture of the target's format (gfx_copy wants the formats the same) */
-static GfxTex *g_snap_color, *g_snap_depth;
-static uint32_t g_snap_serial; /* the frame (g_serial) the copies were last taken in: fx_ao's water mask (GfxScene.water_noshadow) */
-int gfx_scene_snapshot(GfxTex* color, GfxTex** colour_copy, GfxTex** depth_copy, uint32_t* w, uint32_t* h)
-{
-    *colour_copy = *depth_copy = NULL, *w = *h = 0;
-    if (!g_dev || !color || color->type != GFX_TEX_2D || color->use != GFX_USE_RT)
-        return 0;
-    GfxTex* depth = color->depth_seen;
-    if (!depth || depth->use != GFX_USE_DEPTH || depth->type != GFX_TEX_2D || depth->w != color->w || depth->h != color->h || depth->srv < 0)
-        return 0;
-    if (!g_snap_color || g_snap_color->w != color->w || g_snap_color->h != color->h || g_snap_color->dxfmt != color->dxfmt)
-    {
-        gfx_tex_destroy(g_snap_color);
-        g_snap_color = gfx_tex_create(GFX_TEX_2D, color->fmt, color->w, color->h, 1, GFX_USE_SAMPLE);
-    }
-    if (!g_snap_depth || g_snap_depth->w != depth->w || g_snap_depth->h != depth->h || g_snap_depth->dxfmt != depth->dxfmt)
-    {
-        gfx_tex_destroy(g_snap_depth);
-        g_snap_depth = gfx_tex_create(GFX_TEX_2D, depth->fmt, depth->w, depth->h, 1, GFX_USE_DEPTH);
-    }
-    if (!g_snap_color || !g_snap_depth || g_snap_color->srv < 0 || g_snap_depth->srv < 0)
-        return 0;
-    gfx_copy(color, 0, 0, 0, 0, color->w, color->h, g_snap_color, 0, 0, 0, 0);
-    gfx_copy(depth, 0, 0, 0, 0, depth->w, depth->h, g_snap_depth, 0, 0, 0, 0);
-    *colour_copy = g_snap_color, *depth_copy = g_snap_depth, *w = color->w, *h = color->h;
-    g_snap_serial = (uint32_t)g_serial;
-    return 1;
-}
+#include "gfx_d3d12_copies.h" /* gfx_scene_world_depth, gfx_scene_snapshot: the scene copied for the grass, lines and water */
 
 #include "gfx_d3d12_floors.h" /* the glow over the grass, the floors and the rain's mask for the reflections (gfx_scene_floors) */
 
@@ -16080,6 +16037,9 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         u.toon3[1] = sr < 2.0f ? 2.0f : sr > 6.0f ? 6.0f : sr;
         /* ... and VanaCore's grass left out of the lines, given this scene's depth before it (gfx_scene_world_depth) */
         u.toon3[2] = g_fxs.outline_nograss != 0.0f && g_fx.wdepth && g_fx.wdepth_of == depth && g_fx.wdepth_serial == g_serial ? 1.0f : 0.0f;
+        if (u.toon3[2] > 0.0f) /* ... with its own lines (outline_grass) */
+            gfx_grass_lines(g_fxs.outline_grass, g_fxs.outline_width_grass, g_fxs.outline_depth_grass, g_fxs.outline_fade_grass, vh,
+                u.toon, u.toon2, u.toon4);
         /* ... and the characters' lines' width, the same way (char_lines: their depth is there) */
         {
             float cw = g_fxs.outline_width_chars * vh / 1080.0f;

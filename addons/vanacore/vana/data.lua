@@ -706,6 +706,19 @@ local function needs_dx12(row)
     return row
 end
 
+-- One of the ink lines' grass rows (the Effects tab): locked while Mass Grass is off; a slider (`zero` given: shown as `zero` at
+-- 0, `fmt` else) also while the grass is outlined with the scenery (outline_nograss 0), where its own lines aren't drawn
+local function grass_lines(row, zero, fmt)
+    local function grass_off() return tonumber(vana.config.get('graphics', 'grass') or '') ~= 1 end
+    if zero == nil then
+        row.lock_if = grass_off
+    else
+        row.lock_if = function () return grass_off() or tonumber(vana.config.get(FX, 'outline_nograss') or '') == 0 end
+        row.format = function (value) return value < 0.0001 and zero or string.format(fmt, value) end
+    end
+    return row
+end
+
 -- A short note after a setting's name, dim and smaller (vana.lua's row.hint): Max FPS's "before frame gen"
 local function hinted(row, hint)
     row.hint = hint
@@ -2099,7 +2112,11 @@ TIPS.rows = {
     ['graphics.effects.outline_depth'] = 'How big a depth step must be to get a line. Lower draws more lines.',
     ['graphics.effects.outline_crease'] = 'How sharp a fold must be to get a line. Lower draws more lines.',
     ['graphics.effects.outline_fade'] = 'How far away lines fade out.',
-    ['graphics.effects.outline_nograss'] = 'No ink lines on the grass.',
+    ['graphics.effects.outline_nograss'] = 'Mass Grass gets its own lines (the grass settings below), and the scenery\'s lines ignore it. Off: the grass is outlined like the scenery. Needs Mass Grass on.',
+    ['graphics.effects.outline_grass'] = 'How dark the lines on Mass Grass are, as a share of Darkness. Off draws none. Needs Mass Grass on and Separate from scenery.',
+    ['graphics.effects.outline_width_grass'] = 'How thick the lines on Mass Grass are. Same is Line width.',
+    ['graphics.effects.outline_depth_grass'] = 'How big a depth step on Mass Grass must be to get a line. Lower draws more lines. Same is Edge sensitivity.',
+    ['graphics.effects.outline_fade_grass'] = 'How far away the lines on Mass Grass fade out. Same is Lines fade by.',
     ['graphics.effects.bands'] = 'Splits the light into this many flat steps, for a cartoon look.',
     ['graphics.effects.band_soft'] = 'How soft the edges between steps are.',
     ['graphics.effects.dof'] = 'How strong the blur is on things out of focus.',
@@ -4562,8 +4579,15 @@ local TABS = {
                 slider('Edge sensitivity', FX, 'outline_depth', 0.1, 0.01, 0.5, 0.01),
                 slider('Fold sensitivity', FX, 'outline_crease', 0.25, 0, 1, 0.05),
                 slider('Lines fade by', FX, 'outline_fade', 60, 5, 200, 5, '%d'),
-                -- none on VanaCore's grass, the world's found as if it weren't there (fx_comp)
-                toggle('Ignore grass', FX, 'outline_nograss', true),
+                -- VanaCore's grass (Mass Grass): apart from the scenery, the scenery's lines found as if it weren't there, and its
+                -- own lines (fx_comp, toon4: gfx_grass_lines); all locked while Mass Grass is off, the grass's own lines while
+                -- it's outlined with the scenery
+                subheader('Grass'),
+                grass_lines(toggle('Separate from scenery', FX, 'outline_nograss', true)),
+                grass_lines(slider('Grass darkness', FX, 'outline_grass', 0, 0, 1, 0.05), 'Off', '%.2f'),
+                grass_lines(slider('Grass line width', FX, 'outline_width_grass', 0, 0, 4, 0.25), 'Same', '%.2f'),
+                grass_lines(slider('Grass edge sensitivity', FX, 'outline_depth_grass', 0, 0, 0.5, 0.01), 'Same', '%.2f'),
+                grass_lines(slider('Grass lines fade by', FX, 'outline_fade_grass', 0, 0, 200, 5, '%d'), 'Same', '%d'),
                 effect('Brightness bands', 'bands', 0, 4),
                 slider('Bands', FX, 'bands', 0, 0, 8, 1, '%d'),
                 slider('Band softness', FX, 'band_soft', 0.15, 0, 1, 0.05),

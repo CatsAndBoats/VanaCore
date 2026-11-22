@@ -121,6 +121,7 @@
     <ClInclude Include="gfx_d3d12_batch.h" />
     <ClInclude Include="gfx_d3d12_cmask.h" />
     <ClInclude Include="gfx_d3d12_floors.h" />
+    <ClInclude Include="gfx_d3d12_copies.h" />
     <ClInclude Include="gfx_d3d12_measure.h" />
     <ClInclude Include="gfx_d3d12_sky.h" />
     <ClInclude Include="gfx_d3d12_occl.h" />
