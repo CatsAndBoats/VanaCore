@@ -332,8 +332,9 @@ typedef struct VanaRain
 void vanacore_gfx_set_rain(const VanaRain* settings);
 /* the weather (0x057's id) each frame, and whether a packet has given one yet */
 void vanacore_gfx_set_weather(unsigned weather, int known);
-/* the weathers the zone's model DAT has (zoneweather: bit n for 0x057's weather n; 0 not known), each frame: the rain in
- * thunder weather (rain.thunder) falls only where the zone has rain or squall of its own */
+/* the weathers the zone's model DAT has (zoneweather: bit n for 0x057's weather n, rain and squall only where their folder
+ * carries rain; bit 31 set once read, 0 not known), each frame: VanaCore's rain, in the server's rain as in thunder weather
+ * (rain.thunder), falls only where the zone has rain or squall of its own */
 void vanacore_gfx_set_zone_weathers(uint32_t mask);
 
 typedef struct VanaWater

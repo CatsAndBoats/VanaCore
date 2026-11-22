@@ -62,14 +62,21 @@ static void read_rain(When when)
 // The weathers the zone's model DAT has (zoneweather), read once a zone and handed over each frame (vanacore_gfx_set_zone_weathers),
 // from track_focus: VanaCore's rain falls only where the zone has rain or squall of its own, in the server's rain as in thunder
 // weather (rain.thunder). Oldton and Newton Movalpolis have thunder and no rain, and it rained in their mines (a player,
-// 2026-11-20); Phomiuna Aqueducts is given rain by the server and has none (2026-11-21).
+// 2026-11-20); Phomiuna Aqueducts is given rain by the server and has none (2026-11-21). A rain or squall folder counts only
+// when it carries the rain itself (zoneweather::rains): Alzadaal Undersea Ruins' squall is a sky and light alone, and it
+// rained in its halls (a player, 2026-11-22), as in the server's rain in some 15 other indoor zones (Uggalepih, Crawlers'
+// Nest, the Boyahda Tree, Ordelle's Caves...). Bit 31 marks the DAT read, so a zone left with no weather bits is still known.
 static void track_rain_weathers(unsigned zone)
 {
     static unsigned looked = ~0u;
     static std::uint32_t mask = 0;
     if (zone != looked) {
         looked = zone;
-        zoneweather::weathers(static_cast<int>(zone), mask);
+        std::uint32_t sky = 0, rain = 0;
+        zoneweather::weathers(static_cast<int>(zone), sky);
+        zoneweather::rains(static_cast<int>(zone), rain);
+        constexpr std::uint32_t kWet = 1u << 6 | 1u << 7; // rain, squall
+        mask = sky ? (sky & ~kWet) | (rain & kWet) | 0x80000000u : 0;
     }
     vanacore_gfx_set_zone_weathers(mask);
 }

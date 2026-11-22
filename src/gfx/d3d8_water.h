@@ -19,6 +19,9 @@
  * by theirs (water_layer), as above; 1 the game's water models (water_model: the vertex buffers made while the game loaded a
  * model under a water directory of the zone's DAT); 2 either. See water_draw for what each mode does with a water model's draw. */
 static int g_water_mode = 0;
+/* the zone is one VanaCore's water is never drawn in, the game's own left as with water=0 (water_set_zone): Alzadaal Undersea
+ * Ruins' (72) glowing floors were drawn as water, which they don't want (2026-11-22) */
+static int g_water_zone_off;
 static float g_water_tile_back = 0.3f;
 /* this frame's VanaCore water, in the world: x and z from and to, then the height (water_shade; the first WATER_RECTS of
  * g_water_tiles) */
@@ -124,7 +127,7 @@ static int sea_own(const float lo[3], const float hi[3]);            /* below: a
 void d3d8_set_water(const WaterSettings* s)
 {
     g_water_set = *s;
-    g_water_mode = s->enabled ? 1 : 0;
+    g_water_mode = s->enabled && !g_water_zone_off ? 1 : 0;
     g_water_turn[0] = cosf(s->direction * 0.01745329252f), g_water_turn[1] = sinf(s->direction * 0.01745329252f);
 }
 

@@ -14,7 +14,8 @@ static RainSettings g_rain_set = { 1, 1.0f, 1.0f, 45.0f, 0, 1, 1.0f, 1.0f, 1, 1,
 static GfxTex* g_rain_mask;
 static uint32_t g_rain_mask_w, g_rain_mask_h;
 static int g_rain_zone;             /* the zone the player is in (rain_set_zone from d3d8_set_grass_zone) */
-static uint32_t g_rain_zone_weathers; /* d3d8_set_zone_weathers: the weathers its model DAT has, bit n 0x057's n; 0 not known */
+static uint32_t g_rain_zone_weathers; /* d3d8_set_zone_weathers: the weathers its model DAT has (rain and squall only with
+                                       * rain in them), bit n 0x057's n, bit 31 known; 0 not known */
 static float g_rain_fall;           /* how much rain falls now, 0 to the weather's heaviness, eased over 6 s */
 static unsigned g_rain_weather;     /* d3d8_set_weather: 0x057's id */
 static int g_rain_weather_known;    /* ... once a packet has given one */
@@ -42,9 +43,11 @@ static void rain_set_zone(int zone) { g_rain_zone = zone; }
 
 void d3d8_set_zone_weathers(uint32_t mask) { g_rain_zone_weathers = mask; }
 
-/* A zone whose model DAT has no rain or squall weather (6, 7) never rains, whatever the server's weather: the game has no rain
- * of its own there. Phomiuna Aqueducts (indoors) is given rain by the server, its DAT has none, and VanaCore's rain fell in it
- * (a player, 2026-11-21); it is the only such zone in the server's weather table. 0: the DAT not read, so rain as given. */
+/* A zone whose model DAT has no rain or squall weather (6, 7) that carries the rain itself never rains, whatever the server's
+ * weather: the game has no rain of its own there. Phomiuna Aqueducts (indoors) is given rain by the server, its DAT has none,
+ * and VanaCore's rain fell in it (a player, 2026-11-21); Alzadaal Undersea Ruins' squall, as most indoor zones' rain, is a sky
+ * and light with no rain in it (2026-11-22: core/graphics_rain.h track_rain_weathers clears those bits). 0: the DAT not read,
+ * so rain as given. */
 static int rain_zone_dry(void)
 {
     return g_rain_zone_weathers != 0 && (g_rain_zone_weathers & (1u << 6 | 1u << 7)) == 0;

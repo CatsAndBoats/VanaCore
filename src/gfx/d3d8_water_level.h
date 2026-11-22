@@ -110,6 +110,8 @@ static int g_water_ship;
 static void water_set_zone(int zone)
 {
     g_water_ship = zone == 46 || zone == 47 || zone == 220 || zone == 221 || zone == 227 || zone == 228;
+    g_water_zone_off = zone == 72; /* Alzadaal Undersea Ruins: the game's own floors (g_water_zone_off) */
+    g_water_mode = g_water_set.enabled && !g_water_zone_off ? 1 : 0;
 }
 static void sea_note(const float lo[3], const float hi[3], int own)
 {

@@ -126,8 +126,8 @@ void d3d8_set_cover(const GrassFloors* collision);
 void d3d8_set_cover_mesh(int zone, const float* pos, uint32_t npos);
 /* the weather the server last gave (0x057's id: 6 rain, 7 squall...), each frame; known 0 before any packet has */
 void d3d8_set_weather(unsigned weather, int known);
-/* the weathers the zone's model DAT has (bit n for 0x057's weather n; 0 not known), each frame: rain.thunder rains only where
- * the zone has rain or squall */
+/* the weathers the zone's model DAT has (bit n for 0x057's weather n, rain and squall only with rain in them; bit 31 known, 0
+ * not known), each frame: VanaCore's rain falls only where the zone has rain or squall */
 void d3d8_set_zone_weathers(uint32_t mask);
 
 typedef struct WaterSettings
