@@ -5273,14 +5273,14 @@ static const char FX_HLSL_1[] =
     /* The zone's own curved surfaces (cv; Direct3D 11's zn_draw, sun_curved): the maps hold the polygons, and a polygon turned
      * from the light is shaded whole by its neighbours in front of it - round the Crag of Dem's dome the shadow's edge was a
      * staircase of quads 8 units across, and under a high sun its lower half a wall of dark squares. The surface its normals
-     * describe lies outside those polygons (they are cut across its bulge), and from a point on it turned to the light nothing
-     * of the same bulge stands in the way: so the maps are asked from there (g_lift: the point moved out along its normal onto
-     * that surface, Phong tessellation's, and half as far again), on polygons turned from the light or within 11 degrees of
-     * edge-on to it (none past 20). What another rock casts on it is still found, at any distance, a hollow has no bulge (lift
-     * 0: as the maps have it), and the lift is a unit or less, so what stands over the surface still shades it. Tried and
-     * dropped, 2026-11-11: leaving the casters out by their distance (8 to 24 units: a shoulder of the dome in its other
-     * shoulder's shadow came out lit, or the staircase stayed); lifting by the filter's reach or a share of the polygon's size
-     * as well (the wall under the dome's overhang and the spire's neck left their shadow: lit shards under a high sun) */
+     * describe lies outside those polygons (cut across its bulge): the maps are asked from there (g_lift: the point moved out
+     * along its normal onto that surface, Phong tessellation's, and half as far again) on polygons turned from the light or
+     * within 11 degrees of edge-on to it (none past 20), and casters within 8 units of it along the light, its own bulge, are
+     * left out there (sun_look's skip, by g_snug): with the lift alone, a unit or less, La Theine's hills had faces near
+     * edge-on to a sun 58 degrees up shaded whole, dark squares down every slope (2026-11-22). A farther caster (the ledge
+     * over it, another rock) still shades it. Tried and dropped, 2026-11-11: leaving the casters out by their distance on
+     * every polygon (8 to 24 units: a shoulder of the dome in its other shoulder's shadow came out lit, or the staircase
+     * stayed); lifting by the filter's reach or the polygon's size (the dome's overhang, the spire's neck: lit shards) */
     "  float3 Pm = P, Nm = Ng;\n"
     "  float nlm = nlg;\n"
     "  if (cv > 0.0) {\n"
@@ -5290,7 +5290,7 @@ static const char FX_HLSL_1[] =
     "    nlm = dot(Nm, u.sunsh.xyz);\n"
     "    g_snug = wl;\n"
     "  }\n"
-    "  float en, ef, s = sun_cascades(Pm, Nm, dist, k, nlm, 0.0, 0.0, en, ef);\n"
+    "  float en, ef, s = sun_cascades(Pm, Nm, dist, k, nlm, 8.0 * g_snug, 0.0, en, ef);\n"
     "  g_snug = 0.0;\n"
     "  g_raw = lerp(1.0, s, max(en, ef)), g_en = en, g_emv = g_em;\n"
     /* sun_gate: 64 the maps' shadow alone; 8 no shading by the angle (face); 2 no second look on faces turned away (below) */
