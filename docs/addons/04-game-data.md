@@ -18,6 +18,19 @@ local name, id = vana.game.character()   -- 'Vekien', 12345678; nil before login
 `nil` before a character is in the world, at the character select, and while the game has no player. This is what
 `vana.settings` keys a character's folder on, and what the `login` event announces.
 
+## Which server
+
+```lua
+local s = vana.game.server()
+s.name   -- 'CatsEyeXI': the server's own name, as its lobby gives it (the world the character list shows)
+s.host   -- 'server.catseyexi.com': the address VanaCore was given for it, in lower case
+```
+
+`name` is `nil` until the lobby has sent its world list, which it does before the character list shows, so it is there
+by the time a character is in the world; it is what the server's own settings call it, at most 15 letters. `host` is
+`nil` for PlayOnline as installed, and so is `name`. An addon made for one server checks `name`; the same server can be
+reached at more than one address.
+
 ## The player, cheaply
 
 ```lua
