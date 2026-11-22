@@ -134,7 +134,7 @@ end
 
 -- a tab's page: its id (/vana <id>), icon and group; `presets` shows the Presets sub-tab
 local PAGE_META = {
-    Client = { id = 'client', icon = 'chip', group = 'Settings' }, -- (About is its first sub-tab: data.lua)
+    Client = { id = 'client', icon = 'chip', group = 'Settings' }, -- (VanaCore, with About's banner and Info, is its first sub-tab: data.lua)
     Graphics = { id = 'graphics', icon = 'display', group = 'Settings', presets = true, preset_pick = true },
     HUD = { id = 'hud', icon = 'hud', group = 'Settings', color = P.hud, preset_pick = true },
     ['Game Options'] = { id = 'options', icon = 'sliders', group = 'Settings', preset_pick = true },
@@ -307,10 +307,11 @@ local function page_rows(page)
         end
     end
     if page.id == 'client' then
-        -- the window's scale ([vana] scale), first under About's Info
+        -- the window's scale ([vana] scale), under VanaCore's Info: after its Version (the big row), else first
         for i, row in ipairs(rows) do
             if row.kind == 'subheader' and row.text == 'Info' then
-                table.insert(rows, i + 1, { kind = 'scale', label = 'Window scale', tip = M.TIPS.rows['vana.scale'] })
+                local at = rows[i + 1] ~= nil and rows[i + 1].big and i + 2 or i + 1
+                table.insert(rows, at, { kind = 'scale', label = 'Window scale', tip = M.TIPS.rows['vana.scale'] })
                 break
             end
         end
@@ -1448,27 +1449,14 @@ local LEFT = 12    -- the page's margin on the left: the names and the body
 local RIGHT = 9    -- the page's margin on the right
 local PAD_ROW = 40 -- a gamepad's line: its name, its id under it
 local LAYOUT_TITLE_W = 96 -- the Layout page's window names, before their X, Y and Scale
--- the beta testers: a card each, three to a line, in a colour of its own (the same every time: chosen by the name)
-local CARD_H, CARD_GAP = 24, 6
-local NAME_COLS = 4 -- the beta testers' cards to a line
 -- Client > Characters (draw_transfer): the Main's and the Alt's cards, the arrows down between them and the copies' buttons
 local TRANSFER_CARD, TRANSFER_ARROW, TRANSFER_BUTTON = 46, 24, 28
 local TRANSFER_H = 4 + TRANSFER_CARD * 2 + TRANSFER_ARROW * 2 + TRANSFER_BUTTON + 6
--- Graphics > Toggles: a chip a layer, two to a line (CARD_GAP between them)
+-- Graphics > Toggles: a chip a layer, three to a line (LAYER_GAP between them)
 local LAYER_H, LAYER_COLS, LAYER_GAP = 22, 3, 4
 -- Client > Boot.txt (textfile.draw): the box's height and the line under it with Save; one table, its functions with it
 -- (this chunk is near LuaJIT's 200 locals)
 local textfile = { BOX = 380, BAR = 40, BOM = '\239\187\191' }
-local TESTER_HUES = { '#7AA2F7', '#B48CFA', '#5FD3B3', '#F07178', '#7DCFFF', '#9ECE6A', '#FF9E64', '#C3A6FF', '#F7768E', '#73DACA' }
-
-local function tester_hue(name)
-    local h = 0
-    for i = 1, #name do
-        h = (h * 31 + name:byte(i)) % 2147483647
-    end
-    return TESTER_HUES[h % #TESTER_HUES + 1]
-end
-
 -- the GUID in a gamepad status row's value: that row is drawn as a pad
 local function pad_guid(text)
     return text:match('^(%b{})')
@@ -1557,14 +1545,11 @@ local function row_height(row, sec, room)
     elseif row.kind == 'tabs' then
         return searching and 0 or S(M.TABS_H) + S(10)
     end
-    if row.kind == 'names' then
-        local lines = math.ceil(#row.names / NAME_COLS)
-        return lines * S(CARD_H) + math.max(0, lines - 1) * S(CARD_GAP) + S(10)
-    elseif row.kind == 'layers' then
+    if row.kind == 'layers' then
         local lines = math.ceil(#row.items / LAYER_COLS)
         return S(ROW_H) + lines * S(LAYER_H) + math.max(0, lines - 1) * S(LAYER_GAP) + S(8)
     elseif row.kind == 'banner' then
-        return S(58) + S(12)
+        return S(M.BANNER_H) + S(12)
     elseif row.kind == 'transfer' then
         return S(TRANSFER_H)
     elseif row.kind == 'textfile' then
@@ -2476,67 +2461,23 @@ local function draw_transfer(row, id, lx, right, y, h)
     end
 end
 
--- the About banner, as the old window's: the logo, the title and the line under it on a gradient, a button at the right
+-- The banner at the top of Client > VanaCore, as the README's: banner.png (the logo and VANACORE) centred and the line
+-- under it, on a dark card
+M.BANNER_H = 126 -- (unscaled: 16 + the picture 64 + 8 + the line 22 + 16)
 local function draw_banner(row, lx, right, y)
     local dl = imgui.GetWindowDrawList()
-    local bx, bw, h, r = lx, right - lx, S(58), S(10)
-    M.fill(dl, bx - 1, y + S(2), bw + 2, h + S(2), '#000000', r + 1, 0, 0.25)
-    M.fill(dl, bx, y, bw, h, P.banner_edge, r)
-    M.hgradient(dl, bx + 1, y + 1, bw - 2, h - 2, P.banner_l, P.banner_r, r - 1)
-    M.fill(dl, bx + 1, y + 1, bw - 2, math.floor(h / 2), '#FFFFFF', r - 1, M.CORNERS.top, 0.05)
-    M.hline(dl, bx + r, bx + bw - r, y + 1, P.accent, 0.4)
-    local size = h - S(12)
-    local ix, iy = bx + S(8), y + math.floor((h - size) / 2)
-    if M.logo.texture ~= nil then
-        dl:AddImage(M.logo.texture, { ix, iy }, { ix + size, iy + size })
-    else
-        M.fill(dl, ix, iy, size, size, P.accent_lo, S(8))
-        M.icon_centred(dl, ix + size / 2, iy + size / 2, 'cat', P.white, 20)
+    local bx, bw, r = lx, right - lx, S(10)
+    M.fill(dl, bx, y, bw, S(M.BANNER_H), P.well, r)
+    M.outline(dl, bx, y, bw, S(M.BANNER_H), P.well_edge, r)
+    local cx, iy, ih = bx + bw / 2, y + S(16), S(64)
+    if M.logo.banner ~= nil then
+        local iw = ih * 4 -- banner.png is 1024 x 256
+        dl:AddImage(M.logo.banner, { cx - iw / 2, iy }, { cx + iw / 2, iy + ih })
+    else -- (banner.png couldn't be loaded)
+        M.text_centred(dl, bx, iy, bw, ih, 'VANACORE', P.accent, fonts.semi, BODY + 18)
     end
-    local tx = ix + size + S(12)
-    M.text(dl, tx, y + S(8), row.title, P.white, fonts.semi, BODY + 6)
-    M.text(dl, tx, y + S(34), row.subtitle, P.dim, fonts.text, SMALL + 0.5)
-    if row.action ~= nil then
-        local w = M.button_width(row.action.label, 'bug')
-        if M.button('##banner.action', bx + bw - w - S(12), y + h / 2, row.action.label, 'bug', 'banner') then
-            pcall(row.action.fn)
-        end
-    end
-end
-
--- The beta testers: a pill each in its own colour, four to a line; the mouse lights the pill. A GM
--- ("[GM] Pie") is gold, with "GM" after the name; "[Grass] Araedi" is green, with Mass Grass's seedling after it.
-local function draw_names(row, id, lx, right, y, h)
-    local dl = imgui.GetWindowDrawList()
-    local gap, ch = S(CARD_GAP), S(CARD_H)
-    local cw = math.floor((right - lx - gap * (NAME_COLS - 1)) / NAME_COLS)
-    for k, name in ipairs(row.names) do
-        local col, line = (k - 1) % NAME_COLS, math.floor((k - 1) / NAME_COLS)
-        local cx, cy = lx + col * (cw + gap), y + S(4) + line * (ch + gap)
-        local tag, tagged = name:match('^%[(%a+)%]%s*(.+)$')
-        local gm, grass = tag == 'GM', tag == 'Grass'
-        local shown = tagged or name
-        local hue = gm and P.amber or grass and P.green or tester_hue(name)
-        local t = M.ease(id .. '.card' .. k, M.over(cx, cy, cw, ch) and 1 or 0, 14)
-        local r = ch / 2
-        M.fill(dl, cx, cy, cw, ch, '#000000', r, 0, 0.3)
-        M.fill(dl, cx, cy, cw, ch, hue, r, 0, 0.03 + 0.07 * t)
-        M.outline(dl, cx, cy, cw, ch, hue, r, 0, 1, 0.55 + 0.4 * t)
-        local ay = cy + ch / 2
-        local nx = cx + S(12)
-        local tag_w = gm and M.measure('GM', fonts.semi, SMALL - 2.5) + S(10) or grass and S(22) or 0
-        local text = M.fit(shown, cx + cw - S(8) - nx - tag_w, fonts.text, BODY - 1)
-        M.text_mid(dl, nx, ay, text, M.mix(P.text, P.white, t), fonts.text, BODY - 1)
-        if gm or grass then
-            local tx = nx + M.measure(text, fonts.text, BODY - 1) + S(6)
-            M.fill(dl, tx, ay - S(7), tag_w - S(4), S(14), hue, S(3), 0, 0.22)
-            if gm then
-                M.text_centred(dl, tx, ay - S(7), tag_w - S(4), S(14), 'GM', hue, fonts.semi, SMALL - 2.5)
-            else
-                M.icon_centred(dl, tx + (tag_w - S(4)) / 2, ay, 'seedling', hue, 9)
-            end
-        end
-    end
+    local ty = iy + ih + S(8)
+    M.text_centred(dl, bx, ty, bw, S(22), row.tagline or '', P.white, fonts.semi, BODY)
 end
 
 -- Graphics > Toggles (data.lua: layers): a line with how many are on and All off and Put back, then a chip a layer, two to a
@@ -2859,9 +2800,6 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     if row.kind == 'banner' then
         draw_banner(row, lx, right, y + S(4))
         return h
-    elseif row.kind == 'names' then
-        draw_names(row, id, lx, right, y, h)
-        return h
     elseif row.kind == 'layers' then
         draw_layers(row, id, lx, right, y)
         return h
@@ -3062,7 +3000,9 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         local room = edge - lx - M.measure(row.label, fonts.text, BODY) - S(16)
         local full = entry.text .. (entry.aside ~= nil and ('  ' .. entry.aside) or '')
         local size = M.measure(full, fonts.text, BODY) > room and SMALL or BODY
-        if entry.aside ~= nil then
+        if row.big then -- (Client > VanaCore's Version: larger, in the accent)
+            M.text_right_mid(dl, edge, cy, entry.text, P.accent, fonts.semi, BODY + 4)
+        elseif entry.aside ~= nil then
             M.text_right_mid(dl, edge, cy, entry.aside, P.dim, fonts.text, size)
             M.text_right_mid(dl, edge - M.measure(entry.aside, fonts.text, size) - S(6), cy, entry.text, P.text, fonts.text, size)
         else
@@ -4147,7 +4087,7 @@ local function draw_sidebar(x, y, w, h)
     local dl = imgui.GetWindowDrawList()
     local pad = S(PAD)
 
-    -- the search box at the top (the name and version are Client > About's): what's typed finds settings on every
+    -- the search box at the top (the name and version are Client > VanaCore's): what's typed finds settings on every
     -- page. A well with a shadow drawn here; ImGui's field sits in it, see-through, left of the red × that clears it
     -- (the × is its own item, outside the field, so it takes the click)
     local sy = y + S(12)
@@ -6017,8 +5957,8 @@ vana.events.on('command', function (e)
         local page = not asked and page_named(hud_presets and 'hud' or what) or nil
         if page ~= nil then
             st.search[1] = ''
-            if what == 'about' then
-                st.sub[page.id] = 'About' -- the Client page at its About
+            if what == 'about' or what == 'vanacore' then
+                st.sub[page.id] = 'VanaCore' -- the Client page at its VanaCore (with About's banner and Info)
             elseif what == 'layers' or what == 'toggles' then
                 st.sub[page.id] = 'Toggles' -- the Graphics page at its Toggles
             elseif what == 'gamepad' or what == 'gamepads' then

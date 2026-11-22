@@ -73,8 +73,8 @@ M.P = {
     hud       = '#F3E38A', -- the HUD Manager page, light yellow
     experimental = '#C9AEF7', -- the Experimental page, light purple
     server    = '#E5C07B', -- the server's own overlay in Pivot
-    -- the About banner, as the old window's
-    banner_edge = '#4A5183', banner_l = '#35407A', banner_r = '#1B1D31', banner_button = '#2E3250', banner_button_hi = '#3A3F63',
+    -- a 'banner' button (M.button)
+    banner_button = '#2E3250', banner_button_hi = '#3A3F63',
 }
 local P = M.P
 
@@ -243,11 +243,12 @@ M.BODY, M.SMALL = 16, 13.5 -- the text sizes
 local BODY, SMALL = M.BODY, M.SMALL
 
 -------------------------------------------------------------------------------
--- The old window's logo (addons\vanacore\vana\logo.png) as a texture for ImGui, made through VanaCore's own D3DX
--- (what Ashita addons call) on the game's device. nil when it can't be: the banner shows an icon instead.
+-- The logo (addons\vanacore\vana\logo.png) and Client > VanaCore's banner (banner.png: the README's, 1024 x 256) as
+-- textures for ImGui, made through VanaCore's own D3DX (what Ashita addons call) on the game's device. nil when they
+-- can't be: the tile shows a V and the banner the name instead.
 -------------------------------------------------------------------------------
 
-M.logo = { tried = false, texture = nil, holder = nil }
+M.logo = { tried = false, texture = nil, holder = nil, banner = nil, banner_holder = nil }
 
 function M.load_logo()
     local logo = M.logo
@@ -261,27 +262,31 @@ function M.load_logo()
     if device == nil then
         return
     end
-    local path = vana.paths.addons .. '\\vanacore\\vana\\logo.png'
-    local holder = ffi.new('void*[1]')
-    local made, hr = pcall(function () return ffi.C.D3DXCreateTextureFromFileA(ffi.cast('void*', device), path, holder) end)
-    if made and hr == 0 and holder[0] ~= nil then
-        logo.holder, logo.texture = holder, holder[0]
+    local function load(name)
+        local path = vana.paths.addons .. '\\vanacore\\vana\\' .. name
+        local holder = ffi.new('void*[1]')
+        local made, hr = pcall(function () return ffi.C.D3DXCreateTextureFromFileA(ffi.cast('void*', device), path, holder) end)
+        if made and hr == 0 and holder[0] ~= nil then
+            return holder, holder[0]
+        end
     end
+    logo.holder, logo.texture = load('logo.png')
+    logo.banner_holder, logo.banner = load('banner.png')
 end
 
 function M.release_logo()
     local logo = M.logo
-    if logo.texture ~= nil then
-        local ok, ffi = pcall(require, 'ffi')
-        if ok then
+    local ok, ffi = pcall(require, 'ffi')
+    for _, texture in ipairs({ logo.texture or false, logo.banner or false }) do
+        if texture and ok then
             -- IUnknown::Release, the vtable's third slot
             pcall(function ()
-                local vtable = ffi.cast('void**', logo.texture)[0]
-                ffi.cast('long(__stdcall**)(void*)', vtable)[2](logo.texture)
+                local vtable = ffi.cast('void**', texture)[0]
+                ffi.cast('long(__stdcall**)(void*)', vtable)[2](texture)
             end)
         end
-        logo.texture, logo.holder = nil, nil
     end
+    logo.texture, logo.holder, logo.banner, logo.banner_holder = nil, nil, nil, nil
 end
 
 -------------------------------------------------------------------------------

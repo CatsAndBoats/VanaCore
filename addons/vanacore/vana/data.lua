@@ -405,10 +405,8 @@ local function resets(row) row.resets = true; return row end
 -- info: a card, its label above its value; two to a line, a wide one on its own
 -- value() may return a second string: an aside drawn dimmer after the value ("2560 x 1600" and "[3D: 3072 x 3072]")
 local function info(label, value, wide) return { kind = 'info', label = label, value = value, wide = wide } end
--- The logo (logo.png, beside this file) with a title and a line under it
-local function banner(title, subtitle) return { kind = 'banner', title = title, subtitle = subtitle } end
--- names: a list of names four to a line, scrolling in its own box past BASE.names_view
-local function names(list) return { kind = 'names', names = list } end
+-- The banner, as the README's: banner.png (the logo and the name, beside this file) and a line under it
+local function banner(tagline) return { kind = 'banner', tagline = tagline } end
 
 local FX = 'graphics.effects'
 
@@ -1555,15 +1553,6 @@ local function logged(row, costs, d3d12)
     end
     return row
 end
-
--- About's Beta Testers panel: a new name goes at the end. A tag before the name puts a badge after it (vana.lua:
--- draw_names): '[GM]' the gold GM, '[Grass]' Mass Grass's green seedling
-local BETA_TESTERS = { 'Yunas', 'Tai', 'Crobat', 'Torkson', 'Carver', '[Grass] Araedi', 'Stieg', 'Muziko', 'Mizer',
-                       'SmartASCII', 'Nokk', 'Fluff', '[GM] Pie', 'Mythicangel', 'Loudnoises', 'Elehex',
-                       'Ramtough', 'Arkine', 'Azlora', 'Cadia', 'Crocodile', 'Daeloth', 'Guatalupe', 'Kraunik',
-                       'Lunexi', 'Nobody', 'Thethethethe', 'Vitali', 'Charta', 'Citrus', 'Odei', 'Onix',
-                       'The Doctor', 'Hando_San', 'Tizer', 'Snuk', 'Arestia', 'Rusbando',
-                       'Benthere', 'Skeletonhater', 'MadMikeBLVD', 'Patronos', 'Caite' }
 
 -- What each setting does, in a line or two, shown when the mouse rests on its name: 'section.key' -> text. A row that
 -- sets its own `tip` keeps it. Panel titles (TIPS.panels) are keyed by their text. (One table: M.rebuild() is at LuaJIT's upvalue limit.)
@@ -2976,18 +2965,17 @@ end
 
 local TABS = {
     {
-        -- Client's first sub-tab, not a page of its own (put there after TABS: /vana about opens it)
+        -- Client's first sub-tab, VanaCore, not a page of its own (put there after TABS: /vana about or /vana vanacore
+        -- opens it): the heading, the banner and Info, then Client's VanaCore settings (About and VanaCore were two
+        -- sub-tabs till 2026-11-22)
         name = 'About',
         rows = function ()
             return {
-                header('About'),
-                (function ()
-                    local row = banner('VanaCore - v' .. tostring(vana.version), 'Dev: Vekien & josh.xero')
-                    row.action = { label = 'Report bugs', icon = 'bug_report',
-                                   fn = function () vana.system.open_url('https://discord.com/channels/696847769444548700/1556637741276463104') end }
-                    return row
-                end)(),
+                header('VanaCore'),
+                banner('A modern launcher and client for FINAL FANTASY XI.'),
                 subheader('Info'),
+                -- the version first, its value larger (big: vana.lua's info row); Window scale after it
+                (function (row) row.big = true return row end)(info('Version', function () return 'v' .. tostring(vana.version) end)),
                 info('Renderer', function ()
                     local g = vana.graphics.info()
                     if g.active then
@@ -3048,9 +3036,6 @@ local TABS = {
                     end
                     return path
                 end, true),
-                subheader('Beta Testers'),
-                note('Special thanks to all BETA Testers!', 'favorite', 'danger'),
-                names(BETA_TESTERS),
             }
         end,
     },
@@ -3675,7 +3660,7 @@ local TABS = {
                 choice('Keyboard hook thread (Linux / Proton)', 'input', 'keyboard.hookthread', 'auto', { { 'auto', 'Auto' }, { '1', 'Own thread' }, { '0', "Game's thread" } }, true),
                 choice('DEP at start (Mac / CrossOver)', 'client', 'dep', 'auto', { { 'auto', 'Auto' }, { '1', 'On' }, { '0', 'Off' } }, true),
                 -- the FPS counter ([client] fps.*, overlay.cpp); its font is the VanaCore label's too ([client] font.*). A
-                -- sub-panel with its rows in a box (a group, to the VanaCore heading), as Shadows' Advanced Settings is; the
+                -- sub-panel with its rows in a box (a group, to the next heading), as Shadows' Advanced Settings is; the
                 -- Game page's last (asked for, 2026-11-10)
                 (function ()
                     local sub = inner_sub('FPS Counter Options', nil, 'group')
@@ -3690,8 +3675,23 @@ local TABS = {
                           toggle('Italic', 'client', 'font.italic', false),
                           toggle('Bold', 'client', 'font.bold', true)),
                 toggle('Text outline', 'client', 'font.outline', true),
-                header('VanaCore'),
-                -- (first, and the console window's switches on Developer: asked for, 2026-11-10)
+            }) do
+                rows[#rows + 1] = row
+            end
+            if vana.clients ~= nil then
+                for _, extra in ipairs(characters_rows()) do
+                    rows[#rows + 1] = extra
+                end
+            end
+            if vana.gamepad ~= nil and vana.gamepad.apply_profile ~= nil then
+                for _, extra in ipairs(gamepad_rows()) do
+                    rows[#rows + 1] = extra
+                end
+            end
+            -- VanaCore's own settings, before Game: with no heading of their own, under the VanaCore heading, the banner
+            -- and Info that About brings (the merge after TABS). (Addon windows first, and the console window's switches
+            -- on Developer: asked for, 2026-11-10)
+            for i, row in ipairs({
                 subheader('Addon windows'),
                 imgui_font_row(),
                 subheader('Screenshots'),
@@ -3710,19 +3710,9 @@ local TABS = {
                 needs_dx({ kind = 'action', label = 'Recompile shaders', text = 'Recompile shaders', action = 'recompile_shaders',
                            tip = "Compiles the scene effects' shaders again from scratch; the effects are off till they're done" }),
             }) do
-                if row.kind == 'header' and row.text == 'VanaCore' and vana.clients ~= nil then
-                    for _, extra in ipairs(characters_rows()) do
-                        rows[#rows + 1] = extra
-                    end
-                end
-                if row.kind == 'header' and row.text == 'VanaCore' and vana.gamepad ~= nil and vana.gamepad.apply_profile ~= nil then
-                    for _, extra in ipairs(gamepad_rows()) do
-                        rows[#rows + 1] = extra
-                    end
-                end
-                rows[#rows + 1] = row
+                table.insert(rows, i, row)
             end
-            -- Commands, after VanaCore (/vana commands): each of VanaCore's commands, and a switch for those it can do without
+            -- Commands, after Gamepads (/vana commands): each of VanaCore's commands, and a switch for those it can do without
             for _, row in ipairs(commands_rows()) do
                 rows[#rows + 1] = row
             end
@@ -6398,7 +6388,8 @@ end
 merge_tabs('Interface', 'True Font', 'Interface') -- True Font first: Game Options' top sub-tab
 merge_tabs('Game Options', 'Interface', 'Options')
 
--- About: Client's first sub-tab (its section before Client's), no page of its own; /vana about opens Client at it
+-- VanaCore: Client's first sub-tab (About's heading, banner and Info, then Client's VanaCore settings), no page of its
+-- own; /vana about and /vana vanacore open Client at it
 do
     local about, client = nil, nil
     for i = #TABS, 1, -1 do
@@ -6410,6 +6401,7 @@ do
     end
     local about_rows, client_rows = about.rows, client.rows
     client.aliases[#client.aliases + 1] = 'about'
+    client.aliases[#client.aliases + 1] = 'vanacore'
     client.rows = function ()
         local rows = about_rows()
         for _, row in ipairs(client_rows()) do

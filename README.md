@@ -72,7 +72,7 @@ Enix.
 - **GM icons:** Ramtough and Ark
 - **Special thanks:** [RubyMatrix](https://github.com/rubymatrix), whose [xi-on-anything](https://github.com/rubymatrix/xi-on-anything)
   is where VanaCore's Direct3D 12 renderer and effects began
-- **Shaped and beta tested by:** the players of CatsEyeXI
+- **Shaped and beta tested by:** the players of CatsEyeXI (see [Beta testers](#beta-testers))
 
 ---
 
@@ -277,3 +277,12 @@ FINAL FANTASY XI is a registered trademark of Square Enix Holdings Co., Ltd.
 
 - **Looking for a native client for Mac, Linux, Windows and Steam Deck?** Check out
   [xi-on-anything](https://github.com/rubymatrix/xi-on-anything).
+
+## Beta testers
+
+Special thanks to the CatsEyeXI players who beta tested VanaCore:
+
+Yunas, Tai (Bug Bounty), Crobat, Torkson, Carver, Araedi (Grass Detective), Stieg, Muziko, Mizer, SmartASCII, Nokk,
+Fluff, Pie (GM), Mythicangel, Loudnoises, Elehex, Ramtough, Arkine, Azlora, Cadia, Crocodile, Daeloth, Guatalupe,
+Kraunik, Lunexi, Nobody, Thethethethe, Vitali, Charta, Citrus, Odei, Onix, The Doctor, Hando_San, Tizer, Snuk, Arestia,
+Rusbando, Benthere, Skeletonhater, MadMikeBLVD, Patronos, Caite.
