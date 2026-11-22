@@ -7255,7 +7255,7 @@ static const char FX_HLSL_2[] =
     /* Render visual 26 (/vana debug's Grass): VanaCore's grass red, shaded by its own brightness, the rest grey. A pixel the grass
      * covers is one whose depth (input 2) isn't the depth before the grass (input 8, gfx_scene_world_depth; the depth itself
      * when this scene has none: all grey) */
-    "  if (dbg == 26) {\n"
+    "  if (dbg == 26) {\n" GRASS_RINGS_HLSL
     "    float l = dot(c.rgb, LUMA);\n"
     "    return float4(texel(8, px).r != texel(2, px).r ? float3(1.0, 0.1, 0.1) * (0.45 + 0.55 * saturate(2.0 * l)) : l.xxx, c.a);\n"
     "  }\n"
@@ -15730,6 +15730,8 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         g_night_now = s->night, g_day_night_now = s->day_night;
         gfx_player_light(s, g_fxs.player_light, g_fxs.player_light_radius, g_fxs.player_light_warm, g_fxs.player_light_day,
                          u.plight, u.plight2);
+        if ((int)g_fxs.debug == 26 && grass_rings_shown()) /* Render visual 26: the rings' colours kept, their edge band shaded */
+            u.grade[3] += 0.5f, grass_rings_view(s->view, s->focus, u.plight, u.plight2); /* (GRASS_RINGS_HLSL) */
         /* reflections and bounce light: a pass of their own after the composite */
         u.refl[0] = g_fxs.refl, u.refl[1] = fminf(fmaxf(g_fxs.refl_wet, 0.0f), 1.0f), u.refl[2] = fminf(fmaxf(g_fxs.refl_rough, 0.0f), 1.0f);
         u.refl[3] = fmaxf(g_fxs.refl_dist, 1.0f);

@@ -25,6 +25,7 @@ struct Info {
     std::string kind;
     bool shipped = false; // VanaCore's own (not the player's library)
     bool picture = false; // a PNG of its own, not a recipe from the game's files
+    float amount = 0.0f;  // its share of the mix until one is set (grass.asset.<id>.amount), on when over 0: its file's "default"
 };
 
 // Loads the catalogue the first time (and after reload()) and hands the grass the pictures and the ini's
@@ -39,6 +40,17 @@ float dirt(int zone);
 // Whether a zone's grass grows on its blended ground too (VanaGrass.blended: a layer the game draws over other ground, as The
 // Sanctuary of Zi'Tah's moss), from the same file's "blended": true; false for a zone it doesn't list
 bool blended(int zone);
+// How far back from a path's ground a zone's grass is kept (VanaGrass.pathpad, yalms, 0 to 4): the same file's "pathpad" for the
+// zone, 0 where the zone has no paths, whose mottled floors it left spotty (Wajaom Woodlands' leaf litter, each fleck ringed bare);
+// `rest` for a zone it gives none ([graphics] grass.pathpad, /vana's Path padding, else pathpad_default: its top-level "pathpad",
+// 0.25 without it). pathpad_own: whether the zone you're in has its own (and it in value), for the slider's lock
+float pathpad(int zone, float rest);
+float pathpad_default();
+bool pathpad_own(float& value);
+// One library entry grown alone, whole, whatever its share and the others' (the /vana window's eye on its row: what it looks
+// like), till solo("") or the game's end; never saved. solo_id(): the one shown alone, "" none
+void solo(const std::string& id);
+std::string solo_id();
 // The textures that are grass ground in a zone whatever their colours say (VanaGrass.ground: hex hashes, space-separated), from the
 // same file's "ground": [ "65b719e367503797", ... ] (The Sanctuary of Zi'Tah's dark floor); empty for a zone it doesn't list
 std::string ground(int zone);

@@ -137,6 +137,10 @@
     <ClInclude Include="grass_layers.h" />
     <ClInclude Include="grass_color.h" />
     <ClInclude Include="grass_tufts.h" />
+    <ClInclude Include="grass_rings.h" />
+    <ClInclude Include="grass_slope.h" />
+    <ClInclude Include="grass_vs.h" />
+    <ClInclude Include="grass_edges.h" />
     <ClInclude Include="vanacore_gfx.h" />
     <ClInclude Include="native\gthread.h" />
     <ClInclude Include="native\gwin.h" />

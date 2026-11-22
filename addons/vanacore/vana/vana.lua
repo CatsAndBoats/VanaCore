@@ -1653,6 +1653,20 @@ local function delete_asset(id)
     M.rebuild()
 end
 
+-- Mass Grass's library: one plant grown alone, whole (its row's eye), or (nil) the mix again; never saved
+-- (vana.graphics.grass_solo). st.grass_solo the one shown, taken from the game at load (an addon reload keeps it)
+M.grass_solo = function (id)
+    if vana.graphics.grass_solo == nil then
+        return
+    end
+    local ok, now = pcall(vana.graphics.grass_solo, id)
+    st.grass_solo = ok and now or nil
+end
+if vana.graphics.grass_solo ~= nil then
+    local ok, now = pcall(vana.graphics.grass_solo)
+    st.grass_solo = ok and now or nil
+end
+
 -- a change of `row` written, with what follows it (its own changed hook, the pages built again when it locks others;
 -- a grass asset's switch follows its share: on from 1%, off at 0)
 local function changed(row, value, now)
@@ -3256,7 +3270,11 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     end
 
     -- a setting: its name (and "restart" after it when it takes effect at the next start), its control
+    -- (a library plant: lit with a share; while one is shown alone, only that one)
     local lit = enabled and (row.asset == nil or M.read(row) >= 1)
+    if row.asset_id ~= nil and st.grass_solo ~= nil then
+        lit = enabled and row.asset_id == st.grass_solo
+    end
     if row.sub then
         -- an option under the row above: a bent arrow, the name set in; dimmer only while it's locked (its lock_if: the
         -- row above off), its name as bright as any other while it can be set
@@ -3290,12 +3308,26 @@ local function draw_row(page, sec, row, x, y, w, ctx)
             end
         end
     end
-    -- the renderer it needs, after the name (and its "*" or ×)
+    -- a library plant's eye, after its name (and ×): it alone, whole, till clicked again or the window closes (M.grass_solo)
+    local after = row.asset_own and 22 or 0
+    if row.asset_id ~= nil and vana.graphics.grass_solo ~= nil then
+        local alone = st.grass_solo == row.asset_id
+        local ex = lx + M.measure(row.label, fonts.text, BODY) + S(after + 16)
+        local clicked, hov = M.icon_button(id .. '.solo', ex, cy, 'eye', 11, P.teal, alone and P.teal or P.faint, enabled)
+        if hov then
+            M.tooltip(alone and 'Showing only this one: click to put the mix back' or 'Show only this one, to see what it looks like')
+        end
+        if clicked then
+            M.grass_solo(not alone and row.asset_id or nil)
+        end
+        after = after + 22
+    end
+    -- the renderer it needs, after the name (and its "*", × or eye)
     local name_end = (row.sub and lx + S(22) or lx) + M.measure(row.label, fonts.text, BODY)
-    local pill_x = name_end + S(row.asset_own and 30 or row.restart and 18 or 8)
+    local pill_x = name_end + S(after > 0 and after + 8 or row.restart and 18 or 8)
     local pill_w, over_pill = draw_dx_pill(dl, sec, row, pill_x, cy)
-    -- where the name and what's after it (its "*", ×, pill) end: the control mustn't run into it
-    local label_end = pill_w > 0 and pill_x + pill_w or name_end + S(row.asset_own and 22 or row.restart and 14 or 0)
+    -- where the name and what's after it (its "*", ×, eye, pill) end: the control mustn't run into it
+    local label_end = pill_w > 0 and pill_x + pill_w or name_end + S(after > 0 and after or row.restart and 14 or 0)
     if row.hint ~= nil then
         -- a short note after all that, dim and smaller (data.lua's hinted: Max FPS's "before frame gen")
         local hx = label_end + S(8)
@@ -5411,6 +5443,9 @@ local function present()
         end
     else
         hud.was_open = false
+    end
+    if not st.open and st.grass_solo ~= nil then
+        M.grass_solo(nil) -- a library plant shown alone (its eye) goes back into the mix with the window closed
     end
     if not st.open and not managing then
         return

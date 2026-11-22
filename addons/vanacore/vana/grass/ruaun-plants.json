@@ -1,6 +1,7 @@
 {
   "name": "Ru'Aun Gardens small plants",
   "kind": "plant",
+  "default": 35,
   "dat": "ROM2/22/4.DAT",
   "texture": "model   e_w01c",
   "size": [

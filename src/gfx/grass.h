@@ -15,7 +15,8 @@ extern "C" {
  * the player it reaches; density tufts to a square unit of ground; height how tall they stand, variation (0 to 1) how much
  * that differs from tuft to tuft, width how wide they are (as a rule of its own: the height only changes how tall); brightness
  * against the ground's own colour; flowers (0 to 1) how many of the tufts have a flower, in patches, flower_brightness theirs,
- * flowers_only 1 leaves the tufts out; slope the steepest ground (degrees) it grows on; limit the most tufts in a frame (flowers a quarter of that);
+ * flowers_only 1 leaves the tufts out; slope the steepest ground (degrees) it grows on; limit a ceiling on the tufts in a frame (0 none: as many as the
+ * density needs over the rings' ground, a million the most);
  * log 1 writes what it finds to the log and the grass textures to logs\grass. The grass casts no shadow. */
 typedef struct GrassSettings
 {
@@ -80,6 +81,11 @@ typedef struct GrassSettings
     /* the zone's own grass ground (data\grass_dirt.json's "ground"): hex hashes of textures that are grass ground in this zone
      * whatever their colours say, besides the ones found (The Sanctuary of Zi'Tah's dark leaf-litter floor); NULL or "" none */
     const char* ground;
+    /* yalms (0 off): a tuft this near where the grass ends (the zone's floors: a drop, a face steeper than slope, a hard floor after
+     * soft ground; its texture turning from grass; the brink of a drop) grows shorter, to edge_low of its height at the edge (0 to 1;
+     * 0 the default, 0.25), and climbing from half slope to slope the same (grass_edges.h) */
+    float edge_fade, edge_low;
+    int cull; /* 1: a square of tufts wholly outside the camera's view isn't drawn (still made and kept: layer_in_view) */
 } GrassSettings;
 
 void grass_configure(const GrassSettings* settings);
@@ -179,6 +185,12 @@ int grass_logging(void);
 void grass_reject(uint64_t tex_hash, int reason);
 /* 1 while blended ground draws are ground too (GrassSettings.blended, the grass on): d3d8.c hands them over */
 int grass_layers(void);
+/* 1 while the rings are drawn round the player (GrassSettings.show_rings, the grass on): Render visual 26 keeps their colours */
+int grass_rings_shown(void);
+/* ... and with them shown in it, the player's feet in view space (view, focus: the scene's) and the radius into at (the player
+ * light's place: that view draws no pool), off zeroed (the player light's colour: no pool for the late draws either), for its
+ * band between the shrink ring and the edge (GRASS_RINGS_HLSL) */
+void grass_rings_view(const float view[16], const float focus[4], float at[4], float off[4]);
 
 /* A world draw (opaque and depth-written, or with grass_layers a blended layer; static vertices) the game is making into the
  * scene's target. */

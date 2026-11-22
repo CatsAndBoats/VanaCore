@@ -1208,8 +1208,36 @@ int graphics_grass_assets(lua_State* L)
         lua_setfield(L, -2, "shipped");
         lua_pushboolean(L, list[i].picture ? 1 : 0);
         lua_setfield(L, -2, "picture");
+        lua_pushnumber(L, list[i].amount);
+        lua_setfield(L, -2, "default");
         lua_rawseti(L, -2, static_cast<int>(i + 1));
     }
+    return 1;
+}
+
+// graphics.grass_solo([id]): with an id, that library entry grown alone, whole (nil or "": the mix again), never saved; returns
+// the one shown alone, or nil
+// graphics.grass_pathpad(): the path padding the zone you're in has of its own (data\grass_dirt.json's "pathpad" for it, yalms),
+// or nil when it takes [graphics] grass.pathpad (/vana's Path padding, locked while the zone has its own)
+int graphics_grass_pathpad(lua_State* L)
+{
+    float own = 0.0f;
+    if (grass_assets::pathpad_own(own))
+        lua_pushnumber(L, own);
+    else
+        lua_pushnil(L);
+    return 1;
+}
+
+int graphics_grass_solo(lua_State* L)
+{
+    if (lua_gettop(L) >= 1)
+        grass_assets::solo(lua_isstring(L, 1) ? lua_tostring(L, 1) : "");
+    const std::string id = grass_assets::solo_id();
+    if (id.empty())
+        lua_pushnil(L);
+    else
+        lua_pushstring(L, id.c_str());
     return 1;
 }
 
@@ -3761,6 +3789,8 @@ void open(lua_State* L, Context& context)
     set_function(L, "grass_capture", &graphics_grass_capture);
     set_function(L, "grass_capture_status", &graphics_grass_capture_status);
     set_function(L, "grass_reload", &graphics_grass_reload);
+    set_function(L, "grass_solo", &graphics_grass_solo);
+    set_function(L, "grass_pathpad", &graphics_grass_pathpad);
     lua_setfield(L, -2, "graphics");
 
     lua_newtable(L);

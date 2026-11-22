@@ -10,6 +10,8 @@ the /vana window open or not, in the same look (draw.lua).
                      d3d8_rain.h rain_tick, never saved)
   Collision          the zone's whole collision drawn over the world, see-through ([graphics] collision.show, floors.c):
                      walls red, floors by their kind of ground in Reflection ground's colours. Never saved either
+  Grass              Mass Grass's view of the tufts a floor covers ([graphics] grass.cover.show, grass.c), with its
+                     colours. Never saved (its rings are on the Rings tab)
   DLSS crash tests  the DLSS helper (dlss\VanaCore.Dlss.exe) made to fail at its next frame, each a different way (an
                      access violation, one on another thread, an unhandled C++ exception, a fail-fast, a hang), to try what
                      a real crash leaves: the chat's line, its report in logs\vanacore.log, the dump. Picked from a
@@ -17,7 +19,8 @@ the /vana window open or not, in the same look (draw.lua).
                      vana.graphics.dlss_crash_test; DirectX 12 with DLSS or FSR running.
   Shadow & AO rings  where the shadows' and the occlusion's rings fall (sun_rings, ao_rings: fewer taps past each one out
                      from the camera) and the taps each takes: Show rings tints the picture by ring (the Debug view's 15 and
-                     16), with each one's switch and spacing beside it, the Graphics page's own settings
+                     16), with each one's switch and spacing beside it, the Graphics page's own settings; then Mass
+                     Grass's rings (grass.rings.show: circles on the ground, never saved) with where they fall
   Frame recording    /vana debug <seconds> and /vana debug stop (debugrec.cpp): each frame's time and where it went, into
                      logs\frames-*.csv and logs\debug-*.log
 
@@ -308,8 +311,14 @@ end
 local RAIN_RING_COLOURS = { { P.green, '0-100' }, { '#E8D45C', '-200' }, { '#E8945C', '-300' }, { P.rose, '-400' }, { '#B373E6', '-500' },
                             { '#33E6FF', 'splash range' }, { '#FFFFFF', 'rain range' } }
 
+-- Mass Grass's rings (grass.c draw_rings): circles on the ground round the player where fewer tufts are kept, in its colours;
+-- never saved (ini.cpp session_only). The Debug window's Grass tab's till 2026-11-22 ("it has its own section")
+local GRASS_RINGS = { kind = 'toggle', section = 'graphics', key = 'grass.rings.show', default = false }
+local GRASS_RING_COLOURS = { { '#40FF40', 'ring 1' }, { '#FFE040', 'ring 2' }, { '#FF8020', 'ring 3' }, { '#40A0FF', 'tufts shrink' },
+                             { '#FF3030', 'range' } }
+
 local function rings_height()
-    return S(NOTE_H) * 2 + S(ROW_H) * 3 + S(NOTE_H) * 2 + S(4)
+    return S(NOTE_H) * 2 + S(ROW_H) * 3 + S(NOTE_H) * 2 + S(ROW_H) + S(NOTE_H) + S(4)
 end
 
 local function rings_draw(dl, x, y, w, now)
@@ -383,6 +392,33 @@ local function rings_draw(dl, x, y, w, now)
             M.text_mid(dl, lx + S(12), cy2, c[2], P.dim, fonts.text, SMALL)
             lx = lx + S(12) + M.measure(c[2], fonts.text, SMALL) + S(row == 2 and 10 or 16)
         end
+    end
+    y = y + S(NOTE_H) * 2
+
+    -- Mass Grass's rings: their button, where they fall (Draw distance detail, a share of its Range), and their colours under it
+    local showing, ready = M.read(GRASS_RINGS), renderer_ready(now)
+    local gy = y + S(ROW_H) / 2
+    local clicked, bw = M.button('##debug.rings.grass', x, gy, showing and 'Hide grass rings' or 'Show grass rings', 'eye',
+                                 showing and 'accent' or 'ghost', ready)
+    if imgui.IsItemHovered() then
+        M.tooltip(ready and 'Circles on the ground round you where fewer grass tufts are kept, ring by ring' or 'Needs DirectX 11 or 12')
+    end
+    if clicked and ready then
+        M.write(GRASS_RINGS, not showing, true)
+    end
+    local spacing = math.floor((tonumber(vana.config.get('graphics', 'grass.ring.spacing') or '') or 25) + 0.5)
+    local note = not ready and 'Needs DirectX 11 or 12 (Graphics > Renderer)'
+        or tonumber(vana.config.get('graphics', 'grass') or '') ~= 1 and 'Mass Grass is off (Game Options)'
+        or string.format('Grass: rings at %d%%, %d%% and %d%% of its range (Mass Grass > Advanced > Draw distance detail)', spacing,
+                         math.min(spacing * 2, 100), math.min(spacing * 3, 100))
+    M.text_mid(dl, x + bw + S(12), gy, M.fit(note, w - bw - S(12), fonts.text, SMALL + 0.5), ready and P.text2 or P.dim, fonts.text,
+               SMALL + 0.5)
+    y = y + S(ROW_H)
+    local lx, cy3 = x, y + S(NOTE_H) / 2
+    for _, c in ipairs(GRASS_RING_COLOURS) do
+        M.circle(dl, lx + S(4), cy3, S(4), c[1], showing and 1 or 0.35)
+        M.text_mid(dl, lx + S(12), cy3, c[2], showing and P.text2 or P.dim, fonts.text, SMALL)
+        lx = lx + S(12) + M.measure(c[2], fonts.text, SMALL) + S(16)
     end
 end
 
@@ -463,11 +499,60 @@ end
 -- The window
 -------------------------------------------------------------------------------
 
+-------------------------------------------------------------------------------
+-- Mass Grass ([graphics] grass.rings.show, grass.cover.show)
+-------------------------------------------------------------------------------
+
+-- the grass's views, drawn by grass.c over its tufts; never saved (ini.cpp session_only). On the Mass Grass panel till 2026-11-22;
+-- its rings are on the Rings tab with the others' (GRASS_RINGS)
+local GRASS_VIEWS = {
+    { key = 'grass.cover.show', show = 'Show covered grass', hide = 'Hide covered grass',
+      tip = 'The tufts a floor over them hides (a building\'s, over the ground), drawn; left out otherwise',
+      colours = { { P.rose, 'under a floor (left out)' }, { '#E8D45C', 'no floor under it to tell' } } },
+}
+for _, v in ipairs(GRASS_VIEWS) do
+    v.row = { kind = 'toggle', section = 'graphics', key = v.key, default = false }
+end
+
+local function grass_height()
+    return (S(ROW_H) + S(NOTE_H)) * #GRASS_VIEWS + S(4)
+end
+
+local function grass_draw(dl, x, y, w, now)
+    local ready = renderer_ready(now)
+    local on = tonumber(vana.config.get('graphics', 'grass') or '') == 1
+    for i, v in ipairs(GRASS_VIEWS) do
+        local showing = M.read(v.row)
+        local ry = y + S(ROW_H) / 2
+        local clicked, bw = M.button('##debug.grass.' .. i, x, ry, showing and v.hide or v.show, 'eye', showing and 'accent' or 'ghost',
+                                     ready)
+        if imgui.IsItemHovered() then
+            M.tooltip(ready and v.tip or 'Needs DirectX 11 or 12')
+        end
+        if clicked and ready then
+            M.write(v.row, not showing, true)
+        end
+        local note = not ready and 'Needs DirectX 11 or 12 (Graphics > Renderer)' or not on and 'Mass Grass is off (Game Options)' or nil
+        if note ~= nil then
+            M.text_mid(dl, x + bw + S(12), ry, M.fit(note, w - bw - S(12), fonts.text, SMALL + 0.5), P.dim, fonts.text, SMALL + 0.5)
+        end
+        y = y + S(ROW_H)
+        local lx, cy = x, y + S(NOTE_H) / 2
+        for _, c in ipairs(v.colours) do
+            M.circle(dl, lx + S(4), cy, S(4), c[1], showing and 1 or 0.35)
+            M.text_mid(dl, lx + S(12), cy, c[2], showing and P.text2 or P.dim, fonts.text, SMALL)
+            lx = lx + S(12) + M.measure(c[2], fonts.text, SMALL) + S(16)
+        end
+        y = y + S(NOTE_H)
+    end
+end
+
 local TABS = {
     { id = 'views', tab = 'Views', title = 'Debug views', height = views_height, draw = views_draw },
     { id = 'collision', tab = 'Collision', title = 'Collision', height = collision_height, draw = collision_draw },
+    { id = 'grass', tab = 'Grass', title = 'Mass Grass', height = grass_height, draw = grass_draw },
     { id = 'crash', tab = 'DLSS crash', title = 'DLSS crash tests', height = crash_height, draw = crash_draw },
-    { id = 'rings', tab = 'Rings', title = 'Shadow & AO rings', height = rings_height, draw = rings_draw },
+    { id = 'rings', tab = 'Rings', title = 'Shadow, AO, rain & grass rings', height = rings_height, draw = rings_draw },
     { id = 'record', tab = 'Recording', title = 'Frame recording', height = record_height, draw = record_draw },
 }
 local TAB_LABELS = {}

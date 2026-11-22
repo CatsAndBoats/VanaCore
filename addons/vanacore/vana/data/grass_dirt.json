@@ -1,8 +1,10 @@
 {
   "default": 50,
+  "pathpad": 0.25,
   "zones": {
     "115": { "name": "West Sarutabaruta", "dirt": 25 },
     "116": { "name": "East Sarutabaruta", "dirt": 25 },
+    "51": { "name": "Wajaom Woodlands", "blended": true, "pathpad": 0 },
     "108": { "name": "Konschtat Highlands",
              "ground": [ "8aa2155530c93c95", "ac70d9f53d6f52e0", "e32051e314454072" ] },
     "241": { "name": "Windurst Woods",

@@ -158,8 +158,8 @@ void vanacore_gfx_set_untextured(int on);
 /* The grass (VanaCore.ini [graphics] grass*): tufts on the zone's grass-textured ground near the player. enabled; textures the hex hashes of the ground textures that are grass (""
  * any mostly green one); radius how far from the player; density tufts to a square unit of ground; height how tall,
  * variation (0 to 1) how much that differs tuft to tuft, width how wide; brightness against the ground's colour; flowers (0 to 1)
- * the share of tufts with one, in patches, flower_brightness theirs, flowers_only 1 leaves the tufts out; limit the most tufts
- * in a frame; slope the steepest ground (degrees) it grows on; log 1 writes what it finds to the log and the grass textures to
+ * the share of tufts with one, in patches, flower_brightness theirs, flowers_only 1 leaves the tufts out; limit a ceiling on
+ * the tufts in a frame (0 none: as many as the density needs); slope the steepest ground (degrees) it grows on; log 1 writes what it finds to the log and the grass textures to
  * logs\grass. The grass casts no shadow. */
 typedef struct VanaGrass
 {
@@ -190,6 +190,9 @@ typedef struct VanaGrass
     float dry_sat, dry_hue; /* the dry grass test's least mean saturation (0: 0.25) and reddest hue, degrees (0: 46) */
     int blended; /* 1: grass-textured ground drawn blended is ground too, a layer over other ground (the zone's, or grass.blended) */
     const char* ground; /* hex hashes of textures that are grass ground in this zone whatever their colours say (the zone's) */
+    float edge_fade; /* yalms, 0 off: tufts this near where the grass ends (and climbing toward slope) grow shorter ... */
+    float edge_low;  /* ... to this share of their height at it (0 to 1; 0 the default, 0.25) */
+    int cull;        /* 1: a square of tufts wholly outside the camera's view isn't drawn (grass.cull) */
 } VanaGrass;
 void vanacore_gfx_set_grass(const VanaGrass* settings);
 /* The zone the player is in, each frame (0 while there's none). */

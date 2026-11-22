@@ -42,3 +42,28 @@ int gfx_draw_clip_pos(const GfxDraw* d, const float pos[3], float out[4]);
 
 /* The utility functions every device needs (present, the frame-rate overlay), one source. */
 extern const char gfx_hlsl_util[];
+
+/* Render visual 26 (the grass in red, the rest grey) with Mass Grass's rings shown: gfx_d3d12.c's composite adds a half to the
+ * view's number then (grass_rings_shown; read as int elsewhere), and this, at the top of the view's branch (c the scene's colour,
+ * z its view depth, px the pixel), keeps a pixel of one of the rings' five colours (grass.c draw_rings' col[]; drawn with no
+ * depth, so not the grass's) as it is, and shades the band where the tufts shrink, 0.8 of the radius to it, blue to red, as the
+ * shadows' rings tint theirs (ring_tint), the grass in it less: u.plight then holds the player's feet and the radius
+ * (grass_rings_view; the distance across the ground, world up taken out) */
+#define GRASS_RINGS_HLSL                                                                                                         \
+    "    if (frac(u.grade.w) > 0.25) {\n"                                                                                         \
+    "      float3 r0 = abs(c.rgb - float3(0.251, 1.0, 0.251)), r1 = abs(c.rgb - float3(1.0, 0.878, 0.251));\n"                    \
+    "      float3 r2 = abs(c.rgb - float3(1.0, 0.502, 0.125)), r3 = abs(c.rgb - float3(0.251, 0.627, 1.0));\n"                    \
+    "      float3 r4 = abs(c.rgb - float3(1.0, 0.188, 0.188));\n"                                                                 \
+    "      float rd = min(min(min(max(r0.x, max(r0.y, r0.z)), max(r1.x, max(r1.y, r1.z))), min(max(r2.x, max(r2.y, r2.z)),\n"    \
+    "                 max(r3.x, max(r3.y, r3.z)))), max(r4.x, max(r4.y, r4.z)));\n"                                               \
+    "      if (rd < 0.04) return c;\n"                                                                                            \
+    "      float3 gv = z != 0.0 ? view_pos(i.pos.xy, z) - u.plight.xyz : float3(0.0, 0.0, 0.0);\n"                              \
+    "      float gt = (length(gv - u.up.xyz * dot(gv, u.up.xyz)) / max(u.plight.w, 1.0) - 0.8) * 5.0;\n"                          \
+    "      if (u.plight.w > 0.0 && z != 0.0 && gt >= 0.0 && gt <= 1.0) {\n"                                                        \
+    "        float gl = dot(c.rgb, LUMA);\n"                                                                                      \
+    "        bool gg = texel(8, px).r != texel(2, px).r;\n"                                                                        \
+    "        float3 gb = gg ? float3(1.0, 0.1, 0.1) * (0.45 + 0.55 * saturate(2.0 * gl)) : gl.xxx;\n"                            \
+    "        float3 gk = lerp(float3(0.251, 0.627, 1.0), float3(1.0, 0.188, 0.188), gt) * (0.35 + 0.65 * gl);\n"                 \
+    "        return float4(lerp(gb, gk, gg ? 0.3 : 0.6), c.a);\n"                                                                  \
+    "      }\n"                                                                                                                   \
+    "    }\n"

@@ -112,6 +112,30 @@ local function header(text) return { kind = 'header', text = text } end
 -- A slider that takes any number typed into its value box, beyond the slider's ends (the slider then shows its end); `low` and
 -- `high`, when given, are as far as the setting itself goes (what VanaCore reads from vanacore.ini)
 local function free(row, low, high) row.free = true; row.low = low; row.high = high; return row end
+-- A slider shown in other units than vanacore.ini keeps it in: shown = kept * a + b (Mass Grass's Range in tens of yalms, its
+-- Height as a percent). Its default, ends, step and typed limits are the shown ones; the key keeps its own units, for VanaCore
+-- and the presets. A follower's nil (put_back) takes the key out
+local function shown_as(row, a, b)
+    b = b or 0
+    local kept = { kind = 'slider', section = row.section, key = row.key, step = 0.0001 } -- (what M.write formats and writes)
+    row.get = function ()
+        local value = tonumber(vana.config.get(row.section, row.key) or '')
+        if value == nil then
+            return row.default
+        end
+        value = value * a + b
+        return row.free and math.max(row.low or value, math.min(row.high or value, value)) or math.max(row.min, math.min(row.max, value))
+    end
+    row.set = function (value, now)
+        if value == nil then
+            vana.config.set(row.section, row.key, nil)
+            vana.graphics.reload()
+            return
+        end
+        M.write(kept, (value - b) / a, now)
+    end
+    return row
+end
 
 -- The fonts a True Font row offers, each once: Windows' fonts, then VanaCore's fonts folder's (vana.ui.fonts: Browse puts a
 -- picked font there), then the one set now (section.key), if it's none of those
@@ -2016,14 +2040,13 @@ TIPS.rows = {
     ['graphics.water.glint'] = 'The sparkle of the sun and moon on the water.',
     ['graphics.water.glint.size'] = 'How big the sparkles are.',
     -- Mass grass
-    ['graphics.grass.radius'] = 'How far from you grass is drawn.',
-    ['graphics.grass.density'] = 'How thickly the grass grows.',
-    ['graphics.grass.ring.spacing'] = 'How far apart the rings are, as a share of the range. Past each ring fewer tufts are kept (all, then 80%, 50%, 30%).',
+    ['graphics.grass.radius'] = 'How far from you grass is drawn, in tens of yalms: 7 is 70. Click the number to type up to 50.',
+    ['graphics.grass.density'] = 'How thickly the grass grows: 100% is the most. More costs frame rate and video memory.',
+    ['graphics.grass.ring.spacing'] = 'How dense the grass stays further away. Three rings round you, at this share of the Range, twice it and three times it: full density inside the first, then medium, then lower past the third. Higher keeps denser grass further out, and costs more frame rate.',
     ['graphics.grass.rings.show'] = 'Draws the grass rings round you: 1 green, 2 yellow, 3 orange, where tufts shrink blue, the range red.',
     ['graphics.grass.freecam'] = 'While /freecam is on, grass grows round the camera instead of your character.',
     ['graphics.grass.log'] = 'Writes why ground gets grass or not to logs\\vanacore.log, and the textures it finds to logs\\grass.',
-    ['graphics.grass.tufts'] = 'The most tufts drawn at once, in thousands: 1000 is a million. Lower is faster; each thousand takes about 0.3 MB of video memory.',
-    ['graphics.grass.slope'] = 'Grass will not grow on ground steeper than this.',
+    ['graphics.grass.slope'] = 'The steepest slope grass grows on, in degrees. Steeper ground stays bare.',
     ['graphics.grass.dry'] = "Grows grass on yellow, dry grass ground too (East Sarutabaruta's), not only green.",
     ['graphics.grass.shade'] = "Grows grass on the shaded and olive parts of grass ground too, not only the green parts (Bhaflau Thickets' forest floors).",
     ['graphics.grass.walkable'] = "Grass grows only on ground you could stand on, by the zone's collision: not on carts, crates, trees or roofs.",
@@ -2031,19 +2054,22 @@ TIPS.rows = {
     ['graphics.grass.moss'] = 'Low cushions of moss on that shallow water instead of bare ground. Needs No grass in water.',
     ['graphics.grass.cover.show'] = 'Grass under a floor (left out) drawn red; grass with no floor under it to check, yellow.',
     ['graphics.grass.overgrown'] = 'Nyzul Isle?',
-    ['graphics.grass.pathpad'] = 'Keeps grass this many yalms back from a path, so paths read wider. 0 grows grass right up to the edge.',
     ['graphics.grass.build'] = 'Milliseconds a frame spent growing grass as you come up to it; the rest waits for the next frame. Lower is smoother, higher fills in faster.',
+    ['graphics.grass.cull'] = "Skips drawing grass that's behind or beside the camera. It's kept ready, so it shows at once when you turn. Faster; off draws it all.",
+    ['graphics.grass.pathpad'] = "Keeps grass this many yalms back from paths, so they read wider. It's the default for every zone; a zone set up with its own (Wajaom: none) keeps it, and this is locked there.",
     ['graphics.grass.wind.speed'] = 'How fast the grass sways in the wind. 0 stills it; 1 is the usual pace.',
     ['graphics.grass.wind.turbulence'] = 'How much the sway differs from place to place: low, the whole field moves together in long waves; high, it ripples. 0 moves it as one.',
     ['graphics.grass.edges'] = 'Near a ledge or the top of a rock, the grass grows smaller so it does not hang out over the edge.',
-    ['graphics.grass.height'] = 'How tall the grass is.',
+    ['graphics.grass.edge.fade'] = 'Grass this near where it ends (a cliff, a drop, rock, a path) grows shorter, and shortens as it climbs toward the max slope angle. 0 turns it off.',
+    ['graphics.grass.edge.height'] = 'How tall the grass is right at its edge, as a share of its height.',
+    ['graphics.grass.height'] = 'How tall the grass is: 1% is the shortest, 100% the tallest. Click the number to type more.',
     ['graphics.grass.width'] = 'How wide each tuft is.',
     ['graphics.grass.variation'] = 'How much the grass heights differ from each other.',
     ['graphics.grass.brightness'] = 'How bright the grass is.',
     ['graphics.grass.match'] = 'Makes the grass and plants the colour of the ground under them, lit as the ground is: 0 their own shade, 1 the ground\'s.',
     ['graphics.grass.brightness.auto'] = "Dims the grass and flowers by Vana'diel time, a little every minute: full at noon, halfway at 6:00 and 18:00, Night brightness at midnight.",
     ['graphics.grass.brightness.night'] = 'How bright the grass is at midnight with Dim at night on, as a share of Brightness: 0.5 is half.',
-    ['graphics.grass.flowers'] = 'How many of the tufts are flowers.',
+    ['graphics.grass.flowers'] = 'How many of the tufts have a flower: 1 is one in ten, 0.1 one in a hundred.',
     ['graphics.grass.flower_brightness'] = 'How bright the flowers are.',
     ['graphics.grass.flowers_only'] = 'Draws only flowers, no grass.',
     ['graphics.effects.debug'] = 'Shows one effect on its own, for testing. Off again whenever the game starts.\n'
@@ -2875,10 +2901,13 @@ local function grass_asset_rows(rows)
             local ok, assets = pcall(vana.graphics.grass_assets)
             for _, a in ipairs(ok and assets or {}) do
                 local key = 'grass.asset.' .. a.id
-                local t = needs_dx(toggle(a.name, 'graphics', key, a.id == 'blades'))
+                -- its share until set: the catalogue's (grass_assets.cpp Info.amount: a file's "default", the drawn blades' own),
+                -- on when over 0; a DLL from before it says none, and Type 2's blades alone grew
+                local default = a.default or (a.id == 'blades' and 100 or 0)
+                local t = needs_dx(toggle(a.name, 'graphics', key, default > 0))
                 t.tip = (a.shipped and "VanaCore's own" or 'From your library (config\\grass\\' .. a.id .. '.json)') .. (a.kind ~= '' and (': ' .. a.kind) or '')
                 out[#out + 1] = t
-                local share = needs_dx(slider('Share', 'graphics', key .. '.amount', a.id == 'blades' and 100 or 0, 0, 100, 5, '%d'))
+                local share = needs_dx(slider('Share', 'graphics', key .. '.amount', default, 0, 100, 5, '%d'))
                 share.tip = 'Its share of the mix, against the others switched on.'
                 out[#out + 1] = share
             end
@@ -4374,63 +4403,98 @@ local TABS = {
                            switch = { get = function () return tonumber(vana.config.get('graphics', 'grass') or '') == 1 end,
                                       set = function (on) vana.config.set('graphics', 'grass', on and '1' or '0') end } }),
                 note("Made for West Ronfaure; other zones are untried. It's a work in progress: the grass is drawn over the ground the game "
-                     .. "already shows, where its texture is grass. A wider range, more density and more tufts cost frame rate."),
+                     .. "already shows, where its texture is grass. A wider range and a higher quantity cost frame rate."),
                 subheader('Coverage'),
-                needs_dx(free(slider('Range', 'graphics', 'grass.radius', 20, 5, 150, 1, '%d'), 4, 500)),
-                needs_dx(free(slider('Density', 'graphics', 'grass.density', 4, 0.5, 50, 0.5, '%.1f'), 0.1, 100)),
-                needs_dx(free(slider('Ring spacing', 'graphics', 'grass.ring.spacing', 25, 10, 50, 1, '%d%%'), 1, 100)),
-                needs_dx((function (row) row.sub = true return row end)(toggle('Show rings', 'graphics', 'grass.rings.show', false))),
-                needs_dx(toggle('Follow free camera', 'graphics', 'grass.freecam', true)),
-                needs_dx(free((function ()
-                    -- in thousands (grass.tufts); grass.limit, in tufts, from before it while it's unset
-                    local row = slider('Most tufts (thousands)', 'graphics', 'grass.tufts', 24, 1, 1000, 1, '%d')
-                    row.get = function ()
-                        local value = tonumber(vana.config.get('graphics', 'grass.tufts') or '')
-                        if value == nil then
-                            local old = tonumber(vana.config.get('graphics', 'grass.limit') or '')
-                            value = old and math.floor(old / 1000 + 0.5) or row.default
+                -- Range in tens of yalms (grass.radius / 10: 7 is 70), 1 to 20 on the slider, typed up to 50 (500, VanaCore's most)
+                needs_dx(shown_as(free(slider('Range', 'graphics', 'grass.radius', 15, 1, 20, 1, '%g'), 0.4, 50), 0.1)),
+                -- Quantity (grass.density, tufts to a square yalm): the tufts kept follow it and the range (grass.c tuft_limit), so
+                -- Most tufts (grass.tufts, in thousands) isn't on the panel since 2026-11-22; a change here takes out a ceiling left
+                -- set by it, or by grass.limit from before it, which would keep a higher quantity from showing
+                needs_dx(free((function (row)
+                    row.changed = function ()
+                        if vana.config.get('graphics', 'grass.tufts') ~= nil or vana.config.get('graphics', 'grass.limit') ~= nil then
+                            vana.config.set('graphics', 'grass.tufts', nil)
+                            vana.config.set('graphics', 'grass.limit', nil)
+                            vana.graphics.reload()
                         end
-                        return value
-                    end
-                    row.reset = function ()
-                        vana.config.set('graphics', 'grass.tufts', nil)
-                        vana.config.set('graphics', 'grass.limit', nil)
-                        vana.graphics.reload()
                     end
                     return row
-                end)(), 1, 1000)),
-                subheader('Placement'),
-                needs_dx(free(slider('Steepest ground', 'graphics', 'grass.slope', 40, 10, 80, 1, '%d\194\176'), 5, 85)),
-                needs_dx(toggle('Edge detection', 'graphics', 'grass.edges', true)),
-                needs_dx(toggle('Dry grass', 'graphics', 'grass.dry', true)),
-                needs_dx(toggle('Shaded ground', 'graphics', 'grass.shade', true)),
-                needs_dx(toggle('Walkable ground only', 'graphics', 'grass.walkable', true)),
-                needs_dx(toggle('No grass in water', 'graphics', 'grass.nowater', true)),
-                needs_dx((function (row) row.sub = true return row end)(toggle('Moss in water', 'graphics', 'grass.moss', false))),
-                needs_dx((function (row) row.sub = true return row end)(toggle('Show covered grass', 'graphics', 'grass.cover.show', false))),
-                needs_dx(toggle('Overgrown', 'graphics', 'grass.overgrown', false)),
-                needs_dx(slider('Path padding', 'graphics', 'grass.pathpad', 0.25, 0, 4, 0.25, '%.2f')),
-                needs_dx(free(slider('Growing time a frame', 'graphics', 'grass.build', 1.5, 0.25, 8, 0.25, '%.2f ms'), 0.1, 50)),
+                end)(slider('Quantity', 'graphics', 'grass.density', 100, 1, 100, 1, '%g%%')), 0.1, 100)),
+                -- (Show rings: the Debug window's Rings tab, Show covered grass its Grass tab, since 2026-11-22, debug.lua; Ring
+                -- spacing, now Draw distance detail, and Placement under Advanced Settings: "i dont want people messing it up")
                 subheader('Blades'),
-                needs_dx(free(slider('Height', 'graphics', 'grass.height', 0.55, 0.2, 1.5, 0.05, '%.2f'), 0.05, 10)),
-                needs_dx(free(slider('Width', 'graphics', 'grass.width', 0.8, 0.2, 2, 0.05, '%.2f'), 0.1, 10)),
-                needs_dx(slider('Height variability', 'graphics', 'grass.variation', 0.3, 0, 1, 0.05)),
+                -- Height as a percent: 0.10 tall is 1%, 1.50 is 100% (grass.height = 0.1 + (percent - 1) * 1.4 / 99); typed past
+                -- 100 up to 700 (9.9)
+                needs_dx(shown_as(free(slider('Height', 'graphics', 'grass.height', 28, 1, 100, 1, '%d%%'), 0, 700), 99 / 1.4, 1 - 0.1 * 99 / 1.4)),
+                needs_dx(slider('Height variability', 'graphics', 'grass.variation', 0.5, 0, 1, 0.05)),
+                needs_dx(free(slider('Width', 'graphics', 'grass.width', 1, 0.2, 2, 0.1, '%.2f'), 0.1, 10)),
+                needs_dx(slider('Shorter near edges (yalms)', 'graphics', 'grass.edge.fade', 2, 0, 10, 0.25, '%.2f')),
+                needs_dx(slider('Height at edges', 'graphics', 'grass.edge.height', 25, 5, 100, 1, '%d%%')),
                 subheader('Colour'),
                 needs_dx(free(slider('Brightness', 'graphics', 'grass.brightness', 1, 0.2, 3, 0.05), 0.05, 10)),
                 needs_dx(slider('Match ground colour', 'graphics', 'grass.match', 0.75, 0, 1, 0.05)),
                 needs_dx((function (row) row.rebuild = true return row end)( -- Night brightness locks and unlocks by it
-                    toggle('Dim at night', 'graphics', 'grass.brightness.auto', false))),
-                needs_dx((function (row) row.lock_if = function () return (tonumber(vana.config.get('graphics', 'grass.brightness.auto') or '') or 0) == 0 end return row end)(
+                    toggle('Dim at night', 'graphics', 'grass.brightness.auto', true))),
+                needs_dx((function (row) row.lock_if = function () return (tonumber(vana.config.get('graphics', 'grass.brightness.auto') or '') or 1) == 0 end return row end)(
                     slider('Night brightness', 'graphics', 'grass.brightness.night', 0.5, 0.1, 1, 0.05))),
                 subheader('Wind'),
                 needs_dx(slider('Wind speed', 'graphics', 'grass.wind.speed', 1, 0, 3, 0.05, '%.2f')),
                 needs_dx(slider('Wind turbulence', 'graphics', 'grass.wind.turbulence', 1, 0, 3, 0.05, '%.2f')),
                 subheader('Flowers'),
-                needs_dx(slider('Flowers (drawn)', 'graphics', 'grass.flowers', 0.1, 0, 1, 0.05)),
+                -- (1: a tenth of the tufts with a flower, graphics.cpp; it was the share itself till 2026-11-22)
+                needs_dx(slider('Flowers (drawn)', 'graphics', 'grass.flowers', 0, 0, 1, 0.1, '%.1f')),
                 needs_dx(free(slider('Flower brightness', 'graphics', 'grass.flower_brightness', 1, 0.2, 3, 0.05), 0.05, 10)),
                 needs_dx(toggle('Flowers only', 'graphics', 'grass.flowers_only', false)),
                 -- what grows: the catalogue's assets, each on or off with its share (grass_asset_rows)
                 { kind = 'none', grass_assets = true },
+                -- Advanced Settings, as Shadows' are: hidden till the button shows them (2026-11-22: "reduce the amount of
+                -- options"); a group runs to the next heading, Snow Trails'
+                { kind = 'action', label = 'Toggle Advanced Settings', text = 'Toggle Advanced Settings', big = true,
+                  tip = 'Shows or hides the grass\'s fine-tuning. Most players never need it.',
+                  run = function () M.toggle_group('grass.advanced') end },
+                (function ()
+                    local sub = inner_sub('Advanced Settings', nil, 'group')
+                    sub.show_if = function () return M.st.groups['grass.advanced'] == true end
+                    sub.tip = 'Fine-tuning for the grass: how it thins with distance, where it may grow, the free camera, and how fast '
+                        .. 'it fills in. Most players never need these.'
+                    return sub
+                end)(),
+                -- the rings (grass.ring.spacing: rings 1-3 at it, twice it and three times it, a share of the Range)
+                needs_dx(free(slider('Draw distance detail', 'graphics', 'grass.ring.spacing', 25, 10, 50, 1, '%d%%'), 1, 100)),
+                needs_dx(toggle('Follow free camera', 'graphics', 'grass.freecam', true)),
+                needs_dx(free(slider('Growing time a frame', 'graphics', 'grass.build', 1.5, 0.25, 8, 0.25, '%.2f ms'), 0.1, 50)),
+                -- (grass.c layer_in_view: a square of tufts wholly outside the camera's view isn't drawn, still made and kept)
+                needs_dx(toggle('Grass culling', 'graphics', 'grass.cull', true)),
+                inner_sub('Placement', nil, 'in'),
+                needs_dx(free(slider('Max slope angle', 'graphics', 'grass.slope', 40, 10, 80, 1, '%d\194\176'), 5, 85)),
+                needs_dx(toggle('Edge detection', 'graphics', 'grass.edges', true)),
+                needs_dx(toggle('Dry grass', 'graphics', 'grass.dry', false)),
+                needs_dx(toggle('Walkable ground only', 'graphics', 'grass.walkable', true)),
+                needs_dx(toggle('Shaded ground', 'graphics', 'grass.shade', true)),
+                needs_dx(toggle('No grass in water', 'graphics', 'grass.nowater', true)),
+                needs_dx((function (row) row.sub = true return row end)(toggle('Moss in water', 'graphics', 'grass.moss', false))),
+                needs_dx(toggle('Overgrown', 'graphics', 'grass.overgrown', false)),
+                -- Path padding (grass.pathpad): the default for the zones data\grass_dirt.json gives none of their own; in one that
+                -- has its own (vana.graphics.grass_pathpad: Wajaom's 0) locked, showing that (2026-11-22, per zone since 11-22)
+                needs_dx((function (row)
+                    local function own()
+                        if vana.graphics.grass_pathpad == nil then
+                            return nil
+                        end
+                        local ok, value = pcall(vana.graphics.grass_pathpad)
+                        return ok and value or nil
+                    end
+                    row.lock_if = function () return own() ~= nil end
+                    row.get = function ()
+                        local here = own()
+                        if here ~= nil then
+                            return here
+                        end
+                        local value = tonumber(vana.config.get('graphics', 'grass.pathpad') or '')
+                        return value ~= nil and math.max(row.min, math.min(row.max, value)) or row.default
+                    end
+                    return row
+                end)(slider('Path padding', 'graphics', 'grass.pathpad', 0.25, 0, 4, 0.25, '%.2f'))),
                 -- Snow Trails (src/gfx/snow.c): footprints pressed into ground the zone's collision calls snow, drawn as shading
                 warn(needs_dx({ kind = 'header', text = 'Snow Trails (Experimental)', section = 'graphics', key = 'snow',
                                 switch = { get = function () return tonumber(vana.config.get('graphics', 'snow') or '') == 1 end,

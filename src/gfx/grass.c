@@ -95,6 +95,7 @@ typedef struct GWTri /* an instance's triangle, in the world */
     /* how upright the ground is at each corner: the mean of the mesh's triangles meeting there, steep ones too (up times 254),
      * smooth_corners */
     uint8_t vup[3];
+    uint8_t lnx, lnz; /* the normal the game lights it by (its corners', else its face's), up, x and z as 0 to 255: grass_slope.h */
 } GWTri;
 
 typedef struct GMesh
@@ -186,6 +187,9 @@ static struct
     float radius, density, height, width, variation, brightness, flowers, flower_brightness;
     int flowers_only;
     int edges; /* the tufts kept off the brink of drops (find_edges, brink) */
+    float edge_fade, edge_low; /* grass.edge.fade, .height: the tufts shorter near where the grass ends, to edge_low (grass_edges.h) */
+    int cull;                  /* grass.cull: a square's layer wholly outside the view not drawn (layer_in_view) */
+    uint32_t quads_in, quads_all; /* the last frame's quads drawn and in reach, for the report */
     float match; /* how far the tufts are made the ground's colour under them, lit as it is (0 to 1) */
     float wind_speed, wind_turb; /* the sway's pace and how much it differs across the field, times its own (0 to 4; 0 still, 0 a field moving as one) */
     float blade_avg[DRAWN]; /* the drawn blades' pictures' mean shade (blade_quad_shade): 0 until they're made */
@@ -220,7 +224,7 @@ static struct
     float ring_at[3]; /* where rings 1-3 start, of the radius (their ramps' middles) */
     int show_rings;   /* draw them round the player (draw_rings) */
     int show_cover;   /* the tufts drawn by what the floors say of their place (grass.cover.show: floor_grows) */
-    uint32_t limit; /* about the most tufts drawn at once (kept_density thins them to it) */
+    uint32_t limit; /* about the most tufts drawn at once: what the density needs, grass.tufts a ceiling (tuft_limit; kept_density) */
     int want_reset; /* a pool or table ran out: everything is made again at the start of the next frame */
     uint32_t placed; /* tufts, sprites and flowers made this frame, against limit */
 
@@ -409,30 +413,7 @@ static void set_zone_listed(const char* textures)
         g.zsum += hash64(g.zlisted[i]);
 }
 
-/* the rings: in order outward, each keeping no more than the one inside it (a square is made with the share its nearest point keeps,
- * enough for all of it only when the share falls outward); each step a ramp a tenth of the radius wide, narrower where the rings are
- * closer than that */
-static void set_rings(const GrassSettings* in)
-{
-    static const float start0[3] = { 0.25f, 0.50f, 0.75f }, amount0[3] = { 0.80f, 0.50f, 0.30f };
-    float start[3], keep[4] = { 1.0f };
-    for (int i = 0; i < 3; ++i)
-    {
-        start[i] = clampf(in->rings_set ? in->ring[i] : start0[i], i ? start[i - 1] : 0.0f, 1.0f);
-        keep[i + 1] = clampf(in->rings_set ? in->ring_amount[i] : amount0[i], 0.0f, keep[i]);
-    }
-    for (int i = 0; i < 3; ++i)
-    {
-        const float before = i ? start[i] - start[i - 1] : start[i], after = (i < 2 ? start[i + 1] : 1.0f) - start[i];
-        const float half = minf(0.05f, 0.5f * minf(before, after));
-        g.ring_from[i] = start[i] - half, g.ring_to[i] = start[i] + maxf(half, 1e-4f);
-        g.ring_step[i] = keep[i] - keep[i + 1];
-        g.ring_keep[i + 1] = keep[i + 1];
-        g.ring_at[i] = start[i];
-    }
-    g.ring_keep[0] = 1.0f;
-    g.show_rings = in->show_rings;
-}
+#include "grass_rings.h" /* set_rings, ring_share, ring_level, kept_area, tuft_limit, kept_density: the rings and the most tufts */
 
 void grass_configure(const GrassSettings* in)
 {
@@ -441,7 +422,7 @@ void grass_configure(const GrassSettings* in)
     const float made_with[] = { g.radius, g.density, g.height, g.width, g.variation, g.brightness, g.flowers, g.flower_brightness,
         g.slope_cos, (float)g.limit, (float)g.flowers_only, g.ring_from[0], g.ring_from[1], g.ring_from[2], g.ring_keep[1], g.ring_keep[2],
         g.ring_keep[3], (float)g.edges, g.match, (float)g.walkable, g.pathpad, (float)g.overgrown, (float)g.shade, (float)g.show_cover,
-        (float)g.nowater, (float)g.moss };
+        (float)g.nowater, (float)g.moss, g.edge_fade, g.edge_low };
     g.enabled = in->enabled != 0;
     g.radius = clampf(in->radius, 4.0f, 500.0f);
     g.density = clampf(in->density, 0.1f, 100.0f);
@@ -453,6 +434,8 @@ void grass_configure(const GrassSettings* in)
     g.flower_brightness = clampf(in->flower_brightness, 0.05f, 10.0f);
     g.flowers_only = in->flowers_only != 0;
     g.edges = in->edges != 0;
+    g.edge_fade = clampf(in->edge_fade, 0.0f, 10.0f), g.edge_low = or_default(in->edge_low, 0.05f, 1.0f, 0.25f);
+    g.cull = in->cull != 0;
     g.match = clampf(in->match, 0.0f, 1.0f);
     g.wind_speed = clampf(in->wind_speed, 0.0f, 4.0f), g.wind_turb = clampf(in->wind_turbulence, 0.0f, 4.0f);
     /* what tex_sort sorts the textures by, and what's ground (grass.blended's layers, the zone's own ground textures) */
@@ -470,19 +453,19 @@ void grass_configure(const GrassSettings* in)
     g.build_ms = in->build_ms == 0.0f ? 1.5f : in->build_ms < 0.0f ? -1.0f : clampf(in->build_ms, 0.1f, 50.0f);
     g.slope_cos = cosf(clampf(in->slope, 5.0f, 85.0f) * 0.017453292f);
 
-    g.limit = in->limit < 1000 ? 1000 : in->limit > 1000000 ? 1000000 : in->limit;
     g.log = in->log != 0;
     set_listed(in->textures);
     set_zone_listed(in->ground);
     /* the side of the squares tufts are kept in: about a fifth of the reach's width */
     g.cell = clampf(g.radius * 0.4f, 8.0f, 32.0f);
     set_rings(in);
+    g.limit = tuft_limit(in->limit); /* (after the radius, the density and the rings, which it follows) */
     g.show_cover = in->show_cover != 0;
     const float sorted_now[] = { (float)g.dry, g.dry_sat, g.dry_hue, g.dirt, (float)g.blended, (float)(g.zsum & 0xFFFFFF) };
     const float now_with[] = { g.radius, g.density, g.height, g.width, g.variation, g.brightness, g.flowers, g.flower_brightness,
         g.slope_cos, (float)g.limit, (float)g.flowers_only, g.ring_from[0], g.ring_from[1], g.ring_from[2], g.ring_keep[1], g.ring_keep[2],
         g.ring_keep[3], (float)g.edges, g.match, (float)g.walkable, g.pathpad, (float)g.overgrown, (float)g.shade, (float)g.show_cover,
-        (float)g.nowater, (float)g.moss };
+        (float)g.nowater, (float)g.moss, g.edge_fade, g.edge_low };
     if (memcmp(made_with, now_with, sizeof made_with))
         kept_clear();
     zone_check();
@@ -618,6 +601,17 @@ static int tex_is_grass(const GTex* t)
 
 int grass_logging(void) { return g.zone_ok && g.log; }
 int grass_layers(void) { return g.zone_ok && g.blended; }
+int grass_rings_shown(void) { return g.zone_ok && g.show_rings; }
+
+void grass_rings_view(const float view[16], const float focus[4], float at[4], float off[4])
+{
+    memset(at, 0, 4 * sizeof(float)), memset(off, 0, 4 * sizeof(float));
+    if (focus[3] == 0.0f)
+        return;
+    for (int i = 0; i < 3; ++i)
+        at[i] = focus[0] * view[i] + focus[1] * view[4 + i] + focus[2] * view[8 + i] + view[12 + i];
+    at[3] = g.radius;
+}
 
 void grass_reject(uint64_t tex_hash, int reason)
 {
@@ -1308,6 +1302,8 @@ static void drop_instances(GMesh* m)
     m->inst_head = 0;
 }
 
+#include "grass_slope.h" /* slope_note, slope_light: the tufts lit by their ground's slope, as the game lights it */
+
 /* The light the game puts on a ground draw's upward faces, as D3D lights them: the ambient, and each directional light's (the sun's,
  * the moon's) ambient and its diffuse on a face looking up, a factor on the vertex colour (a zone's ground takes its diffuse and
  * ambient from it). Lamps (points, spots) light only near them: left out. Summed for the scene; grass.match lights the tufts by it.
@@ -1343,6 +1339,7 @@ static void ground_light_note(const GfxDraw* d)
     for (int k = 0; k < 3; ++k)
         g.lsum[k] += L[k];
     ++g.nlit;
+    slope_note(d);
 }
 
 #include "grass_layers.h" /* layer_new, layer_seen, layer_keeps: the blended ground's layers (grass.blended) */
@@ -1914,6 +1911,7 @@ static GInst* instance_for(const GDraw* dr, float minup, const float* focus, flo
                     continue;
                 }
             }
+            slope_normal(&w, src, W, nx / len, ny / len, nz / len); /* the normal it's lit by (grass_slope.h) */
             w.area = 0.5f * len;
             w.up = fabsf(ny) / len;
             memset(w.vup, (int)(w.up * 254.0f + 0.5f), sizeof w.vup); /* its own, until smooth_corners */
@@ -2656,126 +2654,7 @@ static int chunk_has(const GChunk* c, int kind)
     return 0;
 }
 
-/* The tufts' vertex function, vs.1.1 tokens (translated like the game's own, gfx_hlsl_shaders.c). In (PVert): v0 the root from the
- * square's middle and u, v8 the corner from the root and v, v5 its colour, v9 the keep draw and height band (PVert.keep). The
- * constants: c0-c3 the view-projection's columns, c4 the player, c6 (-1 / 0.2R, 5, the edge's thinning: -1 / (1 - KEEP_EDGE) R,
- * 1 / (1 - KEEP_EDGE)), c7 (0, 1, 0.3, 1e-6), c8 / c9 / c10 the sway's waves (x's share, z's, the time's, in turns), c11
- * (2, -1, 4, 32), c12 / c13 the rings' ramps (dd * c13 + c12, each 0 to 1) and c14 their steps, c15 the square's middle and its
- * roots' step (GChunk.org), c16 (the corners' step, 1 / 32767, the kind's sway share, 0), c17 the light on them (k, k, k, 1:
- * grass_set_light, times the colour). */
-#define VS_D(type, n, mask) (0x80000000u | ((uint32_t)(type) << 28) | ((uint32_t)(mask) << 16) | (n))
-#define VS_S(type, n, sw) (0x80000000u | ((uint32_t)(type) << 28) | ((uint32_t)(sw) << 16) | (n))
-#define VS_NEG(src) ((src) | (1u << 24))
-#define SW(a, b, c, d) ((a) | (b) << 2 | (c) << 4 | (d) << 6)
-#define XYZW SW(0, 1, 2, 3)
-#define XXXX SW(0, 0, 0, 0)
-#define YYYY SW(1, 1, 1, 1)
-#define ZZZZ SW(2, 2, 2, 2)
-#define WWWW SW(3, 3, 3, 3)
-#define TR(n, sw) VS_S(0, n, sw) /* r# */
-#define VR(n, sw) VS_S(1, n, sw) /* v# */
-#define CR(n, sw) VS_S(2, n, sw) /* c# */
-#define TD(n, mask) VS_D(0, n, mask)
-static const uint32_t g_tuft_vs[] = {
-    0xFFFE0101u, /* vs.1.1 */
-    /* r8: the root (w: how far the corner sways, its height over the root times the kind's share); r9: the corner from the root;
-     * r10: the texture coordinate */
-    4 /* mad */, TD(8, 0x7), VR(0, XYZW), CR(15, WWWW), CR(15, XYZW),
-    5 /* mul */, TD(9, 0x7), VR(8, XYZW), CR(16, XXXX),
-    11 /* max */, TD(8, 0x8), VS_NEG(TR(9, YYYY)), CR(7, XXXX),
-    5 /* mul */, TD(8, 0x8), TR(8, WWWW), CR(16, ZZZZ),
-    1 /* mov */, TD(10, 0xF), CR(7, SW(0, 0, 0, 1)),
-    5 /* mul */, TD(10, 0x1), VR(0, WWWW), CR(16, YYYY),
-    5 /* mul */, TD(10, 0x2), VR(8, WWWW), CR(16, YYYY),
-    /* r1.y: how far the root is from the player over the ground; r0.y: above or below */
-    3 /* sub */, TD(0, 0xF), TR(8, XYZW), CR(4, XYZW),
-    5 /* mul */, TD(1, 0xF), TR(0, XYZW), TR(0, XYZW),
-    2 /* add */, TD(1, 0x1), TR(1, XXXX), TR(1, ZZZZ),
-    2 /* add */, TD(1, 0x1), TR(1, XXXX), CR(7, WWWW),
-    7 /* rsq */, TD(1, 0x2), TR(1, XXXX),
-    5 /* mul */, TD(1, 0x2), TR(1, XXXX), TR(1, YYYY),
-    /* r2.x grown (whole to 0.8 R, nothing at R), r2.y kept (all to 0.65 R, none at R), r2.z this one kept */
-    4 /* mad */, TD(2, 0x3), TR(1, YYYY), CR(6, SW(0, 2, 0, 2)), CR(6, SW(1, 3, 1, 3)),
-    11 /* max */, TD(2, 0x3), TR(2, XYZW), CR(7, XXXX),
-    10 /* min */, TD(2, 0x3), TR(2, XYZW), CR(7, YYYY),
-    /* the rings: the share kept falls by c14's steps over c12/c13's ramps (whole near the player, then 80%, 50%, 30%) */
-    4 /* mad */, TD(7, 0x7), TR(1, YYYY), CR(13, XYZW), CR(12, XYZW),
-    11 /* max */, TD(7, 0x7), TR(7, XYZW), CR(7, XXXX),
-    10 /* min */, TD(7, 0x7), TR(7, XYZW), CR(7, YYYY),
-    8 /* dp3 */, TD(7, 0x8), TR(7, XYZW), CR(14, XYZW),
-    2 /* add */, TD(7, 0x8), CR(7, YYYY), VS_NEG(TR(7, WWWW)),
-    5 /* mul */, TD(2, 0x2), TR(2, YYYY), TR(7, WWWW),
-    13 /* sge */, TD(2, 0x4), TR(2, YYYY), VR(9, XXXX),
-    /* r3.z: within its height band (v9.y * 32) and 0.3 of the distance of the player's height */
-    11 /* max */, TD(3, 0x1), TR(0, YYYY), VS_NEG(TR(0, YYYY)),
-    5 /* mul */, TD(3, 0x2), VR(9, YYYY), CR(11, WWWW),
-    4 /* mad */, TD(3, 0x2), TR(1, YYYY), CR(7, ZZZZ), TR(3, YYYY),
-    13 /* sge */, TD(3, 0x4), TR(3, YYYY), TR(3, XXXX),
-    /* r2.w: the tuft's scale; r4 the vertex scaled about the root */
-    5 /* mul */, TD(2, 0x8), TR(2, XXXX), TR(2, ZZZZ),
-    5 /* mul */, TD(2, 0x8), TR(2, WWWW), TR(3, ZZZZ),
-    4 /* mad */, TD(4, 0x7), TR(9, XYZW), TR(2, WWWW), TR(8, XYZW),
-    1 /* mov */, TD(4, 0x8), CR(7, YYYY),
-    /* the sway: two waves over the field (x, z), each sin(pi y) of y = 2 frac(turns) - 1 as 4 y (1 - |y|) */
-    5 /* mul */, TD(5, 0x3), TR(8, XXXX), CR(8, XYZW),
-    4 /* mad */, TD(5, 0x3), TR(8, ZZZZ), CR(9, XYZW), TR(5, XYZW),
-    2 /* add */, TD(5, 0x3), TR(5, XYZW), CR(10, XYZW),
-    19 /* frc */, TD(5, 0x3), TR(5, XYZW),
-    4 /* mad */, TD(5, 0x3), TR(5, XYZW), CR(11, XXXX), CR(11, YYYY),
-    11 /* max */, TD(6, 0x3), TR(5, XYZW), VS_NEG(TR(5, XYZW)),
-    2 /* add */, TD(6, 0x3), CR(7, YYYY), VS_NEG(TR(6, XYZW)),
-    5 /* mul */, TD(5, 0x3), TR(5, XYZW), TR(6, XYZW),
-    5 /* mul */, TD(5, 0x3), TR(5, XYZW), CR(11, ZZZZ),
-    5 /* mul */, TD(6, 0x1), TR(8, WWWW), TR(2, WWWW),
-    4 /* mad */, TD(4, 0x1), TR(5, XXXX), TR(6, XXXX), TR(4, XXXX),
-    4 /* mad */, TD(4, 0x4), TR(5, YYYY), TR(6, XXXX), TR(4, ZZZZ),
-    20 /* m4x4 */, VS_D(4, 0, 0xF) /* oPos */, TR(4, XYZW), CR(0, XYZW),
-    5 /* mul */, VS_D(5, 0, 0xF) /* oD0 */, VR(5, XYZW), CR(17, XYZW),
-    1 /* mov */, VS_D(6, 0, 0xF) /* oT0 */, TR(10, XYZW),
-    0x0000FFFFu,
-};
-
-/* The rings (grass_configure, from grass.ring1-3 and .amount): the share of the tufts kept by their distance over the radius - all of
- * them near the player, then less ring by ring (80%, 50% and 30% unless set) - each step a short ramp, so the range can reach farther
- * for the same tufts; past KEEP_EDGE of the radius the last ring thins to none at it (and the tufts shrink from 0.8 of it). A tuft's
- * keep draw is its own, so the 30% kept far off are among the 50% and the 80% nearer in: walking toward a field adds tufts, it never
- * swaps them. */
-#define KEEP_EDGE 0.85f
-
-/* the share kept dd from the player (the vertex function's, on the CPU) */
-static float ring_share(float dd)
-{
-    const float R = g.radius, at = dd / R;
-    float f = 1.0f;
-    for (int i = 0; i < 3; ++i)
-        f -= g.ring_step[i] * clampf((at - g.ring_from[i]) / (g.ring_to[i] - g.ring_from[i]), 0.0f, 1.0f);
-    return f * clampf((R - dd) / ((1.0f - KEEP_EDGE) * R), 0.0f, 1.0f);
-}
-
-/* the share a square is made with, whose nearest point is dd from the player: the least of the rings' that is enough there (a square
- * nearer than that holds tufts it can't show yet, never too few) */
-static float ring_level(float dd)
-{
-    const float f = ring_share(dd);
-    for (int i = 3; i > 0; --i)
-        if (f <= g.ring_keep[i])
-            return g.ring_keep[i];
-    return 1.0f;
-}
-
-/* tufts to a square yalm: grass.density, but not more than the limit over the ground the rings keep (in tufts, a disc of the radius
- * weighed by the share each ring keeps): a wide range thins them evenly rather than leaving the far side bare */
-static float kept_density(void)
-{
-    const float R = g.radius;
-    float area = 0.0f;
-    for (int i = 0; i < 64; ++i)
-    {
-        const float r = (i + 0.5f) * R / 64.0f;
-        area += ring_share(r) * 6.2831853f * r * (R / 64.0f);
-    }
-    return minf(g.density, (float)g.limit * 0.7f / maxf(area, 1.0f));
-}
+#include "grass_vs.h" /* g_tuft_vs: the tufts' vertex function */
 
 /* room for `verts` more of a kind's vertices in the square being made, or NULL */
 static KVert* kept_room(int kind, uint32_t verts)
@@ -2920,6 +2799,8 @@ static void build_finish(GChunk* c)
     ++c->nlay;
 }
 
+#include "grass_edges.h" /* edge_grow: the tufts shorter near where the grass ends (grass.edge.fade) */
+
 /* the square in hand made on, triangle by triangle, until `deadline` (gfx_now_ns) or the layer is done: 1 done with it (made,
  * or the square is gone), 0 the rest of it waits for the next frame */
 static int build_step(uint64_t deadline)
@@ -3006,12 +2887,15 @@ static int build_step(uint64_t deadline)
             const int grows = floor_grows(pos, g_build.soil);
             if (!grows)
                 continue; /* no ground the player could stand on (grass.walkable): a cart's top, a crate's, a tree's boughs */
-            const uint32_t keep = 0xFF000000u | kd << 16 | band << 8;
+            const uint32_t keep = (uint32_t)tri->lnz << 24 | kd << 16 | band << 8 | tri->lnx; /* (the slope's normal: grass_slope.h) */
             const float tone = 0.88f + 0.24f * rnd01(sd + 3u);
             float vf[3], col[3];
             for (int i = 0; i < 3; ++i)
                 vf[i] = clampf(vc[i] / 255.0f * 2.0f, 0.4f, 1.3f), col[i] = (float)texel[i] / 255.0f * vf[i] * tone * g.brightness * 1.15f;
-            const float grow = 0.45f + 0.55f * flat; /* the slope's share; the radius's is the vertex function's */
+            /* how far it may reach out across the ground before the brink: a tuft wider than twice that is made smaller to fit, none
+             * under a third of its size */
+            const float room = edgy ? brink(tri, pos) : 1e30f;
+            const float grow = edge_grow(tri, tx, b, pos, flat, room); /* the slope's and the edge's share; the radius's is the vertex function's */
             if (grows == GROW_MOSS) /* shallow water with grass.moss: the spot's cushions of moss, and nothing else */
             {
                 tufts += moss_spot(pos, col, g_build.moss_lift, keep, sd, grow);
@@ -3019,9 +2903,6 @@ static int build_step(uint64_t deadline)
             }
             const float h = maxf(0.04f, g.height * (1.0f + (2.0f * rnd01(sd + 4u) - 1.0f) * g.variation)) * grow;
             const float light = (vf[0] + vf[1] + vf[2]) * (1.0f / 3.0f);
-            /* how far it may reach out across the ground before the brink: a tuft wider than twice that is made smaller to fit, none
-             * under a third of its size */
-            const float room = edgy ? brink(tri, pos) : 1e30f;
             /* the place's tuft: an asset chosen by weight, the drawn blades in the ground's own colour or a picture's sprite */
             if (!g.flowers_only && g.wsum > 0.0f)
             {
@@ -3400,6 +3281,29 @@ static void kind_light(int flower, float c17[4])
         c17[i] = powf(g.light_shown, 1.0f - m) * (m > 0.0f ? powf(clampf(g.ground_shown[i], 0.05f, 4.0f), m) : 1.0f);
 }
 
+/* the camera's four side planes (its view times projection, row vectors: a point p is in view while p . plane + plane[3] >= 0 for
+ * each, w + x, w - x, w + y and w - y), for grass.cull; behind the camera fails them all */
+static void view_planes(const GfxScene* s, float pl[4][4])
+{
+    float m[16];
+    mat_mul(m, s->view, s->proj);
+    for (int i = 0; i < 4; ++i)
+        for (int r = 0; r < 4; ++r)
+            pl[i][r] = m[r * 4 + 3] + ((i & 1) ? -1.0f : 1.0f) * m[r * 4 + (i >> 1)];
+}
+
+/* a layer of a square in view (grass.cull): its roots' box (their middle and half span, a cube) widened by its tallest corner's
+ * reach from its root and the sway, outside none of the planes */
+static int layer_in_view(const GLayer* L, const float pl[4][4])
+{
+    const float e = 32000.0f * (L->org[3] + 1.2f * L->step) + 0.25f;
+    for (int i = 0; i < 4; ++i)
+        if (pl[i][0] * L->org[0] + pl[i][1] * L->org[1] + pl[i][2] * L->org[2] + pl[i][3] +
+                (fabsf(pl[i][0]) + fabsf(pl[i][1]) + fabsf(pl[i][2])) * e < 0.0f)
+            return 0;
+    return 1;
+}
+
 /* this frame's tufts: the kept squares in reach drawn, those not kept yet (or too thin for their ring now) made first, the nearest
  * first; t the time, for the sway */
 static void kept_draw(GfxTex* color, GfxTex* depth, const GfxScene* s, float t)
@@ -3533,6 +3437,9 @@ static void kept_draw(GfxTex* color, GfxTex* depth, const GfxScene* s, float t)
     static GfxDraw d;
     kept_state(&d, s);
     gfx_set_targets(color, 0, 0, depth);
+    float pl[4][4];
+    view_planes(s, pl);
+    g.quads_in = g.quads_all = 0;
     for (int kind = 0; kind < KINDS; ++kind)
     {
         GfxTex* tex = tex_of[kind];
@@ -3546,6 +3453,7 @@ static void kept_draw(GfxTex* color, GfxTex* depth, const GfxScene* s, float t)
                                                   : kind < DRAWN || kind == MOSS ? 5 /* MODULATE2X: keep_blades' and keep_moss's are halved */ : 4 /* MODULATE */),
             2 /* TEXTURE */, 0 /* DIFFUSE */, 1, 4, 2, 0, 1, 1, 1, 0, 2 };
         kind_light(kind == FLOWERS || (sprite && g.asset[kind].flower), d.u.vsc[17]);
+        slope_light(kind == FLOWERS || (sprite && g.asset[kind].flower), s, d.u.vsc);
         d.u.params[1] = sprite ? 120.0f : 100.0f;
         d.tex[0] = tex;
         /* clamped, not wrapped: with wrap the linear filter at a quad's top edge blends in the opaque blade bases from the picture's
@@ -3561,6 +3469,10 @@ static void kept_draw(GfxTex* color, GfxTex* depth, const GfxScene* s, float t)
                 const GLayer* L = &c->lay[l];
                 if (!L->n[kind] || !L->buf)
                     continue;
+                g.quads_all += L->n[kind] / 4;
+                if (g.cull && !layer_in_view(L, pl))
+                    continue;
+                g.quads_in += L->n[kind] / 4;
                 memcpy(d.u.vsc[15], L->org, sizeof L->org);
                 d.u.vsc[16][0] = L->step;
                 /* the kind's corners, four a quad: where they start in the buffer, as d3d8.c gives a static buffer's (not
@@ -3591,7 +3503,7 @@ static void draw_rings(GfxTex* color, GfxTex* depth, const GfxScene* s)
         uint32_t col;
     } RVert;
     static RVert v[LINES * SEG * 6];
-    static const uint32_t col[LINES] = { 0xFF40FF40u, 0xFFFFE040u, 0xFFFF8020u, 0xFF40A0FFu, 0xFFFF3030u };
+    static const uint32_t col[LINES] = { 0xFF40FF40u, 0xFFFFE040u, 0xFFFF8020u, 0xFF40A0FFu, 0xFFFF3030u }; /* (gfx_hlsl.h GRASS_RINGS_HLSL's) */
     const float R = g.radius, at[LINES] = { g.ring_at[0] * R, g.ring_at[1] * R, g.ring_at[2] * R, 0.8f * R, R };
     const float fx = s->focus[0], fy = s->focus[1] - 0.05f, fz = s->focus[2];
     uint32_t n = 0;
@@ -3705,10 +3617,12 @@ static void scene_one(GfxTex* color, GfxTex* depth, const GfxScene* s)
         {
             g.next_report = now + 3000000000ull;
             const double per = g.frames ? 1e-6 / g.frames : 0.0;
-            char nearest[160];
+            char nearest[224];
             if (g.near_d < 1e29f)
-                snprintf(nearest, sizeof nearest, "nearest ground piece %.1f from you (texture %016llx), %u squares of tufts in reach (%.1f MB kept)",
-                    maxf(g.near_d, 0.0f), (unsigned long long)g.near_tex, g.reach_tris, (double)g_kept.bytes / 1048576.0);
+                snprintf(nearest, sizeof nearest, "nearest ground piece %.1f from you (texture %016llx), %u squares of tufts in reach (%.1f MB kept, "
+                    "%u%% of their quads in view%s)", maxf(g.near_d, 0.0f), (unsigned long long)g.near_tex, g.reach_tris,
+                    (double)g_kept.bytes / 1048576.0, g.quads_all ? (unsigned)((uint64_t)g.quads_in * 100u / g.quads_all) : 100u,
+                    g.cull ? "" : ", grass.cull off");
             else
                 snprintf(nearest, sizeof nearest, "no ground piece near you");
             rt_log("[recomp] grass: %u ground draws, %u meshes (%u new, %u unusable), %u pieces (%u new), %u tufts, %u flowers%s, textures %u; %s; "

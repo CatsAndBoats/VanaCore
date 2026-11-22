@@ -190,6 +190,7 @@ void read_folder(const std::wstring& folder, bool shipped, std::vector<Asset>& o
         a.info.id = narrow(file.substr(0, file.size() - 5));
         a.info.name = v.get_string("name", a.info.id);
         a.info.kind = v.get_string("kind", "plant");
+        a.info.amount = static_cast<float>(std::clamp(v.get_number("default", 0.0), 0.0, 1000.0));
         a.info.shipped = shipped;
         a.folder = folder;
         a.dat = v.get_string("dat");
@@ -248,8 +249,8 @@ bool recipe_pixels(const Asset& a, const std::wstring& ffxi, std::map<std::wstri
 // keeps the id the drawn blades always had ("blades", on until set); type 1 is off until switched on.
 std::vector<Info> drawn_blades()
 {
-    return { { "blades1", "Blade grass Type 1 (drawn)", "grass", true },
-             { "blades", "Blade grass Type 2 (drawn)", "grass", true } };
+    return { { "blades1", "Blade grass Type 1 (drawn)", "grass", true, false, 20.0f },
+             { "blades", "Blade grass Type 2 (drawn)", "grass", true, false, 100.0f } };
 }
 
 // The catalogue read again, its pictures handed to the grass (indices kDrawn on; the ones no longer there cleared).
@@ -259,17 +260,21 @@ std::map<int, float> g_dirt;
 float g_dirt_rest = 50.0f;
 bool g_dirt_read = false;
 std::set<int> g_blended;
+std::string g_solo; // solo(): the asset shown alone (send_weights), "" none; under g_lock
+std::map<int, float> g_pathpad; // pathpad(): the zones' own, and g_pathpad_rest the rest's
+float g_pathpad_rest = 0.25f;
 std::map<int, std::string> g_ground; // ground(): the zones' own grass ground textures
 std::set<int> g_bare;                 // grows(): the zones with no grass at all
 
 // addons\vanacore\vana\data\grass_dirt.json, VanaCore's own: { "default": 50, "zones": { "238": { "name": "Windurst Waters",
 // "dirt": 60 }, "121": { "name": "The Sanctuary of Zi'Tah", "blended": true, "ground": [ "65b719e367503797" ] }, "245": {
 // "name": "Lower Jeuno", "grass": false }, ... } } (a zone's entry may be the level alone; "ground" the textures that are grass
-// there whatever their colours say; "grass": false none grows there). Levels 1 to 100; without the file every zone is 50, grows
-// grass and none grows on blended ground
+// there whatever their colours say; "grass": false none grows there; "pathpad" yalms kept bare by a path, the top level's for the
+// zones without one). Levels 1 to 100; without the file every zone is 50, grows grass, none grows on blended ground, padding 0.25
 void read_dirt()
 {
     g_dirt.clear(), g_dirt_rest = 50.0f, g_dirt_read = true, g_blended.clear(), g_ground.clear(), g_bare.clear();
+    g_pathpad.clear(), g_pathpad_rest = 0.25f;
     const std::wstring path = g_dir + L"\\addons\\vanacore\\vana\\data\\grass_dirt.json";
     std::string text, error;
     json::Value v;
@@ -282,13 +287,16 @@ void read_dirt()
         return;
     }
     const auto level = [](double x) { return static_cast<float>(std::clamp(x, 1.0, 100.0)); };
-    g_dirt_rest = level(v.get_number("default", 50.0));
+    const auto pad = [](double x) { return static_cast<float>(std::clamp(x, 0.0, 4.0)); };
+    g_dirt_rest = level(v.get_number("default", 50.0)), g_pathpad_rest = pad(v.get_number("pathpad", 0.25));
     if (const json::Value* zones = v.find("zones"); zones != nullptr && zones->is_object())
         for (const auto& [key, z] : zones->object) {
             const int id = std::atoi(key.c_str());
             const json::Value* dirt = z.is_object() ? z.find("dirt") : &z;
             if (id > 0 && dirt != nullptr && dirt->is_number())
                 g_dirt[id] = level(dirt->number);
+            if (const json::Value* p = z.is_object() ? z.find("pathpad") : nullptr; id > 0 && p != nullptr && p->is_number())
+                g_pathpad[id] = pad(p->number);
             const json::Value* layered = z.is_object() ? z.find("blended") : nullptr;
             if (id > 0 && layered != nullptr && layered->is_bool() && layered->boolean)
                 g_blended.insert(id);
@@ -299,8 +307,10 @@ void read_dirt()
                     if (t.is_string())
                         g_ground[id] += (g_ground[id].empty() ? "" : " ") + t.string;
         }
-    log::write(L"Graphics: grass: dirt levels for %u zones, %g for the rest; %u zones grow on blended ground, %u none at all (data\\grass_dirt.json)",
-               static_cast<unsigned>(g_dirt.size()), g_dirt_rest, static_cast<unsigned>(g_blended.size()), static_cast<unsigned>(g_bare.size()));
+    log::write(L"Graphics: grass: dirt levels for %u zones, %g for the rest; %u zones grow on blended ground, %u none at all; path "
+               L"padding for %u zones, %g for the rest (data\\grass_dirt.json)",
+               static_cast<unsigned>(g_dirt.size()), g_dirt_rest, static_cast<unsigned>(g_blended.size()), static_cast<unsigned>(g_bare.size()),
+               static_cast<unsigned>(g_pathpad.size()), g_pathpad_rest);
 }
 
 void load()
@@ -370,12 +380,18 @@ void load()
 void send_weights()
 {
     std::lock_guard<std::mutex> lock(g_lock);
+    const bool solo_here = std::any_of(g_assets.begin(), g_assets.end(), [](const Asset& a) { return a.info.id == g_solo; });
     for (std::size_t i = 0; i < g_assets.size(); ++i) {
-        const std::wstring key = L"grass.asset." + widen(g_assets[i].info.id);
-        const bool blades = g_assets[i].info.id == "blades"; // the drawn blades of type 2: on, 100 until set; the rest 0
-        const bool on = GetPrivateProfileIntW(L"graphics", key.c_str(), blades ? 1 : 0, g_ini.c_str()) != 0;
+        const Info& info = g_assets[i].info;
+        if (solo_here) { // shown alone (solo()): it whole, whatever its share, the rest none
+            vanacore_gfx_grass_weight(static_cast<unsigned>(i), info.id == g_solo ? 100.0f : 0.0f);
+            continue;
+        }
+        const std::wstring key = L"grass.asset." + widen(info.id);
+        // until set, its file's default (the drawn blades' in drawn_blades): on with a share over 0
+        const bool on = GetPrivateProfileIntW(L"graphics", key.c_str(), info.amount > 0.0f ? 1 : 0, g_ini.c_str()) != 0;
         wchar_t text[32] = {};
-        GetPrivateProfileStringW(L"graphics", (key + L".amount").c_str(), blades ? L"100" : L"0", text, 32, g_ini.c_str());
+        GetPrivateProfileStringW(L"graphics", (key + L".amount").c_str(), std::to_wstring(info.amount).c_str(), text, 32, g_ini.c_str());
         float amount = static_cast<float>(_wtof(text));
         amount = amount < 0.0f ? 0.0f : amount > 1000.0f ? 1000.0f : amount;
         vanacore_gfx_grass_weight(static_cast<unsigned>(i), on ? amount : 0.0f);
@@ -570,6 +586,51 @@ bool blended(int zone)
     if (!g_dirt_read)
         read_dirt();
     return g_blended.count(zone) != 0;
+}
+
+void solo(const std::string& id)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        g_solo = id;
+    }
+    send_weights();
+}
+
+std::string solo_id()
+{
+    std::lock_guard<std::mutex> lock(g_lock);
+    return g_solo;
+}
+
+float pathpad(int zone, float rest)
+{
+    if (g_dir.empty())
+        return rest;
+    if (!g_dirt_read)
+        read_dirt();
+    const auto found = g_pathpad.find(zone);
+    return found != g_pathpad.end() ? found->second : rest;
+}
+
+float pathpad_default()
+{
+    if (!g_dir.empty() && !g_dirt_read)
+        read_dirt();
+    return g_pathpad_rest;
+}
+
+bool pathpad_own(float& value)
+{
+    if (g_dir.empty())
+        return false;
+    if (!g_dirt_read)
+        read_dirt();
+    const auto found = g_pathpad.find(g_zone);
+    if (found == g_pathpad.end())
+        return false;
+    value = found->second;
+    return true;
 }
 
 std::string ground(int zone)
