@@ -4399,9 +4399,18 @@ local TABS = {
                 needs_dx(slider('Glint size', 'graphics', 'water.glint.size', 1, 0.2, 4, 0.05)),
                 -- Mass Grass (src/gfx/grass.c): tufts and flowers scattered on the zone's grass-textured ground round the player;
                 -- shown as Game Options' last sub-tab since 2026-11-06, it was the Experimental page's (vana.lua MOVED_PANELS)
+                -- reset_also: its settings no longer on the panel, taken out by its reset too (reset_rows). grass.tufts and grass.limit
+                -- are the old Most tufts ceiling (24 thousand by default until 2026-11-22, written by any preset loaded before then):
+                -- left in with the new Range of 150 it spread the tufts to a fortieth of the default's, and Reset left it
                 needs_dx({ kind = 'header', text = 'Mass Grass', section = 'graphics', key = 'grass',
                            switch = { get = function () return tonumber(vana.config.get('graphics', 'grass') or '') == 1 end,
-                                      set = function (on) vana.config.set('graphics', 'grass', on and '1' or '0') end } }),
+                                      set = function (on) vana.config.set('graphics', 'grass', on and '1' or '0') end },
+                           reset_also = { { 'graphics', 'grass.tufts' }, { 'graphics', 'grass.limit' },
+                                          { 'graphics', 'grass.ring1' }, { 'graphics', 'grass.ring1.amount' },
+                                          { 'graphics', 'grass.ring2' }, { 'graphics', 'grass.ring2.amount' },
+                                          { 'graphics', 'grass.ring3' }, { 'graphics', 'grass.ring3.amount' },
+                                          { 'graphics', 'grass.dry.saturation' }, { 'graphics', 'grass.dry.hue' },
+                                          { 'graphics', 'grass.textures' }, { 'graphics', 'grass.blended' } } }),
                 note("Made for West Ronfaure; other zones are untried. It's a work in progress: the grass is drawn over the ground the game "
                      .. "already shows, where its texture is grass. A wider range and a higher quantity cost frame rate."),
                 subheader('Coverage'),
@@ -6725,8 +6734,27 @@ local function switch_row(row)
     return (row.kind == 'toggle' and not row.resets) or row.switch ~= nil
 end
 
--- Rows' settings back to their defaults (their keys taken out of vanacore.ini), the on/off switches as they are
-local function reset_rows(rows)
+-- With `switches` (a panel's Reset button, vana.lua draw_heading): a switch in the panel back to its default too: a toggle's
+-- key taken out, a sub-panel switched as an effect (effect_sub) its strength and switch, a colours line's switch. One whose
+-- default its row doesn't say (a get and set of its own: True Font's, DLSS 5's, Night time's) stays, and so does the panel's
+-- own, on its heading (2026-11-22: Reset left Mass Grass's Dry grass and Shaded ground as a player had them)
+local function switch_reset(row)
+    if row.kind == 'toggle' and resettable(row) then
+        vana.config.set(row.section, row.key, nil)
+        return true
+    end
+    if row.kind == 'subheader' and row.effect and resettable(row) then
+        vana.config.set(row.section, row.key, nil)
+        vana.config.set(row.section, row.key .. '.enabled', nil)
+        return true
+    end
+    return false
+end
+
+-- Rows' settings back to their defaults (their keys taken out of vanacore.ini), the on/off switches as they are unless
+-- `switches` (switch_reset). A row's reset_also ({ { section, key } }: a heading's settings no longer on its panel, Mass
+-- Grass's old Most tufts ceiling) taken out with it, whatever resets it: the panel's reset, Reset all settings
+local function reset_rows(rows, switches)
     flush()
     local live = false
     -- an effect off by default (its strength's default 0: reflections, the cel look) has its strength's slider set to the
@@ -6751,10 +6779,21 @@ local function reset_rows(rows)
         return true
     end
     for _, row in ipairs(rows) do
-        if switch_row(row) then
+        for _, also in ipairs(row.reset_also or {}) do
+            vana.config.set(also[1], also[2], nil)
+            live = live or LIVE_GRAPHICS[also[1]]
+        end
+        if switches and switch_reset(row) then
+            live = live or LIVE_GRAPHICS[row.section]
+        elseif switch_row(row) then
             -- left on or off
         elseif row.reset ~= nil then -- a setting kept elsewhere (a window's place: vana.layout)
             row.reset()
+            local toggle = row.toggle -- (a colours line's switch: colours_line)
+            if switches and toggle ~= nil and resettable(toggle) then
+                vana.config.set(toggle.section, toggle.key, nil)
+                live = live or LIVE_GRAPHICS[toggle.section]
+            end
         elseif resettable(row) then
             if row.effect then
                 -- on while it isn't switched off and its strength is above 0 (effect_on): the strength's default

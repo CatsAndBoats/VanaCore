@@ -3418,20 +3418,49 @@ local function draw_heading(page, sec, x, y, w, over_title)
             break
         end
     end
+    -- A main option's (a heading with a switch: an effect, Mass Grass, the water, DLSS) is a Reset button beside its switch,
+    -- asked twice as Vanilla UI is, that puts the panel's switches back too (data.lua switch_reset) and the settings its
+    -- heading names that aren't on the panel (reset_also); the heading's own switch stays as it is. The icon alone left
+    -- the switches, so a player's "reset everything" kept Mass Grass's Dry grass, Shaded ground and plants as they were
+    -- (2026-11-22). Any other section keeps the icon, which leaves its switches.
     if has_settings or M.resettable(head) then
-        local reset_clicked, reset_hovered = M.icon_button('##' .. sec.key .. '.reset', line_end - S(8), cy, 'reset', 9, P.text, P.faint)
-        if reset_clicked then
+        local function reset(switches)
             local rows = { head }
             for _, row in ipairs(with_assets(sec.rows)) do
                 rows[#rows + 1] = row
             end
-            M.reset_rows(rows)
+            M.reset_rows(rows, switches)
             st.picker = nil
         end
-        if reset_hovered then
-            M.tooltip('Reset ' .. sec.title .. ' to the defaults')
+        if head.effect or head.switch ~= nil then
+            local now, confirm_id = clock(), '##reset.' .. sec.key
+            local asking = st.confirm ~= nil and st.confirm.name == confirm_id and now - st.confirm.at < 3
+            local bw = math.max(M.button_width('Reset', 'reset'), M.button_width('Sure?', 'reset'))
+            local clicked = M.button('##' .. sec.key .. '.reset', line_end - bw, cy, asking and 'Sure?' or 'Reset', 'reset',
+                                     asking and 'danger' or 'neutral', true, nil, nil, bw)
+            if imgui.IsItemHovered() then
+                M.tooltip(asking and 'Click again to put every ' .. sec.title .. ' setting back to its default'
+                          or 'Every ' .. sec.title .. ' setting back to its default, the switches in it too.\nThe switch beside this stays as it is.')
+            end
+            if clicked then
+                if asking then
+                    st.confirm = nil
+                    reset(true)
+                else
+                    st.confirm = { name = confirm_id, at = now }
+                end
+            end
+            line_end = line_end - bw - S(10)
+        else
+            local reset_clicked, reset_hovered = M.icon_button('##' .. sec.key .. '.reset', line_end - S(8), cy, 'reset', 9, P.text, P.faint)
+            if reset_clicked then
+                reset(false)
+            end
+            if reset_hovered then
+                M.tooltip('Reset ' .. sec.title .. ' to the defaults')
+            end
+            line_end = line_end - S(24)
         end
-        line_end = line_end - S(24)
     end
     -- an addon's page (Layout's section): Unload beside the reset, what its switch on the List does when switched off
     -- (unloaded, and not loaded at the next start either). Its windows go with it, so the List shows after.
