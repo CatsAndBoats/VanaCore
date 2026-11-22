@@ -2,6 +2,8 @@
 
 #include <string>
 
+struct lua_State;
+
 namespace vanacore::client {
 
 // Reads [client] retail from `ini` (the game's copy of the settings file), or takes `forced` (VanaCore.exe's --retail). Call
@@ -18,5 +20,14 @@ bool retail();
 // (PlayOnline as installed). Set once as the core installs, before anything asks server().
 void set_server(const wchar_t* host);
 const std::string& server();
+
+// The server's own name, as its lobby gives it in the world list (what the character list shows as the world:
+// "CatsEyeXI"); empty until the lobby has sent it, and for PlayOnline as installed. Set by the loader as the reply comes
+// (loader.cpp), on the game's thread or the lobby's.
+void set_server_name(const std::string& name);
+std::string server_name();
+
+// vana.game.server (the table on the stack is vana.game)
+void add_lua(lua_State* L);
 
 } // namespace vanacore::client

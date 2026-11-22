@@ -36,6 +36,7 @@
 #include "camera.hpp"
 #include "damagetext.hpp"
 #include "chat.hpp"
+#include "client.hpp"
 #include "clients.hpp"
 #include "clipboard.hpp"
 #include "compat/ashita/host.hpp"
@@ -2755,6 +2756,7 @@ void open_game(lua_State* L)
     lua_entity::add(L); // entity, entity_by_id, vitals
     lua_maxhp::add(L);  // native_request_max_hp, native_max_hp_answers (lua/vana.lua's request_max_hp wraps them)
     zoneload::add_lua(L); // loading
+    client::add_lua(L);   // server
     set_function(L, "entity_count", &game_entity_count);
     set_function(L, "party", &game_party);
     set_function(L, "player", &game_player);

@@ -19,6 +19,7 @@
 #include <mutex>
 #include <string>
 
+#include "client.hpp"
 #include "imports.hpp"
 #include "log.hpp"
 #include "scan.hpp"
@@ -246,6 +247,27 @@ int WINAPI connect_traced(SOCKET socket, const sockaddr* to, int length)
     return result;
 }
 
+// The lobby's world list (0x23, lpkt_world_list): how many worlds at 28, then each as its number (4 bytes) and its name (16).
+// A private server sends one, its own name, the one the character list shows: kept for addons (vana.game.server).
+void on_world_list(const char* data, int size)
+{
+    if (size < 52 || std::memcmp(data + 4, "IXFF", 4) != 0 || static_cast<unsigned char>(data[8]) != 0x23)
+        return;
+    std::uint32_t worlds = 0;
+    std::memcpy(&worlds, data + 28, sizeof(worlds));
+    if (worlds == 0)
+        return;
+    std::string name;
+    for (int i = 0; i < 16 && data[36 + i] != '\0'; ++i) {
+        const unsigned char c = static_cast<unsigned char>(data[36 + i]);
+        name += c >= 0x20 && c < 0x7F ? static_cast<char>(c) : '?';
+    }
+    while (!name.empty() && name.back() == ' ')
+        name.pop_back();
+    if (!name.empty())
+        client::set_server_name(name);
+}
+
 int WINAPI recv_traced(SOCKET socket, char* data, int size, int flags)
 {
     const int result = g_recv(socket, data, size, flags);
@@ -255,8 +277,10 @@ int WINAPI recv_traced(SOCKET socket, char* data, int size, int flags)
         if (peer_of(socket, peer) && traced_peer(peer) && tracing())
             log::write(L"Lobby: from %hs, %d bytes: %ls", address_text(peer).c_str(), result,
                        result > 0 ? head(data, result).c_str() : L"(closed or failed)");
-    if (result > 0 && (flags & MSG_PEEK) == 0)
+    if (result > 0 && (flags & MSG_PEEK) == 0) {
         zonelink::on_lobby_reply(data, result);
+        on_world_list(data, result);
+    }
     SetLastError(error);
     return result;
 }

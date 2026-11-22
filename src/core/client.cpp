@@ -4,7 +4,10 @@
 
 #include <vanacore/version.hpp>
 
+#include <lua.hpp>
+
 #include <atomic>
+#include <mutex>
 #include <string>
 
 #include "log.hpp"
@@ -20,6 +23,25 @@ constexpr DWORD kAsk = 200;         // ms a window's own thread has to answer be
 std::atomic<bool> g_retail{false};
 std::atomic<int> g_marked{0};
 std::string g_server; // set_server's, lower case
+std::mutex g_name_lock;
+std::string g_server_name; // set_server_name's, under g_name_lock
+
+// vana.game.server() -> { name = the server's own name (nil until its lobby has sent the world list), host = the address
+// VanaCore was given for it (nil for PlayOnline as installed) }
+int lua_server(lua_State* L)
+{
+    lua_createtable(L, 0, 2);
+    const std::string name = server_name();
+    if (!name.empty()) {
+        lua_pushlstring(L, name.data(), name.size());
+        lua_setfield(L, -2, "name");
+    }
+    if (!g_server.empty()) {
+        lua_pushlstring(L, g_server.data(), g_server.size());
+        lua_setfield(L, -2, "host");
+    }
+    return 1;
+}
 
 // `window`'s title, asked of its own thread with a time limit (a window whose thread is busy isn't waited for)
 bool title_of(HWND window, std::wstring& text)
@@ -94,6 +116,29 @@ void set_server(const wchar_t* host)
 const std::string& server()
 {
     return g_server;
+}
+
+void set_server_name(const std::string& name)
+{
+    {
+        const std::lock_guard lock(g_name_lock);
+        if (name == g_server_name)
+            return;
+        g_server_name = name;
+    }
+    log::write(L"Server: its lobby names it %hs", name.c_str());
+}
+
+std::string server_name()
+{
+    const std::lock_guard lock(g_name_lock);
+    return g_server_name;
+}
+
+void add_lua(lua_State* L)
+{
+    lua_pushcfunction(L, &lua_server);
+    lua_setfield(L, -2, "server");
 }
 
 } // namespace vanacore::client

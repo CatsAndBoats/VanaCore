@@ -75,6 +75,7 @@ Events: `load`, `unload`, `present`, `command`, `unhandled`, `text_in`, `text_ou
 | `vana.game.set_target(index) → bool` | Target that entity |
 | `vana.game.world() → table` | `server_time`, `weather`, `chat_open` |
 | `vana.game.zoning() → bool` | Between zones |
+| `vana.game.server() → table` | `name` (the server's own name, from its lobby's world list: `'CatsEyeXI'`; `nil` until it has come), `host` (the address VanaCore was given for it, lower case; `nil` for PlayOnline as installed) |
 | `vana.game.loading() → table?` | A zone (or the login's first zone) loading: `phase` (`server`, `zone`, `people`), `login`, `zone`, `previous`, `elapsed`, `ready`, `zone_files`, `zone_expected`, `people_files`, `people_expected`, `file`, `step` (`leaving`, `connecting`, `waiting`), `wait`, `answer`, `out_type`; nil when none is |
 | `vana.game.player_zone(listed) → zone` | The zone-in's zone until the party list has it |
 | `vana.game.zone_weathers(zone) → ids \| nil` | The weathers (0x057's ids, lowest first) the zone's model DAT has a sky and light for, the DAT the game loads (pivot's overlays too); nil if it can't be read |
