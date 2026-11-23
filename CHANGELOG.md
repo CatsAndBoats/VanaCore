@@ -2,6 +2,19 @@
 
 What's new in each VanaCore release. A release's notes on GitHub are its section here (`## <version>`), under New, Changed, Fixed and Misc: write the next version's section with its version bump.
 
+## 0.9.6
+
+### New
+- **Ink Lines:** Mass Grass can now have its own ink lines, with their own darkness, width, edge sensitivity and fade, under Ink lines > Grass (Grass darkness starts at Off).
+- **/vana:** Every panel has a Reset button on its heading (click it twice) that puts everything in the panel back to its default, switches included.
+
+### Changed
+- **Addons:** VanaStore now loads on its own at start, like /vana, and stays off once you switch it off.
+
+### Fixed
+- **Shadows:** Shadows on snow and other rounded ground should no longer be cut off or vanish as the camera moves under a low sun, such as at dawn and dusk in Qufim Island, Xarcabard, the Dunes, Sarutabaruta and Windurst Woods.
+- **/vana:** Resetting a panel should no longer leave switches such as Blend with the game's shading or Dry grass on, and Mass Grass's reset should now also clear its old hidden settings, such as the old tuft limit that thinned the grass.
+
 ## 0.9.5
 
 ### New
