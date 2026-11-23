@@ -235,6 +235,7 @@ grown past its allowance in `tools\lint\baseline.json`.
 - [docs/addons/](docs/addons/README.md): writing addons, and the whole `vana` Lua API.
 - [docs/plugins/](docs/plugins/README.md): what Ashita plugins can ask of VanaCore.
 - [docs/tech/d3d12-frame-order.html](docs/tech/d3d12-frame-order.html): one Direct3D 12 frame in order, and when the grass, glow, shadows and effects come in.
+- [docs/water-test-round.md](docs/water-test-round.md): the places to look at in the game after a change to the water, and what each should look like.
 - [vanacore.example.ini](vanacore.example.ini): every setting with its default.
 
 ## Contributing
