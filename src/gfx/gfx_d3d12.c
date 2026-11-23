@@ -5276,13 +5276,13 @@ static const char FX_HLSL_1[] =
      * describe lies outside those polygons (cut across its bulge): the maps are asked from there (g_lift: the point moved out
      * along its normal onto that surface, Phong tessellation's, and half as far again) on polygons turned from the light or
      * within 11 degrees of edge-on to it (none past 20), and casters within 8 units of it along the light, its own bulge, are
-     * left out there (sun_look's skip, by g_snug): with the lift alone, a unit or less, La Theine's hills had faces near
-     * edge-on to a sun 58 degrees up shaded whole, dark squares down every slope (2026-11-22). A farther caster (the ledge
-     * over it, another rock) still shades it. Tried and dropped, 2026-11-11: leaving the casters out by their distance on
-     * every polygon (8 to 24 units: a shoulder of the dome in its other shoulder's shadow came out lit, or the staircase
-     * stayed); lifting by the filter's reach or the polygon's size (the dome's overhang, the spire's neck: lit shards) */
+     * left out there (sun_look's skip, by g_snug): with the lift alone La Theine's hills, 37 degrees steep and more, had faces
+     * near edge-on to a sun 58 degrees up shaded whole, dark squares down every slope (2026-11-22). A farther caster still
+     * shades it. Not on floors (fl: the smooth normal within 30 degrees of up, none past 40): under a low sun all ground is
+     * near edge-on, and a character's whole shadow and a trunk's first 8 units were gone (Qufim's snow, 2026-11-23). Dropped
+     * 2026-11-11: casters left out by distance on every polygon (a dome's shoulder lit); lifting by the filter (lit shards) */
     "  float3 Pm = P, Nm = Ng;\n"
-    "  float nlm = nlg;\n"
+    "  float nlm = nlg, fl = 1.0 - smoothstep(0.77, 0.87, dot(Ns.xyz, u.up.xyz));\n"
     "  if (cv > 0.0) {\n"
     "    float wl = cv * (1.0 - smoothstep(0.2, 0.35, nlg)), wt = cv * (1.0 - smoothstep(0.1, 0.2, nlg));\n"
     "    Pm = P + Ns.xyz * (g_lift.x * 1.5 * wl + g_lift.y * wt);\n"
@@ -5290,7 +5290,7 @@ static const char FX_HLSL_1[] =
     "    nlm = dot(Nm, u.sunsh.xyz);\n"
     "    g_snug = wl;\n"
     "  }\n"
-    "  float en, ef, s = sun_cascades(Pm, Nm, dist, k, nlm, 8.0 * g_snug, 0.0, en, ef);\n"
+    "  float en, ef, s = sun_cascades(Pm, Nm, dist, k, nlm, 8.0 * g_snug * fl, 0.0, en, ef);\n"
     "  g_snug = 0.0;\n"
     "  g_raw = lerp(1.0, s, max(en, ef)), g_en = en, g_emv = g_em;\n"
     /* sun_gate: 64 the maps' shadow alone; 8 no shading by the angle (face); 2 no second look on faces turned away (below) */
