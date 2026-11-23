@@ -2887,8 +2887,8 @@ local function draw_row(page, sec, row, x, y, w, ctx)
             end
             line_end = right - total - S(10)
         end
-        -- reset: this sub-panel's rows (to the next sub-panel) back to their defaults, as the section's reset does for all
-        -- of them (Position without the colours)
+        -- reset: this sub-panel's rows (to the next sub-panel) back to their defaults, its switches left as they are (the
+        -- panel's Reset, draw_heading, puts those back too; Position without the colours)
         local sub_rows, after = {}, false
         for _, other in ipairs(ctx.list or sec.rows) do
             if after then
@@ -3418,20 +3418,36 @@ local function draw_heading(page, sec, x, y, w, over_title)
             break
         end
     end
+    -- Reset: everything in the panel back to its default, its switches too (data.lua reset_rows with switches) and the
+    -- settings its heading names that aren't on the panel (reset_also); the heading's own switch (the panel's on/off) stays as
+    -- it is. A button with its name, asked twice as Vanilla UI is. Till 2026-11-23 an arrow that left every switch, so a
+    -- player's "reset your shadows" kept Blend with the game's shading on ("the main reset on the top should reset
+    -- EVERYTHING for that category"). A sub-panel's arrow (draw_row's, on its line) still leaves its switches.
     if has_settings or M.resettable(head) then
-        local reset_clicked, reset_hovered = M.icon_button('##' .. sec.key .. '.reset', line_end - S(8), cy, 'reset', 9, P.text, P.faint)
-        if reset_clicked then
-            local rows = { head }
-            for _, row in ipairs(with_assets(sec.rows)) do
-                rows[#rows + 1] = row
+        local now, confirm_id = clock(), '##reset.' .. sec.key
+        local asking = st.confirm ~= nil and st.confirm.name == confirm_id and now - st.confirm.at < 3
+        local bw = math.max(M.button_width('Reset', 'reset'), M.button_width('Sure?', 'reset'))
+        local clicked = M.button('##' .. sec.key .. '.reset', line_end - bw, cy, asking and 'Sure?' or 'Reset', 'reset',
+                                 asking and 'danger' or 'neutral', true, nil, nil, bw)
+        if imgui.IsItemHovered() then
+            M.tooltip(asking and 'Click again to put everything in ' .. sec.title .. ' back to its default'
+                      or 'Everything in ' .. sec.title .. ' back to its default, its switches too.'
+                         .. ((head.effect or head.switch ~= nil) and '\nThe switch beside this stays as it is.' or ''))
+        end
+        if clicked then
+            if asking then
+                st.confirm = nil
+                local rows = { head }
+                for _, row in ipairs(with_assets(sec.rows)) do
+                    rows[#rows + 1] = row
+                end
+                M.reset_rows(rows, true)
+                st.picker = nil
+            else
+                st.confirm = { name = confirm_id, at = now }
             end
-            M.reset_rows(rows)
-            st.picker = nil
         end
-        if reset_hovered then
-            M.tooltip('Reset ' .. sec.title .. ' to the defaults')
-        end
-        line_end = line_end - S(24)
+        line_end = line_end - bw - S(10)
     end
     -- an addon's page (Layout's section): Unload beside the reset, what its switch on the List does when switched off
     -- (unloaded, and not loaded at the next start either). Its windows go with it, so the List shows after.
