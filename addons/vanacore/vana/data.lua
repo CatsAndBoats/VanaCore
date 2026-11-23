@@ -1907,6 +1907,7 @@ TIPS.rows = {
         .. 'Off: the shadow sways with the plant.',
     ['graphics.effects.sun_distance'] = 'How far from you shadows are drawn.',
     ['graphics.effects.sun_near'] = 'How far from you shadows stay extra sharp.',
+    ['graphics.effects.sun_handoff'] = 'How gradually the sharp shadows near you blend into the softer ones farther out. Higher is smoother as you walk.',
     ['graphics.effects.sun_mid'] = 'Sharper shadows a little way off, out this far from you. 0 is off. Costs about as much as the far shadows.',
     ['graphics.effects.sun_detail'] = 'How sharp nearby shadows are.\n'
         .. 'Higher is sharper and uses more video memory. 8192 uses 256 MB.',
@@ -2060,7 +2061,8 @@ TIPS.rows = {
     ['graphics.grass.freecam'] = 'While /freecam is on, grass grows round the camera instead of your character.',
     ['graphics.grass.log'] = 'Writes why ground gets grass or not to logs\\vanacore.log, and the textures it finds to logs\\grass.',
     ['graphics.grass.slope'] = 'The steepest slope grass grows on, in degrees. Steeper ground stays bare.',
-    ['graphics.grass.dry'] = "Grows grass on yellow, dry grass ground too (East Sarutabaruta's), not only green.",
+    ['graphics.grass.dry'] = "Grows grass on yellow, dry grass ground too (East Sarutabaruta's), not only green. Outdoors only.",
+    ['graphics.grass.mega'] = "Fills all the ground the game calls grass, not only its green spots. More grass to draw.",
     ['graphics.grass.shade'] = "Grows grass on the shaded and olive parts of grass ground too, not only the green parts (Bhaflau Thickets' forest floors).",
     ['graphics.grass.walkable'] = "Grass grows only on ground you could stand on, by the zone's collision: not on carts, crates, trees or roofs.",
     ['graphics.grass.nowater'] = "No grass on ground the game calls shallow water, where your footsteps splash (Dragon's Aery's meadow, Pashhow's marsh).",
@@ -4186,7 +4188,10 @@ local TABS = {
                 -- camera's view leaves out drawn for the maps all the same (casters.cpp). The rest of the shadows' parts are ini
                 -- keys alone (sun_centre, sun_cache, sun_late, sun_cull, sun_fade: README), the rings in the Debug window
                 needs_dx12(toggle('Sharp shadows near you', FX, 'sun_sharp', true)),
-                slider('Sharp shadow range', FX, 'sun_near', 50, 3, 80, 1, '%d'),
+                slider('Sharp shadow range', FX, 'sun_near', 10, 3, 80, 1, '%d'),
+                -- how much of the sharp map's reach it spends fading into the maps beyond (sun_look's edge): thin shadows soften
+                -- across it as you walk instead of popping
+                slider('Sharp shadow fade', FX, 'sun_handoff', 0.5, 0.05, 0.9, 0.05, '%.2f'),
                 -- a third map between the sharp one and the far one (gfx_sun_mid.h), 0 none
                 needs_dx12(slider('Middle shadow range', FX, 'sun_mid', 0, 0, 200, 5, '%d')),
                 needs_dx12(toggle('Shadows from things off screen', FX, 'sun_seek', true)),
@@ -4446,6 +4451,8 @@ local TABS = {
                     end
                     return row
                 end)(slider('Quantity', 'graphics', 'grass.density', 100, 1, 100, 1, '%g%%')), 0.1, 100)),
+                -- every spot of ground the zone's collision calls grass grows, whatever its texture's colour there (grass.c grass_floor)
+                needs_dx(toggle('Mega dense', 'graphics', 'grass.mega', false)),
                 -- (Show rings: the Debug window's Rings tab, Show covered grass its Grass tab, since 2026-11-22, debug.lua; Ring
                 -- spacing, now Draw distance detail, and Placement under Advanced Settings: "i dont want people messing it up")
                 subheader('Blades'),

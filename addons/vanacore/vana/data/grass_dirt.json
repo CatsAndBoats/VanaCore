@@ -1,6 +1,10 @@
 {
   "default": 50,
   "pathpad": 0.25,
+  "not_grass": [
+    "bfca2e582a6af44d", "c3dec964f62463df", "015133cdb11f8b82", "8d5143ce8c41cbf9", "a7c826fba3239955",
+    "45ea89da027fd84e", "2c3fadb4150b8fbd", "c600da88a6d94e74", "42022b2c51e626ad", "ad48f38a1ac2ed7e"
+  ],
   "zones": {
     "115": { "name": "West Sarutabaruta", "dirt": 25 },
     "116": { "name": "East Sarutabaruta", "dirt": 25 },

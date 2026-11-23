@@ -81,7 +81,7 @@ constexpr const char* kEffectKeys[] = {"ao",      "radius",      "grade",      "
                                        "filter",  "aniso",       "fog",        "fog_falloff", "fog_height", "fog_floor", "fog_max",
                                        "fog_sun", "fog_g",
                                        "bloom",   "threshold",   "rays",       "rays_decay",  "rays_length", "debug",
-                                       "light",   "sun",   "sun_distance", "sun_near", "sun_mid",
+                                       "light",   "sun",   "sun_distance", "sun_near", "sun_mid", "sun_handoff",
                                        "sun_soft", "sun_soft_chars", "sun_soft_zone", "sun_curved", "sun_face", "sun_min",    "sun_direct", "sun_dusk", "sun_moon", "sun_moon_strength", "sun_moon_casters", "sun_free", "sun_free_az", "sun_free_el", "sun_tilt", "sun_game_shading", "sun_centre", "sun_gate", "sun_seek", "sun_zone_mesh", "sun_cache", "sun_late", "sun_sharp", "sun_cull", "sun_casters", "moghouse", "temporal",
                                        "dlss_compare", "dlss_preset", "dlss5_preset", "dlss5_style", "dlss5_intensity", "dlss5_tone", "dlss5_structure", "dlss5_skin", "dlss5_mask",
                                        "dlss5_fx_out", "dlss5_fx_light", "dlss5_fx_gain", "dlss5_fx_actor", "dlss5_fx_cap", "dlss5_fx_norm", "dlss5_elight_post", "dlss_motion_all", "fg_fx_motion", "dlss_motion_plants", "dlss_motion_chars", "dlss_motion_batch", "dlss_reactive", "dlss_reactive_moving",
@@ -158,6 +158,7 @@ float g_grass_night = 0.5f;     // ... grass.brightness.night: its share of gras
 bool g_grass_floors = false;    // grass, and grass.walkable or grass.nowater: the zone's floors are read for it (track_focus, grass_floors; the
                                 // reflections ask for them themselves, vanacore_gfx_floors_wanted)
 unsigned g_grass_zone = 0;      // the zone the grass's settings were last given for (its dirt level: track_focus)
+bool g_grass_outdoors = true;   // ... and whether it's outdoors (a sky, not a Mog House): grass.dry only there
 bool g_grass_freecam = true;    // grass.freecam: while the free camera is on, the grass grows round it, not the player (track_grass_centre)
 bool g_snow_floors = false;     // snow: the zone's floors are read for the footprints too (track_focus)
 bool g_water_floors = false;    // water with water.detect=2: the zone's floors are read for the water's sheets (d3d8_water.h water_sheet)
@@ -729,7 +730,9 @@ void apply_grass(When when)
     // grass.match (0 to 1, default 0.75): how far the tufts are made the ground's colour under them, lit as the ground is (0 their own)
     grass.match = number(L"grass.match", 0.75f, 0.0f, 1.0f);
     // grass.dry=1 (default 0): the yellow-olive of dry grass (East Sarutabaruta's) counts as grass ground, not only green
-    grass.dry = flag(L"grass.dry", false) ? 1 : 0;
+    // (outdoors alone, g_grass_outdoors: a Mog House's tan stone floor passed for it)
+    grass.dry = flag(L"grass.dry", false) && g_grass_outdoors ? 1 : 0;
+    grass.mega = flag(L"grass.mega", false) ? 1 : 0; // Mega dense: every spot of a grass floor (its collision) grows, whatever its colour
     // grass.walkable=1 (the default): tufts only on ground the zone's collision says the player could stand on (path, grass,
     // stone...), not on carts, crates, trees or roofs (grass_floors reads the zone's floors from its DAT)
     grass.walkable = flag(L"grass.walkable", true) ? 1 : 0;
@@ -779,6 +782,9 @@ void apply_grass(When when)
     // Sanctuary of Zi'Tah's dark leaf-litter floor, taken for a plant's cut-outs by its darkness)
     const std::string ground = grass_assets::ground(static_cast<int>(g_grass_zone));
     grass.ground = ground.c_str();
+    // ... and what's never grass there ("not_grass": the zone's, and every zone's, as the Mog Houses' floors)
+    const std::string never = grass_assets::not_ground(static_cast<int>(g_grass_zone));
+    grass.not_ground = never.c_str();
     vanacore_gfx_set_grass(&grass);
     // the catalogue (addons\vanacore\vana\grass and the player's config\grass): its pictures, read once, and grass.asset.<id>
     // (on or off) and grass.asset.<id>.amount (its share of the mix) each time
@@ -2261,7 +2267,7 @@ void track_grass_centre()
 // over each frame (vanacore_gfx_set_fixed_light). d3d8_sun.c otherwise judges by watching whether the zone's light moves with
 // the clock, and Palborough Mines, whose every environment is a fixed light's, had the sun's shadows (a player, 2026-11-04).
 // The model DAT as zonelines.cpp finds it: file id 100 + the zone below 0x100, 0x147B3 + (zone - 0x100) from there.
-void track_fixed_light(unsigned zone)
+bool track_fixed_light(unsigned zone)
 {
     static unsigned looked = ~0u;
     static int fixed = 0;
@@ -2277,6 +2283,7 @@ void track_fixed_light(unsigned zone)
         fixed = light == 1 ? 1 : 0;
     }
     vanacore_gfx_set_fixed_light(fixed);
+    return fixed != 0;
 }
 
 // Where the player stands, for the shadows' sharp map (vanacore_gfx_set_focus): their entity's position each
@@ -2316,10 +2323,12 @@ void track_focus()
                    zone);
         apply_live(When::Quiet); // sun_casters and the game's own character shadows, as this zone has them
     }
-    track_fixed_light(zone);
+    const bool fixed = track_fixed_light(zone);
     track_rain_weathers(zone); // rain in thunder weather only where the zone has rain (graphics_rain.h)
-    if (zone != g_grass_zone) { // the grass's settings as this zone has them (its dirt level and blended ground, grass_assets)
-        g_grass_zone = zone;
+    // dry grass outdoors only: not in a Mog House (the party list names the city there) or a zone with no sky (its DAT's fixed light)
+    const bool outdoors = !fixed && !packets::in_mog_house();
+    if (zone != g_grass_zone || outdoors != g_grass_outdoors) { // the grass's settings as this zone has them (grass_assets)
+        g_grass_zone = zone, g_grass_outdoors = outdoors;
         apply_grass(When::Quiet);
     }
     vanacore_gfx_set_grass_zone(static_cast<int>(zone));

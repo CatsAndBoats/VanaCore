@@ -441,6 +441,8 @@ typedef struct FxSettings
     float sun_near_hold; /* frames the sharp map's still layer is kept at most (g_still_near, near_stale), 0 the map drawn whole
                           * every frame; at most 600 */
     float sun_mid;    /* the middle map's reach round the player, world units (gfx_sun_mid.h); 0 none */
+    float sun_handoff; /* the share of the sharp map's half-width over which it fades into the maps beyond (u.smapm2.z, sun_look's
+                        * edge), 0.05 to 0.9; 0.15 until 2026-11-23, whose 1.5 units at sun_near 10 thin shadows popped across */
     float sun_roll;   /* 1: a still layer is drawn again over SUN_SLICES frames, a slice each (gfx_sun_layers.h), not all in one; 0 whole */
     float sun_plants; /* 0: the zone's plants (draw_plant: trees, bushes, grass) cast none of the sun's shadows (sun_draw); 1 they do */
     float sun_plants_still; /* 1: a plant casts the pose it was first seen in, kept still (gfx_sun_cache.h plant_still); 0 as it sways */
@@ -5010,7 +5012,7 @@ static const char FX_HLSL_1[] =
     "  float4 rain;   // the rain's wet ground (fx_ssr): how wet (0 dry), rain.reflect, rain.puddles, its mask's heap slot + 1 (0 none)\n"
     "  float4x4 lmatm; // the middle cascade (sun_mid, input 7): view space to its map\n"
     "  float4 smapm;  // its texel in world units, depth bias, penumbra, slope\n"
-    "  float4 smapm2; // its depth units, 1 when it is there\n"
+    "  float4 smapm2; // its depth units, 1 when it is there; z where the sharp map's fade starts (sun_handoff)\n"
     "  float4 toon4;  // the lines on VanaCore's grass (toon3.z): share of toon.x (0 none), width, threshold, fade\n"
     "};\n"
     "cbuffer CU : register(b0) { FxU u; };\n"
@@ -5165,7 +5167,7 @@ static const char FX_HLSL_1[] =
     "  float2 uv = float2(lc.x * 0.5 + 0.5, 0.5 - lc.y * 0.5);\n"
     "  float2 e = abs(lc.xy);\n"
     /* sun_gate 16: no fading edge, in the map or out */
-    "  edge = lc.z >= 1.0 ? 0.0 : (gate & 80) != 0 ? (max(e.x, e.y) < 1.0 ? 1.0 : 0.0) : 1.0 - smoothstep(0.8, 0.95, max(e.x, e.y));\n"
+    "  edge = lc.z >= 1.0 ? 0.0 : (gate & 80) != 0 ? (max(e.x, e.y) < 1.0 ? 1.0 : 0.0) : 1.0 - smoothstep(km == 2u && u.smapm2.z > 0.0 ? u.smapm2.z : 0.8, 0.95, max(e.x, e.y));\n"
     "  if (edge <= 0.0) return 1.0;\n"
     "  if ((gate & 64) != 0) return tx2[slot(km)].SampleCmpLevelZero(smpc[fsi[0].w], uv, lc.z - p.y);\n"
     "  float z = lc.z - p.y, sz = size_of(km).x, tx = 1.0 / sz;\n"
@@ -8183,11 +8185,11 @@ static const struct
 #else
     { "sun_casters", offsetof(FxSettings, sun_casters), 1.0f },
 #endif
-    /* 25 until 2026-11-21: with the middle map off again, thin shadows past it were the far map's coarse texels and popped
-     * in and out as its edge went by with the player walking (East Ronfaure [S]); registry.cpp's reset_old_defaults takes a
-     * saved 25 out once */
-    { "sun_near", offsetof(FxSettings, sun_near), 50.0f },
+    /* 25 until 2026-11-21, then 50 (thin shadows past it popped as its edge went by, East Ronfaure [S]) until 2026-11-23: 10,
+     * sharp close up, the popping to be met another way; registry.cpp's reset_old_defaults takes a saved 25 or 50 out once */
+    { "sun_near", offsetof(FxSettings, sun_near), 10.0f },
     { "sun_mid", offsetof(FxSettings, sun_mid), 0.0f }, /* off again (2026-11-21: GPU timeouts reported after 0.8.284 turned it on) */
+    { "sun_handoff", offsetof(FxSettings, sun_handoff), 0.5f },
     { "moghouse", offsetof(FxSettings, moghouse), 0.0f }, /* XI on Anything's default: none */
     { "temporal", offsetof(FxSettings, temporal), 0.99f },
     { "ao_quality", offsetof(FxSettings, ao_quality), 3.0f },
@@ -10417,7 +10419,7 @@ static int sun_map(const GfxScene* s, const float* L, FxU* u)
         mat_mul(u->lmatn, invV, kn->S); /* this frame's view space to the map (sun_fit's lmat, for the cascade drawn) */
         srec_map(1, kn, kn != &cnear);
         u->smapn[0] = kn->texel, u->smapn[1] = kn->bias, u->smapn[2] = kn->soft, u->smapn[3] = kn->slope;
-        u->smapn2[0] = kn->range, u->smapn2[1] = 1.0f;
+        u->smapn2[0] = kn->range, u->smapn2[1] = 1.0f, u->smapm2[2] = 0.95f - fminf(fmaxf(g_fxs.sun_handoff, 0.05f), 0.9f);
         g_fx.st_near_r = 0.5f * kn->across;
     }
     g_sun_cull = NULL;

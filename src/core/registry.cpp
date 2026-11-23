@@ -1316,6 +1316,7 @@ void serve(Key key, const char* name, const std::wstring& text)
 // 1: [graphics.effects] sun_near 25 to 50 (2026-11-21: past 25 thin shadows were the far map's coarse ones and popped in
 // and out as the sharp map's edge went by with the player walking; the middle map is off by default again)
 // 2: [graphics] grass.pathpad 0.25 to unset (2026-11-22: each zone's own now, data\grass_dirt.json, and off the /vana panel)
+// 3: [graphics.effects] sun_near 50 to 10 (2026-11-23: sharp close up again; the popping past it to be met another way)
 static void reset_old_defaults(const wchar_t* ini)
 {
     struct Reset {
@@ -1327,8 +1328,9 @@ static void reset_old_defaults(const wchar_t* ini)
     constexpr Reset kResets[] = {
         {1, L"graphics.effects", L"sun_near", 25.0},
         {2, L"graphics", L"grass.pathpad", 0.25},
+        {3, L"graphics.effects", L"sun_near", 50.0},
     };
-    constexpr int kSteps = 2;
+    constexpr int kSteps = 3;
     const int had = static_cast<int>(GetPrivateProfileIntW(L"client", L"defaults", 0, ini));
     if (had >= kSteps)
         return;

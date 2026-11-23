@@ -264,16 +264,27 @@ std::string g_solo; // solo(): the asset shown alone (send_weights), "" none; un
 std::map<int, float> g_pathpad; // pathpad(): the zones' own, and g_pathpad_rest the rest's
 float g_pathpad_rest = 0.25f;
 std::map<int, std::string> g_ground; // ground(): the zones' own grass ground textures
+std::map<int, std::string> g_not;    // not_ground(): the textures never grass in a zone (0: every zone's, the top level's)
 std::set<int> g_bare;                 // grows(): the zones with no grass at all
 
 // addons\vanacore\vana\data\grass_dirt.json, VanaCore's own: { "default": 50, "zones": { "238": { "name": "Windurst Waters",
 // "dirt": 60 }, "121": { "name": "The Sanctuary of Zi'Tah", "blended": true, "ground": [ "65b719e367503797" ] }, "245": {
 // "name": "Lower Jeuno", "grass": false }, ... } } (a zone's entry may be the level alone; "ground" the textures that are grass
-// there whatever their colours say; "grass": false none grows there; "pathpad" yalms kept bare by a path, the top level's for the
-// zones without one). Levels 1 to 100; without the file every zone is 50, grows grass, none grows on blended ground, padding 0.25
+// there whatever their colours say; "not_grass" the textures never grass, whatever they say, the top level's in every zone (the
+// Mog Houses' floors: the party list names the city there); "grass": false none grows there; "pathpad" yalms kept bare by a path,
+// the top level's for the zones without one). Levels 1 to 100; without the file every zone is 50, grows grass, none grows on
+// blended ground, padding 0.25
+void add_textures(std::map<int, std::string>& to, int id, const json::Value* list)
+{
+    if (list != nullptr && list->is_array())
+        for (const json::Value& t : list->array)
+            if (t.is_string())
+                to[id] += (to[id].empty() ? "" : " ") + t.string;
+}
+
 void read_dirt()
 {
-    g_dirt.clear(), g_dirt_rest = 50.0f, g_dirt_read = true, g_blended.clear(), g_ground.clear(), g_bare.clear();
+    g_dirt.clear(), g_dirt_rest = 50.0f, g_dirt_read = true, g_blended.clear(), g_ground.clear(), g_not.clear(), g_bare.clear();
     g_pathpad.clear(), g_pathpad_rest = 0.25f;
     const std::wstring path = g_dir + L"\\addons\\vanacore\\vana\\data\\grass_dirt.json";
     std::string text, error;
@@ -289,6 +300,7 @@ void read_dirt()
     const auto level = [](double x) { return static_cast<float>(std::clamp(x, 1.0, 100.0)); };
     const auto pad = [](double x) { return static_cast<float>(std::clamp(x, 0.0, 4.0)); };
     g_dirt_rest = level(v.get_number("default", 50.0)), g_pathpad_rest = pad(v.get_number("pathpad", 0.25));
+    add_textures(g_not, 0, v.find("not_grass"));
     if (const json::Value* zones = v.find("zones"); zones != nullptr && zones->is_object())
         for (const auto& [key, z] : zones->object) {
             const int id = std::atoi(key.c_str());
@@ -302,10 +314,8 @@ void read_dirt()
                 g_blended.insert(id);
             if (const json::Value* grows = z.is_object() ? z.find("grass") : nullptr; id > 0 && grows != nullptr && grows->is_bool() && !grows->boolean)
                 g_bare.insert(id);
-            if (const json::Value* ground = z.is_object() ? z.find("ground") : nullptr; id > 0 && ground != nullptr && ground->is_array())
-                for (const json::Value& t : ground->array)
-                    if (t.is_string())
-                        g_ground[id] += (g_ground[id].empty() ? "" : " ") + t.string;
+            if (id > 0 && z.is_object())
+                add_textures(g_ground, id, z.find("ground")), add_textures(g_not, id, z.find("not_grass"));
         }
     log::write(L"Graphics: grass: dirt levels for %u zones, %g for the rest; %u zones grow on blended ground, %u none at all; path "
                L"padding for %u zones, %g for the rest (data\\grass_dirt.json)",
@@ -641,6 +651,16 @@ std::string ground(int zone)
         read_dirt();
     const auto found = g_ground.find(zone);
     return found != g_ground.end() ? found->second : std::string();
+}
+
+std::string not_ground(int zone)
+{
+    if (g_dir.empty())
+        return {};
+    if (!g_dirt_read)
+        read_dirt();
+    const auto all = g_not.find(0), here = zone > 0 ? g_not.find(zone) : g_not.end();
+    return (all != g_not.end() ? all->second : std::string()) + " " + (here != g_not.end() ? here->second : std::string());
 }
 
 bool grows(int zone)

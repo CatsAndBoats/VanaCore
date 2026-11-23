@@ -184,11 +184,16 @@ static struct
     uint64_t zlisted[64];
     int nzlisted;
     uint64_t zsum;
+    /* ... and the textures never grass ground here ("not_grass", the zone's and every zone's: a Mog House's tan stone floor passed for
+     * dry grass); in zsum too */
+    uint64_t znot[256];
+    int nznot;
     float radius, density, height, width, variation, brightness, flowers, flower_brightness;
     int flowers_only;
     int edges; /* the tufts kept off the brink of drops (find_edges, brink) */
     float edge_fade, edge_low; /* grass.edge.fade, .height: the tufts shorter near where the grass ends, to edge_low (grass_edges.h) */
     int cull;                  /* grass.cull: a square's layer wholly outside the view not drawn (layer_in_view) */
+    int mega;                  /* grass.mega: every spot of grass ground on a grass floor grows, whatever its colour (build_step) */
     uint32_t quads_in, quads_all; /* the last frame's quads drawn and in reach, for the report */
     float match; /* how far the tufts are made the ground's colour under them, lit as it is (0 to 1) */
     float wind_speed, wind_turb; /* the sway's pace and how much it differs across the field, times its own (0 to 4; 0 still, 0 a field moving as one) */
@@ -387,8 +392,8 @@ static int g_said;
 /* a setting whose 0 is its default (a settings struct zeroed past what it sets): v within lo to hi, or def */
 static float or_default(float v, float lo, float hi, float def) { return v > 0.0f ? clampf(v, lo, hi) : def; }
 
-/* grass.textures: the hex hashes of the ground textures that are grass (8 digits at least each; 64 kept) */
-static int parse_listed(const char* textures, uint64_t* out)
+/* grass.textures: the hex hashes of the ground textures that are grass (8 digits at least each; most kept: 64, not_grass's 256) */
+static int parse_listed(const char* textures, uint64_t* out, int most)
 {
     int n = 0;
     for (const char* p = textures ? textures : ""; *p;)
@@ -398,19 +403,21 @@ static int parse_listed(const char* textures, uint64_t* out)
         if (e == p || e - p < 8)
             p = e == p ? p + 1 : e;
         else
-            p = e, n < 64 ? (void)(out[n++] = (uint64_t)v) : (void)0;
+            p = e, n < most ? (void)(out[n++] = (uint64_t)v) : (void)0;
     }
     return n;
 }
 
-static void set_listed(const char* textures) { g.nlisted = parse_listed(textures, g.listed); }
+static void set_listed(const char* textures) { g.nlisted = parse_listed(textures, g.listed, 64); }
 
-/* GrassSettings.ground: the zone's own grass ground, the same way */
-static void set_zone_listed(const char* textures)
+/* GrassSettings.ground and .not_ground: the zone's own grass ground, and what's never grass, the same way */
+static void set_zone_listed(const char* textures, const char* never)
 {
-    g.nzlisted = parse_listed(textures, g.zlisted), g.zsum = 0;
+    g.nzlisted = parse_listed(textures, g.zlisted, 64), g.nznot = parse_listed(never, g.znot, 256), g.zsum = 0;
     for (int i = 0; i < g.nzlisted; ++i)
         g.zsum += hash64(g.zlisted[i]);
+    for (int i = 0; i < g.nznot; ++i)
+        g.zsum += hash64(~g.znot[i]);
 }
 
 #include "grass_rings.h" /* set_rings, ring_share, ring_level, kept_area, tuft_limit, kept_density: the rings and the most tufts */
@@ -422,8 +429,9 @@ void grass_configure(const GrassSettings* in)
     const float made_with[] = { g.radius, g.density, g.height, g.width, g.variation, g.brightness, g.flowers, g.flower_brightness,
         g.slope_cos, (float)g.limit, (float)g.flowers_only, g.ring_from[0], g.ring_from[1], g.ring_from[2], g.ring_keep[1], g.ring_keep[2],
         g.ring_keep[3], (float)g.edges, g.match, (float)g.walkable, g.pathpad, (float)g.overgrown, (float)g.shade, (float)g.show_cover,
-        (float)g.nowater, (float)g.moss, g.edge_fade, g.edge_low };
+        (float)g.nowater, (float)g.moss, g.edge_fade, g.edge_low, (float)g.mega };
     g.enabled = in->enabled != 0;
+    g.mega = in->mega != 0;
     g.radius = clampf(in->radius, 4.0f, 500.0f);
     g.density = clampf(in->density, 0.1f, 100.0f);
     g.height = clampf(in->height, 0.05f, 10.0f);
@@ -455,7 +463,7 @@ void grass_configure(const GrassSettings* in)
 
     g.log = in->log != 0;
     set_listed(in->textures);
-    set_zone_listed(in->ground);
+    set_zone_listed(in->ground, in->not_ground);
     /* the side of the squares tufts are kept in: about a fifth of the reach's width */
     g.cell = clampf(g.radius * 0.4f, 8.0f, 32.0f);
     set_rings(in);
@@ -465,7 +473,7 @@ void grass_configure(const GrassSettings* in)
     const float now_with[] = { g.radius, g.density, g.height, g.width, g.variation, g.brightness, g.flowers, g.flower_brightness,
         g.slope_cos, (float)g.limit, (float)g.flowers_only, g.ring_from[0], g.ring_from[1], g.ring_from[2], g.ring_keep[1], g.ring_keep[2],
         g.ring_keep[3], (float)g.edges, g.match, (float)g.walkable, g.pathpad, (float)g.overgrown, (float)g.shade, (float)g.show_cover,
-        (float)g.nowater, (float)g.moss, g.edge_fade, g.edge_low };
+        (float)g.nowater, (float)g.moss, g.edge_fade, g.edge_low, (float)g.mega };
     if (memcmp(made_with, now_with, sizeof made_with))
         kept_clear();
     zone_check();
@@ -594,9 +602,17 @@ static int zone_listed(uint64_t hash)
     return 0;
 }
 
+static int never_grass(uint64_t hash)
+{
+    for (int i = 0; i < g.nznot; ++i)
+        if (g.znot[i] == hash)
+            return 1;
+    return 0;
+}
+
 static int tex_is_grass(const GTex* t)
 {
-    return (g.nlisted ? is_listed(t->hash) : t->autog) || zone_listed(t->hash);
+    return !never_grass(t->hash) && ((g.nlisted ? is_listed(t->hash) : t->autog) || zone_listed(t->hash));
 }
 
 int grass_logging(void) { return g.zone_ok && g.log; }
@@ -980,7 +996,7 @@ static void log_texture(const GTex* t)
     rt_log("[recomp] grass: texture %016llx %ux%u format %08x average %d,%d,%d%s%s: green %.0f%%, yellow-olive %.0f%% at %.2f, dark %.0f%%, other %.0f%%\n",
         (unsigned long long)t->hash, t->w, t->h, t->fmt, (int)t->avg[0], (int)t->avg[1], (int)t->avg[2],
         t->autog ? (t->green ? " (green)" : " (dry grass)") : t->foliage ? " (cut-outs: plants or trees)" : " (not grass)",
-        is_listed(t->hash) ? " (listed)" : zone_listed(t->hash) ? " (the zone's ground)" : "", (float)greens * per, (float)drys * per, drys ? sat / (float)drys : 0.0f, (float)darks * per,
+        never_grass(t->hash) ? " (not_grass: never)" : is_listed(t->hash) ? " (listed)" : zone_listed(t->hash) ? " (the zone's ground)" : "", (float)greens * per, (float)drys * per, drys ? sat / (float)drys : 0.0f, (float)darks * per,
         (float)(MAPN * MAPN - greens - drys - darks) * per);
     dump_bmp(t);
 }
@@ -2431,6 +2447,14 @@ static int soil_ok(int terrain)
     return terrain < 0 || (terrain >= 1 && terrain <= 4) || (terrain == GRASS_WET && (!g.nowater || g.moss));
 }
 
+/* grass.mega: p's floor (the zone's collision) is grass (the game's footsteps' terrain 2); 0 where the floors aren't known */
+static int grass_floor(const float p[3])
+{
+    int below;
+    float over;
+    return g.mega && gf.zone == g.zone && gf.npairs && floor_terrain(p, &below, &over) == 2;
+}
+
 static int floor_grows(const float p[3], int soil)
 {
     g_cover_tint = g.show_cover ? COVER_YELLOW : 0;
@@ -2801,6 +2825,22 @@ static void build_finish(GChunk* c)
 
 #include "grass_edges.h" /* edge_grow: the tufts shorter near where the grass ends (grass.edge.fade) */
 
+/* a tuft's spot at uv (pos in the world): its colour in texel, the ground's round it, and 1; 0 where it isn't grass ground (in green
+ * grass, yellow-olive is a path's dirt). grass.mega: on a grass floor (*mega) every spot is, a bare one tinted with its texture's grass
+ * colour (tex_sort's lit) */
+static int spot_colour(const GTex* tx, const float uv[2], const float pos[3], int dry, uint8_t texel[3], int* mega)
+{
+    *mega = grass_floor(pos);
+    if (!tex_color(tx, uv[0], uv[1], texel) || ground_ok(texel, dry))
+    {
+        tuft_colour(tx, uv, texel, dry);
+        return 1;
+    }
+    for (int i = 0; i < 3 && *mega; ++i)
+        texel[i] = (uint8_t)clampf(tx->lit[i], 0.0f, 255.0f);
+    return *mega;
+}
+
 /* the square in hand made on, triangle by triangle, until `deadline` (gfx_now_ns) or the layer is done: 1 done with it (made,
  * or the square is gone), 0 the rest of it waits for the next frame */
 static int build_step(uint64_t deadline)
@@ -2879,10 +2919,10 @@ static int build_step(uint64_t deadline)
                     vc[2] += b[v] * (float)(tri->c[v] & 255);
             }
             uint8_t texel[3] = { 90, 120, 60 };
-            if (tex_color(tx, uv[0], uv[1], texel) && !ground_ok(texel, dry))
-                continue; /* this part of the ground isn't grass (in green grass, yellow-olive is a path's dirt) */
-            tuft_colour(tx, uv, texel, dry); /* its colour the ground's round it, as it's seen */
-            if (g.pathpad > 0.0f && path_near(tri, tx, pos, dry))
+            int mega;
+            if (!spot_colour(tx, uv, pos, dry, texel, &mega))
+                continue; /* this part of the ground isn't grass */
+            if (g.pathpad > 0.0f && !mega && path_near(tri, tx, pos, dry))
                 continue; /* a path's ground within grass.pathpad of it: the path's edge kept bare */
             const int grows = floor_grows(pos, g_build.soil);
             if (!grows)

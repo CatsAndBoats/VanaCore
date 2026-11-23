@@ -700,9 +700,9 @@ void vanacore_gfx_set_grass(const VanaGrass* in)
     s.dry_hue = in->dry_hue;
     s.dirt = in->dirt;
     s.blended = in->blended;
-    s.ground = in->ground;
+    s.ground = in->ground, s.not_ground = in->not_ground;
     s.edge_fade = in->edge_fade, s.edge_low = in->edge_low;
-    s.cull = in->cull;
+    s.cull = in->cull, s.mega = in->mega;
     d3d8_set_grass(&s);
 }
 void vanacore_gfx_set_grass_zone(int zone)

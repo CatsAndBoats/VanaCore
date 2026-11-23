@@ -54,6 +54,9 @@ std::string solo_id();
 // The textures that are grass ground in a zone whatever their colours say (VanaGrass.ground: hex hashes, space-separated), from the
 // same file's "ground": [ "65b719e367503797", ... ] (The Sanctuary of Zi'Tah's dark floor); empty for a zone it doesn't list
 std::string ground(int zone);
+// The textures never grass ground in a zone whatever their colours say (VanaGrass.not_ground), from the same file's "not_grass":
+// the zone's and the top level's, which every zone takes (the Mog Houses' floors)
+std::string not_ground(int zone);
 // Whether a zone grows grass at all: false for one the same file says "grass": false of (Jeuno's three cities, no grass ground in
 // them, where a stone town's tan tile could pass for dry grass), true for the rest
 bool grows(int zone);

@@ -190,9 +190,11 @@ typedef struct VanaGrass
     float dry_sat, dry_hue; /* the dry grass test's least mean saturation (0: 0.25) and reddest hue, degrees (0: 46) */
     int blended; /* 1: grass-textured ground drawn blended is ground too, a layer over other ground (the zone's, or grass.blended) */
     const char* ground; /* hex hashes of textures that are grass ground in this zone whatever their colours say (the zone's) */
+    const char* not_ground; /* hex hashes of textures never grass ground here, whatever their colours say (the zone's and every zone's) */
     float edge_fade; /* yalms, 0 off: tufts this near where the grass ends (and climbing toward slope) grow shorter ... */
     float edge_low;  /* ... to this share of their height at it (0 to 1; 0 the default, 0.25) */
     int cull;        /* 1: a square of tufts wholly outside the camera's view isn't drawn (grass.cull) */
+    int mega;        /* 1: every spot of grass ground on a floor the collision calls grass grows, whatever its colour (grass.mega) */
 } VanaGrass;
 void vanacore_gfx_set_grass(const VanaGrass* settings);
 /* The zone the player is in, each frame (0 while there's none). */

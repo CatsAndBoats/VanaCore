@@ -188,7 +188,8 @@ static float edge_grow(const GWTri* t, const GTex* tx, const float b[3], const f
     if (!(g.edge_fade > 0.0f))
         return 0.45f + 0.55f * flat;
     const float fade = g.edge_fade;
-    float d = tex_edge(t, tx, p, minf(room, edge_lattice(p)));
+    /* (grass.mega: the floors' edges alone, its texture's speckles none: on a grass floor every spot of it grows) */
+    float d = g.mega ? minf(room, edge_lattice(p)) : tex_edge(t, tx, p, minf(room, edge_lattice(p)));
     d += (vnoise(p[0] * 0.7f, p[2] * 0.7f) - 0.5f) * 0.4f * fade; /* ragged: the shortening follows no line */
     float e = clampf(d / fade, 0.0f, 1.0f);
     e = e * e * (3.0f - 2.0f * e);

@@ -81,11 +81,17 @@ typedef struct GrassSettings
     /* the zone's own grass ground (data\grass_dirt.json's "ground"): hex hashes of textures that are grass ground in this zone
      * whatever their colours say, besides the ones found (The Sanctuary of Zi'Tah's dark leaf-litter floor); NULL or "" none */
     const char* ground;
+    /* the same file's "not_grass", the zone's and its top level's (every zone's: the Mog Houses' floors, entered from the cities):
+     * hex hashes of textures that are never grass ground, whatever their colours say or the lists above; NULL or "" none */
+    const char* not_ground;
     /* yalms (0 off): a tuft this near where the grass ends (the zone's floors: a drop, a face steeper than slope, a hard floor after
      * soft ground; its texture turning from grass; the brink of a drop) grows shorter, to edge_low of its height at the edge (0 to 1;
      * 0 the default, 0.25), and climbing from half slope to slope the same (grass_edges.h) */
     float edge_fade, edge_low;
     int cull; /* 1: a square of tufts wholly outside the camera's view isn't drawn (still made and kept: layer_in_view) */
+    /* 1 (grass.mega, Mega dense): on a floor the zone's collision calls grass, every spot of grass ground grows, whatever its
+     * picture's colour there (green_ok, the path padding and the texture's edges left out: Konschtat's speckled ground grew in patches) */
+    int mega;
 } GrassSettings;
 
 void grass_configure(const GrassSettings* settings);

@@ -240,6 +240,7 @@ typedef struct FxSettings
     float sun_ring_spacing; /* ... how far apart the rings are, world units */
     float sun_detail; /* the near map's texels across, 512-8192 (sun_size) */
     float sun_fade;   /* seconds the zone's shadows the cache lets go of take to fade (cache_let_go); 0 at once */
+    float sun_handoff; /* the share of the sharp map's half-width over which it fades into the far one (gfx_d3d12.c's) */
     float moghouse;   /* how much of the sun's shadows stay indoors (GfxScene.indoors), 0 none to 1 all (gfx_d3d12.c's) */
     /* the cel look: ink lines, brightness bands, smoothing */
     float outline, outline_width, outline_depth, outline_crease, outline_fade, bands, band_soft, smooth;
@@ -2495,7 +2496,7 @@ typedef struct FxU
         plight[4], plight2[4], /* the player's light (gfx_player_light) */
         gmc[4], gmx[4], gmz[4], gm[4 * GFX_GROUND_MARKS][4], /* the rings of light on the ground (ground_marks) */
         rain[4], /* (Direct3D 12's rain wet ground, gfx_d3d12.c: 0 here) */
-        lmatm[16], smapm[4], smapm2[4], // cppcheck-suppress unusedStructMember ; Direct3D 12's middle shadow map (sun_mid): 0 here, none
+        lmatm[16], smapm[4], smapm2[4], // cppcheck-suppress unusedStructMember ; Direct3D 12's middle map (sun_mid): 0 here; smapm2[2] sun_handoff
         toon4[4]; /* the lines on VanaCore's grass (gfx_grass_lines) */
 } FxU;
 
@@ -2697,8 +2698,9 @@ static const struct
     { "sun_game_shading", offsetof(FxSettings, sun_game_shading), 0.0f },
     { "sun_free_el", offsetof(FxSettings, sun_free_el), 41.0f },
     { "sun_casters", offsetof(FxSettings, sun_casters), 0.0f }, /* the zone casts too */
-    { "sun_near", offsetof(FxSettings, sun_near), 50.0f }, /* 25 until 2026-11-21 (gfx_d3d12.c) */
+    { "sun_near", offsetof(FxSettings, sun_near), 10.0f }, /* 25, then 50 until 2026-11-23 (gfx_d3d12.c) */
     { "moghouse", offsetof(FxSettings, moghouse), 0.0f },
+    { "sun_handoff", offsetof(FxSettings, sun_handoff), 0.5f },
     { "temporal", offsetof(FxSettings, temporal), 0.99f },
     { "ao_quality", offsetof(FxSettings, ao_quality), 3.0f },
     { "ao_rings", offsetof(FxSettings, ao_rings), 1.0f },
@@ -5379,7 +5381,7 @@ static int sun_map(const GfxScene* s, const float* L, FxU* u)
         sun_draw(&g_fx.smapn, s, invP, invV, &cnear, 1, 0);
         memcpy(u->lmatn, cnear.lmat, 64);
         u->smapn[0] = cnear.texel, u->smapn[1] = cnear.bias, u->smapn[2] = cnear.soft, u->smapn[3] = cnear.slope;
-        u->smapn2[0] = cnear.range, u->smapn2[1] = 1.0f;
+        u->smapn2[0] = cnear.range, u->smapn2[1] = 1.0f, u->smapm2[2] = 0.95f - fminf(fmaxf(g_fxs.sun_handoff, 0.05f), 0.9f);
         g_fx.st_near_r = 0.5f * cnear.across;
     }
     g_fx.st_across = cfar.across;
