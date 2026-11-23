@@ -6734,29 +6734,55 @@ local function switch_row(row)
     return (row.kind == 'toggle' and not row.resets) or row.switch ~= nil
 end
 
--- With `switches` (a panel's Reset button, vana.lua draw_heading): a switch in the panel back to its default too: a toggle's
--- key taken out, a sub-panel switched as an effect (effect_sub) its strength and switch, a colours line's switch. One whose
--- default its row doesn't say (a get and set of its own: True Font's, DLSS 5's, Night time's) stays, and so does the panel's
--- own, on its heading (2026-11-22: Reset left Mass Grass's Dry grass and Shaded ground as a player had them)
-local function switch_reset(row)
-    if row.kind == 'toggle' and resettable(row) then
-        vana.config.set(row.section, row.key, nil)
-        return true
-    end
-    if row.kind == 'subheader' and row.effect and resettable(row) then
-        vana.config.set(row.section, row.key, nil)
-        vana.config.set(row.section, row.key .. '.enabled', nil)
-        return true
-    end
-    return false
-end
-
--- Rows' settings back to their defaults (their keys taken out of vanacore.ini), the on/off switches as they are unless
--- `switches` (switch_reset). A row's reset_also ({ { section, key } }: a heading's settings no longer on its panel, Mass
--- Grass's old Most tufts ceiling) taken out with it, whatever resets it: the panel's reset, Reset all settings
+-- Rows' settings back to their defaults (their keys taken out of vanacore.ini). With `switches` (a panel's Reset, at the top of
+-- it: vana.lua draw_heading) everything in it, its switches too (switch_back); without (a sub-panel's reset arrow) the on/off
+-- switches stay as they are. A heading's own switch (the panel's on/off beside its Reset) always stays. A row's reset_also
+-- ({ { section, key } }: a heading's settings no longer on its panel, Mass Grass's old Most tufts ceiling) is taken out with
+-- it, whatever resets it: the panel's Reset, Reset all settings. (2026-11-23: a player's "reset your shadows" left Blend with
+-- the game's shading on, and Mass Grass's Dry grass, Overgrown and plants as they were: "the main reset on the top should
+-- reset EVERYTHING for that category")
 local function reset_rows(rows, switches)
     flush()
     local live = false
+    local function take(section, key)
+        vana.config.set(section, key, nil)
+        live = live or LIVE_GRAPHICS[section] or false
+    end
+    -- a switch back to its default: a toggle's key taken out (one with a set of its own given its default: the Hide switches,
+    -- which share hide.windows, take out their own name alone); a sub-panel's switch on one key taken out (Night time's
+    -- sun_moon, DLSS 5's dlss5, Auto Login's; one switched as an effect, effect_sub, its strength's .enabled too); a line's
+    -- switch (a font line's True Font, row.switch with its key; a colours line's, row.toggle) and the switches among its parts
+    -- (a colours line's Gradient). A switch whose key its row doesn't name (a get and set of its own alone) stays
+    local function switch_back(row)
+        if row.kind == 'toggle' and resettable(row) then
+            if row.set ~= nil then
+                row.set(row.default)
+                live = live or LIVE_GRAPHICS[row.section] or false
+            else
+                take(row.section, row.key)
+            end
+            return
+        end
+        if row.kind == 'subheader' and row.switch ~= nil and resettable(row) then
+            take(row.section, row.key)
+            if row.effect then
+                take(row.section, row.key .. '.enabled')
+            end
+            return
+        end
+        local sw = row.switch
+        if sw ~= nil and sw.section ~= nil and sw.key ~= nil then
+            take(sw.section, sw.key)
+        end
+        if row.toggle ~= nil and resettable(row.toggle) then
+            take(row.toggle.section, row.toggle.key)
+        end
+        for _, part in ipairs(row.parts or {}) do
+            if part.kind == 'toggle' then
+                switch_back(part)
+            end
+        end
+    end
     -- an effect off by default (its strength's default 0: reflections, the cel look) has its strength's slider set to the
     -- slider's own default, not taken out: taken out, it was 0 again and the effect went off with it
     local off_by_default = {}
@@ -6780,20 +6806,17 @@ local function reset_rows(rows, switches)
     end
     for _, row in ipairs(rows) do
         for _, also in ipairs(row.reset_also or {}) do
-            vana.config.set(also[1], also[2], nil)
-            live = live or LIVE_GRAPHICS[also[1]]
+            take(also[1], also[2])
         end
-        if switches and switch_reset(row) then
-            live = live or LIVE_GRAPHICS[row.section]
-        elseif switch_row(row) then
-            -- left on or off
-        elseif row.reset ~= nil then -- a setting kept elsewhere (a window's place: vana.layout)
+        if switches and row.kind ~= 'header' then
+            switch_back(row)
+        end
+        if row.reset ~= nil then
+            -- a setting kept elsewhere (a window's place: vana.layout), or a line of parts (a font line's, a colours line's):
+            -- its own. Before the switch test: a font line, which has a switch, was left whole, its font and size too
             row.reset()
-            local toggle = row.toggle -- (a colours line's switch: colours_line)
-            if switches and toggle ~= nil and resettable(toggle) then
-                vana.config.set(toggle.section, toggle.key, nil)
-                live = live or LIVE_GRAPHICS[toggle.section]
-            end
+        elseif switch_row(row) then
+            -- a switch: left on or off here (with `switches`, put back above)
         elseif resettable(row) then
             if row.effect then
                 -- on while it isn't switched off and its strength is above 0 (effect_on): the strength's default
@@ -6812,7 +6835,7 @@ local function reset_rows(rows, switches)
             elseif not strength_kept(row) then
                 vana.config.set(row.section, row.key, nil)
             end
-            live = live or LIVE_GRAPHICS[row.section]
+            live = live or LIVE_GRAPHICS[row.section] or false
         end
     end
     if live then
