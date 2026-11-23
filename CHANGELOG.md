@@ -2,6 +2,16 @@
 
 What's new in each VanaCore release. A release's notes on GitHub are its section here (`## <version>`), under New, Changed, Fixed and Misc: write the next version's section with its version bump.
 
+## 0.9.8
+
+### New
+- **Water:** VanaCore's water now mirrors the world around it, the shore, trees, walls, cliffs and characters, broken up by the waves, with the sky's own clouds and dusk colours in it (by Carver).
+- **Water:** Rain now leaves spreading rings where it lands on VanaCore's water, none under roofs or bridges (by Carver).
+
+### Fixed
+- **Water:** Lake Mechieume should now be VanaCore's water from shore to shore, without a jagged line across it, and Jugner Forest's and East Sarutabaruta's rivers should run on unbroken (by Carver).
+- **Water:** Fountains should no longer show bands of water by the screen's right edge with a large Background resolution, as in Bastok Markets (by Carver).
+
 ## 0.9.7
 
 ### New
