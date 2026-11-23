@@ -265,6 +265,7 @@ static int floors_ok(const GrassFloors* f)
 
 static void collect(const GrassFloors* f, TriList* out)
 {
+    const int sand = g.set.sand;
     for (uint32_t k = 0; k < f->npairs && !out->over; ++k)
     {
         const uint32_t mesh = f->pairs[2 * k + 1];
@@ -272,7 +273,7 @@ static void collect(const GrassFloors* f, TriList* out)
         for (uint32_t t = f->mesh_first[mesh]; t < f->mesh_first[mesh + 1]; ++t)
         {
             float w[9];
-            if (f->terrain[t] == 4 /* snow */ && world_tri(m, &f->tris[t * 9], w))
+            if ((f->terrain[t] == 4 /* snow */ || (sand && f->terrain[t] == 3 /* sand */)) && world_tri(m, &f->tris[t * 9], w))
                 tl_split(out, w);
         }
     }

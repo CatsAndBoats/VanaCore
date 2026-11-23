@@ -19,6 +19,7 @@ typedef struct SnowSettings
     float depth, strength, fade;
     float sink;
     float soft;
+    int sand; /* trails in the zone's sand ground (terrain 3) too; read when a zone's floors are laid out, so on the next zone */
 } SnowSettings;
 
 void snow_configure(const SnowSettings* settings);

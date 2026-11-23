@@ -270,6 +270,7 @@ typedef struct VanaSnow
     float depth, strength, fade;
     float sink; /* yalms a character standing in snow is lowered into it, 0 off */
     float soft; /* 0 to 1: how soft the prints' edges are */
+    int sand;   /* 1: the zone's sand (terrain 3) takes trails too, from the next zone */
 } VanaSnow;
 void vanacore_gfx_set_snow(const VanaSnow* settings);
 /* VanaCore's sky (VanaCore.ini [graphics] sky, sky.log): drawn in place of the game's dome (sky.c; Direct3D 12). enabled; log 1: a line

@@ -1211,6 +1211,8 @@ void apply_live(When when)
         // snow.soft (0 to 1, default 0.6): how soft the prints' edges are. A print keeps the look it was pressed in with
         snow.sink = number(L"snow.sink", 0.0f, 0.0f, 1.0f);
         snow.soft = number(L"snow.soft", 0.6f, 0.0f, 1.0f);
+        // snow.sand=1 (off by default): sand ground (the collision's terrain 3) takes footprints too, from the next zone
+        snow.sand = flag(L"snow.sand", false) ? 1 : 0;
         g_snow_floors = snow.enabled != 0;
         if (snow.enabled != (g_snow_floors_said ? 1 : 0) && when != When::Quiet)
             log::write(snow.enabled ? L"Graphics: snow trails on (snow)" : L"Graphics: snow trails off (snow)");

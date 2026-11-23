@@ -740,7 +740,7 @@ void vanacore_gfx_set_collision(const VanaFloors* in)
 }
 void vanacore_gfx_set_snow(const VanaSnow* in)
 {
-    const SnowSettings s = { in->enabled, in->depth, in->strength, in->fade, in->sink, in->soft };
+    const SnowSettings s = { in->enabled, in->depth, in->strength, in->fade, in->sink, in->soft, in->sand };
     snow_configure(&s);
 }
 void vanacore_gfx_set_sky(const VanaSky* in)
