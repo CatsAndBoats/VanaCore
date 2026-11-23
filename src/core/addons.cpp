@@ -1046,11 +1046,13 @@ void addon_link(Addon& addon)
 // exec <name> <lua>, info <name>, link <name>.
 bool is_required(std::string_view name, bool plugin); // below, with the scripts
 
-// VanaCore's own addons that load at start without a boot.txt line: its window (/vana), which [addons] vana=0 switches
-// off (default 1), and the key binds window (keybinds), which is always on: /addon unload leaves it alone (reload
-// works). Every other one, freecam and loadscreen too, is boot.txt's like any addon: the default boot.txt loads them
-// for a new install, and nothing adds them to an existing one (they're on once switched on).
-constexpr const char* kOwnDefaults[] = {"vana", "keybinds"};
+// The addons that load at start without a boot.txt line: VanaCore's window (/vana), which [addons] vana=0 switches off
+// (default 1); the key binds window (keybinds), which is always on: /addon unload leaves it alone (reload works); and
+// VanaStore (vanastore), the addon store, which [addons] vanastore=0 switches off like /vana. VanaStore isn't in this
+// repository: CatsAndBoats/cexi-addons publishes it into the launcher's VanaCore build (addons\vanacore\vanastore), and
+// an install without it skips it. Every other one, freecam and loadscreen too, is boot.txt's like any addon: the
+// default boot.txt loads them for a new install, and nothing adds them to an existing one (they're on once switched on).
+constexpr const char* kOwnDefaults[] = {"vana", "keybinds", "vanastore"};
 constexpr const char* kOwnAlwaysOn[] = {"keybinds"};
 
 bool is_own_default(std::string_view name)
@@ -1089,17 +1091,21 @@ bool write_script_file(const std::string& path, const std::string& contents)
 
 // scripts\boot.txt follows a typed /addon load or /addon unload, as it follows the /vana window's switches (vana.lua's
 // persist): on adds a `/addon load <name> <kind>` line unless one loads it already; off takes the name out of each line
-// that does. `name` is lower case. VanaCore's own window (/vana), keybinds and CatsEyeXI's required addon aren't
-// boot.txt's. `plugin`: the `/plugin load` lines instead (only off: a typed /plugin unload takes the plugin out).
+// that does. `name` is lower case. The ones that load at start by themselves (kOwnDefaults) and CatsEyeXI's required
+// addon aren't boot.txt's. `plugin`: the `/plugin load` lines instead (only off: a typed /plugin unload takes the plugin
+// out).
 void persist_boot(const std::string& name, bool on, bool plugin = false)
 {
     if (!plugin && is_always_on(name))
         return;
-    // VanaCore's own window loads by itself at start, unless switched off: [addons] vana=0 remembers that
+    // VanaCore's window and VanaStore load by themselves at start, unless switched off: [addons] <name>=0 remembers
+    // that. Off also takes out a boot.txt line from before (VanaStore switched on before it loaded by itself), which
+    // would load it again at login
     if (!plugin && is_own_default(name)) {
         if (!g_settings_ini.empty())
             ini::set(g_settings_ini, L"addons", std::wstring(name.begin(), name.end()).c_str(), on ? L"1" : L"0");
-        return;
+        if (on)
+            return;
     }
     if (plugin && on)
         return;
@@ -1177,8 +1183,9 @@ void persist_boot(const std::string& name, bool on, bool plugin = false)
         say(name + (on ? " is in scripts\\boot.txt: it loads at the next start" : " is out of scripts\\boot.txt"));
 }
 
-// /addon unload of CatsEyeXI's required addon or keybinds (always on), said so; and an old boot.txt line loading keybinds,
-// which loaded at start already, without a word. True: leave `name` as it is.
+// /addon unload of CatsEyeXI's required addon or keybinds (always on), said so; and an old boot.txt line loading one that
+// loaded at start already (keybinds; vanastore, switched on before it loaded by itself), without a word. True: leave
+// `name` as it is.
 bool stays_as_is(const std::string& action, const std::string& name, bool loaded, bool typed)
 {
     if (action == "unload" && is_required(name, false)) {
@@ -1189,7 +1196,7 @@ bool stays_as_is(const std::string& action, const std::string& name, bool loaded
         say(name + " is part of VanaCore and stays loaded (/addon reload " + name + " reloads it)");
         return true;
     }
-    return action == "load" && is_always_on(name) && loaded && !typed;
+    return action == "load" && is_own_default(name) && loaded && !typed;
 }
 
 void addon_command(const std::vector<std::string>& parts, bool typed)
@@ -3041,8 +3048,8 @@ void on_frame()
     }
     if (!g_booted) {
         g_booted = true;
-        // VanaCore's own window (/vana), unless switched off ([addons] vana=0), and keybinds, always, before what
-        // boot.txt loads
+        // VanaCore's own window (/vana) and VanaStore, unless switched off ([addons] vana=0, vanastore=0; one whose
+        // folder isn't there is skipped), and keybinds, always, before what boot.txt loads
         std::string display;
         for (const char* name : kOwnDefaults) {
             const std::wstring key(name, name + strlen(name));

@@ -66,9 +66,10 @@ EXTERNAL_FIXED = [
     "plugins\\vanacore\\", "addons\\ashita\\", "addons\\vanacore\\yunagearopt\\",
 ]
 CEXI_ADDONS_REPO = "CatsAndBoats/cexi-addons"
-# cexi-addons' addons as of 2026-11-21: always taken as external, GitHub's list or not, so one that GitHub can't be asked
-# about (or that leaves cexi-addons, its copy on R2 kept) is never pushed over or deleted
-CEXI_ADDONS_KNOWN = ["auctionhouse-vanacore", "clawmark-vanacore", "partyfinder-vanacore", "vanamaps"]
+# cexi-addons' addons as of 2026-11-23: always taken as external, GitHub's list or not, so one that GitHub can't be asked
+# about (or that leaves cexi-addons, its copy on R2 kept) is never pushed over or deleted. vanastore loads at start by
+# itself (src/core/addons.cpp's kOwnDefaults), so a push must never delete it
+CEXI_ADDONS_KNOWN = ["auctionhouse-vanacore", "clawmark-vanacore", "partyfinder-vanacore", "vanamaps", "vanastore"]
 
 # manager.json's deploy_ignore on the machine that releases. These and the external paths are neither uploaded nor
 # deleted.

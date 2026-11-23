@@ -6583,12 +6583,16 @@ local BOOT = vana.paths.install .. '\\scripts\\boot.txt'
 -- name what loads, a kind last. On adds a line unless one loads it; off takes it out of each line that does.
 local function persist(row, on)
     local command = row.what == 'addon' and 'addon' or 'plugin'
-    -- VanaCore's own window (/vana) loads by itself at start unless [addons] vana=0, not by a boot.txt line (keybinds
-    -- too, always, and has no switch); every other addon, freecam and loadscreen too, is a boot.txt line
-    local own = { vana = true }
+    -- VanaCore's own window (/vana) and VanaStore load by themselves at start unless [addons] vana=0 or vanastore=0, not
+    -- by a boot.txt line (keybinds too, always, and has no switch; src/core/addons.cpp's kOwnDefaults); every other
+    -- addon, freecam and loadscreen too, is a boot.txt line. Off also takes out a boot.txt line from before (VanaStore
+    -- switched on before it loaded by itself), which would load it again at login
+    local own = { vana = true, vanastore = true }
     if command == 'addon' and own[row.name:lower()] then
         vana.config.set('addons', row.name:lower(), on and '1' or '0')
-        return
+        if on then
+            return
+        end
     end
     local file = io.open(BOOT, 'rb')
     local text = file and file:read('*a') or ''

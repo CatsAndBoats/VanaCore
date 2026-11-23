@@ -41,9 +41,10 @@ constexpr const char* kBareNames[] = {"license", "licence", "copying", "notice",
                                       "readme", "version"};
 // What a zip made by Finder or Explorer carries beside the files: left out, not refused
 constexpr const char* kJunk[] = {"__macosx", ".ds_store", "thumbs.db", "desktop.ini"};
-// VanaCore's own addons (addons\vanacore) and CatsEyeXI's required one: never a package's
+// VanaCore's own addons (addons\vanacore), VanaStore (it ships with VanaCore's build from CatsAndBoats/cexi-addons and
+// installs packages itself) and CatsEyeXI's required one: never a package's
 constexpr const char* kReserved[] = {"vana", "keybinds", "freecam", "mcp", "hello", "libs", "apiexplorer", "plates",
-                                     "sendkey", "minparty", "loadscreen", "customcolors"};
+                                     "sendkey", "minparty", "loadscreen", "vanastore", "customcolors"};
 constexpr const char* kDevices[] = {"con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7",
                                     "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"};
 
