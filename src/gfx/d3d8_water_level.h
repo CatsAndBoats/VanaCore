@@ -1,7 +1,44 @@
-/* d3d8_water_level.h: an include unit of d3d8_water.h (in its scope: g_sea, g_wfloor, g_water_set, g_scene, SEA_*). The sea's
- * level: which zones have a sea (sea_zone), its level (sea_level, sea_note) and the game's sea sheets VanaCore's sea plane
- * takes the place of (sea_own) */
+/* d3d8_water_level.h: an include unit of d3d8_water.h (in its scope: g_water_set, g_scene). The zone's floors (g_wfloor) and the
+ * sea (g_sea, SEA_*); the sea's level: which zones have a sea (sea_zone), its level (sea_level, sea_note) and the game's sea
+ * sheets VanaCore's sea plane takes the place of (sea_own) */
 #pragma once
+
+static struct
+{
+    uint32_t n;         /* the collision's water triangles (0: none, or the zone's floors not known) */
+    float lo[3], hi[3]; /* their box in the world */
+    float zlo[3], zhi[3]; /* the zone's floors' box in the world, every terrain: the sea's tiles run past it (water_horizon_pass) */
+    int zone;             /* whose floors (0: none) */
+    float rim_y;          /* the lowest point of the water floors at the zone's rim (within SEA_RIM of the box's edge): the shore's
+                           * level where the sea is painted on the sky's dome and has no tiles (Valkurm Dunes); rim_n corners */
+    uint32_t rim_n;
+} g_wfloor;
+static uint32_t water_floors_zone(void) { return g_wfloor.zone; }
+
+/* The sea, for water_horizon_pass: the lowest level of the game's water tiles that reach the zone's rim (sea_note) */
+static struct
+{
+    float y;      /* its height (the world's y points down: the largest; a chunk's lowest point) */
+    uint32_t n;   /* tile draws, or chunks, at it */
+    uint32_t gen; /* changed as the level is set or first reaches SEA_LEAST: chunks without water are looked at again (water_ground) */
+    int said;     /* the log has said */
+    uint32_t full; /* the frame (g_scene.frame) VanaCore's sea plane was last drawn (water_horizon_pass): the game's tiles are dropped
+                    * only while it is (sea_own), never with no sea at all */
+    float box[4];  /* the x and z box (x0, z0, x1, z1) of the draw that set the level */
+    float under;   /* the level of the sea's under-sheet (has_under: one), that same draw again lower down (sea_note) */
+    int has_under;
+} g_sea;
+#define SEA_PLANES 2.0f /* the game's level water up to this far over the sea's level is the sea's too: Lower Jeuno lays its harbour in
+                       * two or three sheets a little apart, which showed as steps and seams in the water */
+#define SEA_RIM 60.0f   /* a tile within this of the zone's floors' box edge, or past it, is the sea's; a marsh's tiles lie well inside */
+#define SEA_LEAST 4     /* tile draws, or chunks, at a level before the sea is drawn on */
+#define SEA_STACK 8.0f  /* the sheet that set the sea's level drawn again up to this far over it is the sea's surface (sea_note) */
+#define SEA_UNDER 0.15f /* the horizon's sheet this far under the tiles' level: where the tiles are, they win the depth test */
+#define SEA_OVER 0.1f   /* ... and this far over the shore's level where the sea has no tiles: it lies over the wet sand's end, which it fades in across */
+#define SEA_EDGE 120.0f /* the sheet fades in from nothing over this much from its inner edge (its first ring's depth 0 to SEA_DEPTH) */
+#define SEA_DEPTH 30.0f /* the bed's depth the sheet's pixels take: the deep water's colour */
+#define SEA_IN 100.0f   /* the sheet starts this far inside the floors' box: under the last tiles, chunks or shore, with no gap to them */
+#define SEA_RIM_LEAST 3000u /* water corners at the rim before the shore's level counts as a sea's (Valkurm's has 10,500; a stream's end near a zone's edge a few hundred) */
 
 /* A tile of the game's drawn as VanaCore's water (water_draw): the sea's level for water_horizon_pass. The lowest level (the
  * world's y points down) of the tiles that reach the zone's rim, within SEA_RIM of its floors' box or past it: the sea's tiles
