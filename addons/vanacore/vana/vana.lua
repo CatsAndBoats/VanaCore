@@ -2839,7 +2839,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     local hovered = M.over(x, y, w, h)
     -- no hover band on a sub-panel's heading, nor on the Addons and Plugins pages' search row (controls, not a setting)
     if hovered and row.kind ~= 'subheader' and row.kind ~= 'extension_filter' and row.kind ~= 'controls' and row.kind ~= 'columns'
-        and not row.big then
+        and not BANNER_KINDS[row.kind] and not row.big then
         M.fill(dl, x + S(4), y, w - S(8), h, P.hover, S(3), 0, 0.8)
         if row.window ~= nil and vana.layout ~= nil then
             vana.layout.highlight(row.window) -- a Layout window's row: it's outlined in the game
