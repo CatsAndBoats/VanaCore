@@ -2,6 +2,19 @@
 
 What's new in each VanaCore release. A release's notes on GitHub are its section here (`## <version>`), under New, Changed, Fixed and Misc: write the next version's section with its version bump.
 
+## 0.9.9
+
+### New
+- **Snow Trails:** A new snow.sand setting (off by default) lets sand ground take footprints too, from the next zone.
+
+### Changed
+- **/vana:** Advanced Settings groups now show when Enable Advanced Graphics Settings is on, DLSS 5 has a heading of its own, and only the panels' Reset buttons remain.
+
+### Fixed
+- **Water:** The far sea now fogs to the sky over the horizon instead of the zone's flat grey, and a tree on the shore no longer leaves its crown in navy on the sea.
+- **Name icons:** Name icons now stay clear of the name on ultrawide screens.
+- **/vana:** Banners no longer tint their row under the mouse.
+
 ## 0.9.8
 
 ### New
