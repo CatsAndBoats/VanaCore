@@ -35,7 +35,7 @@ ALLOWED_EXTENSIONS = {
 ALLOWED_BARE_NAMES = {"license", "licence", "copying", "notice", "authors", "contributors", "changelog", "readme", "version"}
 SKIPPED_NAMES = {"thumbs.db", "desktop.ini", ".ds_store", "__macosx"}
 RESERVED = {"vana", "keybinds", "freecam", "mcp", "hello", "libs", "apiexplorer", "plates", "sendkey", "minparty",
-            "loadscreen", "customcolors"}
+            "loadscreen", "vanastore", "customcolors"}
 DEVICES = {"con", "prn", "aux", "nul"} | {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
 MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_ADDON_BYTES = 256 * 1024 * 1024

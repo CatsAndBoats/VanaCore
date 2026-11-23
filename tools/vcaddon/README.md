@@ -54,7 +54,8 @@ Before writing anything (`src/core/addonpkg.cpp`, `zipread.cpp`):
 - a file type addons don't ship (the launcher's own list: `.lua .json .xml .txt .md .png .ttf .ogg ...`; no `.dll` or
   `.exe`), a file over 32 MB, over 256 MB unpacked, over 5000 files, a package over 256 MB;
 - a file that doesn't unpack to its listed size or checksum;
-- VanaCore's own addons (`vana`, `keybinds`, `freecam`, `mcp`, `hello`, `libs`, ...) and CatsEyeXI's `customcolors`;
+- VanaCore's own addons (`vana`, `keybinds`, `freecam`, `mcp`, `hello`, `libs`, ...), `vanastore` (VanaStore ships
+  with VanaCore's build) and CatsEyeXI's `customcolors`;
 - an addon folder that's there already and wasn't installed by a package (no `.vcaddon.json` in it): one the launcher
   keeps up to date, which it would put back, or one copied in by hand.
 
