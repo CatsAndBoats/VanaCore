@@ -69,6 +69,13 @@ it) when the change is more than a small one. Something worse than the baseline:
 an include unit (`grass_keep.h`, `d3d8_casters.h`) in the same commit, not a "lint ratchet paid" commit after. Don't run
 `--update-baseline --accept-growth` to make a failure pass without a maintainer agreeing.
 
+## Branches and pull requests
+
+- Never name a branch `claude/...`, even when a cloud session hands you one. Use a short name for the change
+  (`vanastore-autoload`), and push the work there instead.
+- Open pull requests ready for review, never as drafts, even when the change hasn't been built or tested in game yet.
+  Say what's untested in the description instead.
+
 ## Never edit addons
 
 Never edit an addon's files (an Ashita install's `addons\*`, any `addons\ashita\*` copy). We don't control them and they
