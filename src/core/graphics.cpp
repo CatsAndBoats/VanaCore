@@ -87,6 +87,7 @@ constexpr const char* kEffectKeys[] = {"ao",      "radius",      "grade",      "
                                        "dlss5_fx_out", "dlss5_fx_light", "dlss5_fx_gain", "dlss5_fx_actor", "dlss5_fx_cap", "dlss5_fx_norm", "dlss5_elight_post", "dlss_motion_all", "fg_fx_motion", "dlss_motion_plants", "dlss_motion_chars", "dlss_motion_batch", "dlss_reactive", "dlss_reactive_moving",
                                        "dlss5_passes", "dlss5_taper", "dlss5_mix", "dlss5_colour", "dlss5_brighten", "dlss5_rebuild", "dlss5_scale",
                                        "outline", "outline_width", "outline_depth", "outline_crease", "outline_fade", "outline_nograss", "outline_width_chars",
+                                       "outline_grass", "outline_width_grass", "outline_depth_grass", "outline_fade_grass",
                                        "bands",  "band_soft",   "smooth",
                                        "dof",     "dof_focus",   "dof_player", "dof_range",  "dof_far",  "dof_near", "dof_sky",
                                        "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_lift", "gi", "gi_radius", "gi_quality",

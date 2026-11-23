@@ -36,6 +36,19 @@ void gfx_player_light(const GfxScene* s, float strength, float radius, float war
     plight2[3] = dim;
 }
 
+void gfx_grass_lines(float strength, float width, float depth, float fade, float vh, const float toon[4], const float toon2[4],
+    float toon4[4])
+{
+    memset(toon4, 0, 4 * sizeof(float));
+    if (!(strength > 0.0f))
+        return;
+    const float lw = width * vh / 1080.0f;
+    toon4[0] = fminf(strength, 1.0f);
+    toon4[1] = width > 0.0f ? fmaxf(lw, 1.0f) : toon[1];
+    toon4[2] = depth > 0.0f ? fmaxf(depth, 1e-3f) : toon[2];
+    toon4[3] = fade > 0.0f ? fade : toon2[0];
+}
+
 static float g_pool[16]; /* gfx_player_pool's; g_pool[3] (the radius) 0: none this frame */
 static float g_hfog[16]; /* gfx_height_fog's; g_hfog[3] (the density) 0: none this frame */
 

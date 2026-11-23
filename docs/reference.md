@@ -439,7 +439,11 @@ In `[graphics.effects]` (xi-on-mac's `fx.txt` keys; each 0 turns that effect off
 | `outline_depth` | 0.1 | How big a jump in depth makes a line around an object; smaller finds more |
 | `outline_crease` | 0.25 | How sharp a fold makes a line (0.25 is about 40°); 0 turns fold lines off |
 | `outline_fade` | 60 | The distance they're gone by, in world units |
-| `outline_nograss` | 1 | 1 leaves VanaCore's grass out of them: no lines on it |
+| `outline_nograss` | 1 | 1 keeps VanaCore's grass (Mass Grass) apart: the scenery's lines are found as if it weren't there, and the grass gets only its own (`outline_grass`). 0 outlines the grass like the scenery. The /vana Effects tab has these under Ink lines > Grass, locked while Mass Grass is off |
+| `outline_grass` | 0 | With `outline_nograss` 1, how dark the lines on the grass are, as a share of `outline` (0–1; 0 none) |
+| `outline_width_grass` | 0 | Their width, as `outline_width`; 0 is `outline_width` |
+| `outline_depth_grass` | 0 | How big a jump in depth makes a line on the grass, as `outline_depth` (larger keeps only the tufts' outer edges); 0 is `outline_depth` |
+| `outline_fade_grass` | 0 | The distance the grass's lines are gone by, in world units; 0 is `outline_fade` |
 | `bands` | 0 | Brightness in this many flat steps (2 or more; 3–5 looks cartoon-like), hue and saturation kept; not the sky |
 | `band_soft` | 0.15 | How soft the steps' edges are, 0 (hard) to 1 |
 | `smooth` | 0 | Texture detail flattened into even patches, edges kept (a Kuwahara filter), 0–1 |

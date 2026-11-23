@@ -138,6 +138,13 @@ int gfx_dlss_cpu_sync_wanted(void);
  * taken off round the pool (0 at night). The light hangs max(0.8 radius, 3) over them. */
 void gfx_player_light(const GfxScene* s, float strength, float radius, float warm, float day, float plight[4], float plight2[4]);
 
+/* The ink lines on VanaCore's grass ([graphics.effects] outline_grass, outline_width_grass, outline_depth_grass, outline_fade_grass;
+ * the composite's toon4), with the grass apart from the world's (outline_nograss): toon4 = how dark (a share of the lines'
+ * strength, toon.x; 0 none), their width in pixels on a scene vh lines high (as wide on a 1080-line screen), the silhouette's
+ * threshold and the distance they're gone by. A width, threshold or fade of 0 is the world's (toon.y, toon.z, toon2.x). */
+void gfx_grass_lines(float strength, float width, float depth, float fade, float vh, const float toon[4], const float toon2[4],
+    float toon4[4]);
+
 /* The scene effects' shader build (fx_build in gfx_d3d11.c and gfx_d3d12.c), watched: the 30-odd functions compile in seconds
  * with Microsoft's d3dcompiler_47.dll and in minutes with Wine's own (vkd3d-shader's HLSL compiler, Proton's too), and until
  * they're built the effects draw nothing (no shadows, occlusion, grade, zone lines, sparkles, addons' ground rings) with
