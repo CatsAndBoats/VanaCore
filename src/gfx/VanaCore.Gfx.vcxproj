@@ -93,6 +93,7 @@
     <ClInclude Include="d3d8_water_fill.h" />
     <ClInclude Include="d3d8_water_bake.h" />
     <ClInclude Include="d3d8_water_memo.h" />
+    <ClInclude Include="d3d8_water_light.h" />
     <ClInclude Include="d3d8_water_level.h" />
     <ClInclude Include="d3d8_water_mirror.h" />
     <ClInclude Include="d3d8_water_sea.h" />
