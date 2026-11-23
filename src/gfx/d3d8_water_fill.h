@@ -8,6 +8,8 @@
  * or more under the level, appended to b's water. Not a sea's sheets, nor ones too big to grid */
 #define FILL_REACH 8
 #define FLOOD_REACH 96 /* cells a pond is flooded out to from its layer, at most */
+#define FILL_POND_DOWN 16.0f /* how far from a pond's level its water's floors are looked for (fill_wet): no farther than its
+                              * deepest bed needs, so a pool isn't flooded on over water lying a fall's height under its lip */
 static const float FILL_PT[5][2] = { { 0.5f, 0.5f }, { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f } }; /* a cell's middle, corners */
 #define FILL_MOST 262144u /* cells, at most */
 /* a cell: 0 open, 1 the sheet's, 2+k filled in pass k, and these */
@@ -36,9 +38,22 @@ typedef struct FloodCell
 } FloodCell;
 static FloodCell g_flood[FLOOD_SET];
 static uint32_t g_flood_n;
+/* Where a flood stopped in open water, to be carried on from (flood_pend, flood_pump): a cell's middle, the level, and the
+ * flood's kind (bake_flood's pond and own) */
+#define FLOOD_PEND 32
+#define FLOOD_PEND_APART 48.0f /* yalms between two of them at a level: the floods from each reach well past that */
+#define FLOOD_PUMP_EVERY 4     /* frames between two floods carried on: a lake fills in over a second, without a hitch */
+#define FLOOD_ROOM 24000u      /* cells g_flood must still have room for (a flood's most) before one is carried on */
+typedef struct FloodPend
+{
+    float x, z, y;
+    uint8_t pond, own;
+} FloodPend;
+static FloodPend g_flood_pend[FLOOD_PEND];
+static uint32_t g_flood_pend_n;
 static void flood_reset(void)
 {
-    memset(g_flood, 0, sizeof g_flood), g_flood_n = 0;
+    memset(g_flood, 0, sizeof g_flood), g_flood_n = 0, g_flood_pend_n = 0;
 }
 static FloodCell* flood_at(int x, int z, int y2, int add)
 {
@@ -116,7 +131,9 @@ static float fill_wet(const FillGrid* g, uint32_t ix, uint32_t iz, int strict)
     for (int k = 0; k < 5; ++k)
     {
         float p[3] = { g->x0 + (float)ix + FILL_PT[k][0], g->y, g->z0 + (float)iz + FILL_PT[k][1] }, d;
-        const int tk = grass_floor_near(p, 12.0f, &d);
+        /* (a pond's floors looked for deeper: Lake Mechieume's bed lies 13 yalms down in places, past the 12 the rest ask
+         * within, and its deepest water was square holes in the lake) */
+        const int tk = grass_floor_near(p, g->pond ? FILL_POND_DOWN : 12.0f, &d);
         const int w = g->pond  ? (tk == 8 || tk == 9) && d >= -BAKE_LEVEL
                       : strict ? (tk == 9 && d >= -1.0f) || (tk == 8 && d >= 0.1f)
                                : (tk == 9 && fabsf(d) <= 1.0f) || (tk >= 0 && tk != 9 && d >= 0.1f);
@@ -242,6 +259,34 @@ static void flood_note(WaterBake* b, const FillGrid* g)
         memcpy(b->lo, lo, sizeof lo), memcpy(b->hi, hi, sizeof hi);
 }
 
+/* A flood that stopped in open water leaves where to carry on from. bake_flood goes FLOOD_REACH cells out from its sheet, a
+ * pass a cell, four ways: on a lake wider than that (Jugner Forest's Lake Mechieume, whose one sheet lies at the river's mouth)
+ * it stopped across the open lake along a staircase of yalm cells, a diamond's edge, VanaCore's water on one side and the
+ * game's on the other, and nothing took it on. The cells of its last pass (when it stopped with cells still being made: cut)
+ * and the ones at its grid's rim are such places: kept, FLOOD_PEND_APART apart, for flood_pump */
+static void flood_pend(const FillGrid* g, int cut, int pond, int own)
+{
+    uint8_t last = 0;
+    for (size_t i = 0; cut && i < (size_t)g->nx * g->nz; ++i)
+        if (g->m[i] >= 2 && g->m[i] < FILL_SEED && g->m[i] > last)
+            last = g->m[i];
+    for (uint32_t iz = 1; iz + 1 < g->nz; ++iz)
+        for (uint32_t ix = 1; ix + 1 < g->nx; ++ix)
+        {
+            const uint8_t c = g->m[(size_t)iz * g->nx + ix];
+            const int rim = ix <= 1 || iz <= 1 || ix + 2 >= g->nx || iz + 2 >= g->nz;
+            if (c < 2 || c >= FILL_SEED || !(rim || (cut && c == last)))
+                continue;
+            const float x = g->x0 + (float)ix + 0.5f, z = g->z0 + (float)iz + 0.5f;
+            int near = 0;
+            for (uint32_t k = 0; k < g_flood_pend_n && !near; ++k)
+                near = fabsf(g_flood_pend[k].y - g->y) <= 1.0f && fabsf(g_flood_pend[k].x - x) < FLOOD_PEND_APART &&
+                       fabsf(g_flood_pend[k].z - z) < FLOOD_PEND_APART;
+            if (!near && g_flood_pend_n < FLOOD_PEND)
+                g_flood_pend[g_flood_pend_n++] = (FloodPend){ x, z, g->y, (uint8_t)(pond != 0), (uint8_t)(own != 0) };
+        }
+}
+
 /* A pond flooded from the game's additive layer over it (b: the layer's triangles, at level y). East Sarutabaruta's pond is
  * painted on its bed, its water only that and a lit additive mesh laid four times along its banks: no sheet to make VanaCore's
  * water from. The cells under the layer and out from them up to FLOOD_REACH where the collision has the pond's water at the
@@ -273,10 +318,12 @@ static void bake_flood(WaterBake* b, float y, int pond, int own)
     int pass = 0;
     for (; pass < FLOOD_REACH && (n = fill_pass(&g, pass, 1)) != 0; ++pass)
         cells += n;
+    const int cut = pass == FLOOD_REACH && n != 0; /* stopped by the reach with cells still being made: in open water */
     for (int k = 0; k < FILL_REACH; ++k, ++pass)
         shelf += fill_pass(&g, pass, 0);
     fill_runs(b, &g, own ? -1.0f : 1.0f);
     flood_note(b, &g);
+    flood_pend(&g, cut, pond, own);
     free(g.m), free(g.dp);
     if (g_water_set.log)
         rt_log("[recomp] water: the %s at %.2f (drawn at %.1f %.1f %.1f) flooded %u cells of its pond and %u of its banks' shelves "
@@ -294,4 +341,35 @@ static void bake_pond_over(const WaterBake* b, float y)
         if (o != b && o->n && !o->seed && fabsf((o->lo[1] + o->hi[1]) * 0.5f - y) < 0.1f && bake_flooded(o->lo, o->hi))
             o->n = 0;
     }
+}
+
+
+/* Once a frame, from water_ground_pass before the pool goes to the card: one flood that stopped in open water carried on
+ * (flood_pend), every FLOOD_PUMP_EVERY frames. An entry of its own takes its cells (no mesh's: never found by bake_find), a
+ * cell's box where the flood stopped; bake_flood lays its grid round that, takes the cells flooded before as water and goes
+ * on from them another FLOOD_REACH out, by the same rule - and leaves its own places to carry on from, until the lake's banks
+ * end it. Not past what g_flood has room to remember (a cell not remembered would be flooded again, water over water) */
+static void flood_pump(void)
+{
+    static uint32_t frames;
+    if (!g_flood_pend_n || (++frames % FLOOD_PUMP_EVERY) != 0)
+        return;
+    if (g_bake_n >= BAKE_ENTRIES || g_flood_n + FLOOD_ROOM > FLOOD_SET / 4 * 3)
+    {
+        g_flood_pend_n = 0;
+        return;
+    }
+    const FloodPend p = g_flood_pend[--g_flood_pend_n];
+    WaterBake* b = &g_bake[g_bake_n];
+    memset(b, 0, sizeof *b);
+    b->at = g_bake_nv, b->seed = 2, b->gen = g_sea.gen, b->seen = g_scene.frame;
+    b->lo[0] = p.x - 0.5f, b->lo[1] = p.y, b->lo[2] = p.z - 0.5f, b->hi[0] = p.x + 0.5f, b->hi[1] = p.y, b->hi[2] = p.z + 0.5f;
+    bake_flood(b, p.y, p.pond, p.own);
+    if (!b->n) /* nothing more there (another flood got to it first): the entry isn't taken */
+        return;
+    ++g_bake_n;
+    if (p.pond)
+        bake_pond_over(b, p.y);
+    bake_wet(b);
+    g_bake_dirty = 1;
 }

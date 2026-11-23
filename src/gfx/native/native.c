@@ -771,7 +771,7 @@ void vanacore_gfx_grass_capture_clear(void) { grass_capture_clear(); }
 int vanacore_gfx_write_png(const wchar_t* path, const uint32_t* argb, unsigned w, unsigned h) { return grass_write_png(path, argb, w, h); }
 void vanacore_gfx_set_rain(const VanaRain* in)
 {
-    RainSettings s = { in->wet, in->sheen, in->drops, in->dry, in->force, in->rain, in->density, in->splash, in->shelter, in->thunder, in->game, in->lens, in->spatter, in->lens_on, in->ground, in->freeze, in->range, in->reflect, in->puddles, in->reach, in->view };
+    RainSettings s = { in->wet, in->sheen, in->drops, in->dry, in->force, in->rain, in->density, in->splash, in->shelter, in->thunder, in->game, in->lens, in->spatter, in->lens_on, in->ground, in->freeze, in->range, in->reflect, in->puddles, in->reach, in->view, in->water };
     d3d8_set_rain(&s);
 }
 void vanacore_gfx_set_weather(unsigned weather, int known) { d3d8_set_weather(weather, known); }
@@ -780,7 +780,8 @@ void vanacore_gfx_set_water(const VanaWater* in)
 {
     WaterSettings s = { in->enabled, in->waves, in->speed, in->size, in->reflection, in->glint, in->brightness, in->colour,
         in->shallowness, in->turbulence, in->direction, in->glint_size, in->has_tint, in->tint, in->detect, in->view, in->pass,
-        in->clarity, in->refraction, in->shore, in->foam, in->ripples, in->ripple_size, in->log, in->probe, in->horizon, in->falls, in->caustics, in->relief, in->shadows, in->sea };
+        in->clarity, in->refraction, in->shore, in->foam, in->ripples, in->ripple_size, in->log, in->probe, in->horizon, in->falls, in->caustics, in->relief, in->shadows, in->sea,
+        in->mirror, in->mirror_scale, in->mirror_reach, in->mirror_waves };
     d3d8_set_water(&s);
 }
 void vanacore_gfx_set_water_zones_off(const uint16_t* zones, unsigned n) { d3d8_set_water_zones_off(zones, n); }

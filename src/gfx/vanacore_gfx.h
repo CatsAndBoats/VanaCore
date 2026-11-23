@@ -333,6 +333,7 @@ typedef struct VanaRain
     float puddles; /* the puddles' share of them: low ground and corners (rain.puddles, 0 none) */
     float reach;   /* how far round the camera the rain falls at all (rain.far) */
     int view;      /* the rain red over the picture in grey (Debug view 31) */
+    float water;   /* the drops' rings on VanaCore's water (rain.water, 0 none) */
 } VanaRain;
 void vanacore_gfx_set_rain(const VanaRain* settings);
 /* the weather (0x057's id) each frame, and whether a packet has given one yet */
@@ -363,6 +364,9 @@ typedef struct VanaWater
     float relief;   /* water.relief: the wavelets lit as slopes */
     int shadows;    /* water.shadows: the sun's shadows fall on VanaCore's water (0, the default: none) */
     int sea;        /* water.sea: VanaCore's own sea plane in place of the game's sea tiles (1, the default) */
+    /* the world mirrored in the water: its strength (water.mirror, 0 off), its size as a share of the scene's (water.mirror.scale),
+     * how far what's mirrored reaches in yalms (water.mirror.reach, 0 all) and how far the waves push it about (water.mirror.waves) */
+    float mirror, mirror_scale, mirror_reach, mirror_waves;
 } VanaWater;
 void vanacore_gfx_set_water(const VanaWater* settings);
 /* The zones (the game's zone ids) VanaCore's water is never drawn in, the game's own left there as with water off; copied, and

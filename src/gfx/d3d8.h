@@ -118,6 +118,7 @@ typedef struct RainSettings
     float puddles; /* ... and its puddles, in the low ground and the corners, near mirrors (rain.puddles, 0 to 2) */
     float reach;   /* how far round the camera the rain falls at all, yalms (rain.far, Rain Range, 52 to 500) */
     int view;      /* 1 the rain red and the rest of the picture grey, 2 the rain's rings (32; Debug view 31, /vana debug's Rain; this session only) */
+    float water;   /* the drops' rings on VanaCore's water (rain.water, 0 none to 3; d3d8_rain.h rain_water_bind) */
 } RainSettings;
 void d3d8_set_rain(const RainSettings* settings);
 /* the zone's whole collision (vanacore_gfx_set_collision), for the rain's shelter map; NULL or zone 0: none */
@@ -154,6 +155,10 @@ typedef struct WaterSettings
     float relief;   /* water.relief: the wavelets lit as slopes, the refraction with them, 0 flat */
     int shadows;    /* water.shadows: the sun's shadows on the pass's water; 0 (the default) none (water_pass: GfxScene.water_noshadow) */
     int sea;        /* water.sea: the game's sea tiles dropped and VanaCore's one sea plane drawn in their place (d3d8_water_sea.h) */
+    /* the world mirrored in the water (d3d8_water_mirror.h): how strongly (water.mirror, 0 off), the mirror's size as a share of
+     * the scene's each way (water.mirror.scale), how far from the camera what's mirrored reaches, in yalms (water.mirror.reach,
+     * 0 all of it), and how far the waves push it about (water.mirror.waves) */
+    float mirror, mirror_scale, mirror_reach, mirror_waves;
 } WaterSettings;
 void d3d8_set_water(const WaterSettings* settings);
 void d3d8_set_water_zones_off(const uint16_t* zones, unsigned n);

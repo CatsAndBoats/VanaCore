@@ -413,6 +413,7 @@ static void water_shade(GfxDraw* d, const float lo[3], const float hi[3], const 
     tn[11] = g_water_set.clarity < 0.5f ? 0.5f : g_water_set.clarity, tn[12] = g_water_set.refraction, tn[13] = g_water_set.shore;
     tn[14] = g_water_set.foam, tn[15] = pool ? g_water_set.ripples * 0.5f : g_water_set.ripples;
     d->u.texm[5][0] = (float)g_water_set.probe; /* matrix 5's byte 0: the probe (water.probe), 0 otherwise */
+    memset(d->u.texm[2], 0, 64); /* matrix 2: the mirror's and the rain's, set on the pass's draws (water_mirror_bind, rain_water_bind); none here */
     d->u.texm[5][2] = g_water_set.caustics, d->u.texm[5][3] = g_water_set.relief; /* bytes 2 and 3 */
     water_feet_set(d->u.texm[5], lo, hi);
     if (rect && g_water_tiles < WATER_RECTS)
@@ -819,6 +820,9 @@ static struct
     uint32_t w, h, frame;
 } g_water_late;
 static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy, uint32_t w, uint32_t h, const GfxScene* s);
+static void water_mirror_bind(GfxDraw* d); /* d3d8_water_mirror.h: the world mirrored in the water, on one of the pass's draws */
+static void rain_water_bind(GfxDraw* d);   /* d3d8_rain.h: the rain's drops landing on it, after water_mirror_bind */
+static int g_wmirror_lost; /* ... the device was lost since its mirror was made: the back end's texture went with it */
 
 /* A draw kept for the pass reads the game's textures and buffers as they were when it was kept; the game may release them
  * before the scene ends (at a zone change, a settings reload: the kept draw's vertex buffer or shimmer texture gone), and
@@ -901,6 +905,8 @@ static int water_keep(GfxDraw* d, uint32_t prim, uint32_t count, int kind)
         if (cc)
         {
             water_pass_draw(d, cc, dc, w, h, &g_scene.s);
+            water_mirror_bind(d);
+            rain_water_bind(d);
             g_water_as_is = 0;
             return 0;
         }
@@ -971,6 +977,14 @@ static void water_pass_draw(GfxDraw* d, GfxTex* colour_copy, GfxTex* depth_copy,
     memcpy(&minz, &d->vp[4], 4), memcpy(&maxz, &d->vp[5], 4);
     if (!(maxz > minz))
         minz = 0.0f, maxz = 1.0f;
+    /* the viewport the pixel function reads (the copies' and the mirror's place by the pixel's own: u.vp) in the target's
+     * pixels, as it's drawn (d->vp). A draw of the game's comes with the game's (draw_packet: the XYZRHW mapping's), and with
+     * the scene drawn at another size than the game's own ([graphics] background 3072x3072, the scene 3440x1440) the copies
+     * were read up to the game's width alone - past pixel 3072 each row of a fountain's water was one texel of the bed, level
+     * bands that slid as the camera turned (Bastok Markets) - and the mirror and the sky at another place than the pixel's.
+     * The ground's water, the sea's sheet and the rain's pass set both alike already */
+    for (int i = 0; i < 4; ++i)
+        d->u.vp[i] = (float)d->vp[i];
     float* tn = d->u.texm[6];
     tn[4] = s->proj[10], tn[5] = s->proj[14], tn[6] = s->proj[11] < 0.0f ? -1.0f : 1.0f, tn[7] = minz;
     tn[8] = maxz - minz, tn[9] = (float)w, tn[10] = (float)h;
@@ -1146,6 +1160,7 @@ static void water_device_lost(void)
 {
     gfx_buf_destroy(g_bake_buf), g_bake_buf = NULL, g_bake_dirty = 1;
     ocean_lost();
+    g_wmirror_lost = 1;
 }
 
 /* the CPU row of index slot i of the draw (its own row for a draw without indices) */
@@ -1384,7 +1399,11 @@ static void water_ground_setup(GfxDraw* d, const GfxScene* s, int copies, GfxTex
     if (g_water_set.view) /* the debug view: cyan */
         water_view(d, 0x00FFFFu);
     else if (copies)
+    {
         water_pass_draw(d, colour_copy, depth_copy, w, h, s), d->fs.water = 3;
+        water_mirror_bind(d); /* (the water's draws alone: the rain's pass sets its draw up by water_pass_draw too) */
+        rain_water_bind(d);
+    }
 }
 
 /* The ground's water drawn as VanaCore's water, at the pass's end: the chunks drawn this frame, each its triangles from the
@@ -1393,6 +1412,7 @@ static void water_ground_setup(GfxDraw* d, const GfxScene* s, int copies, GfxTex
  * scene's copies when the pass has them. No rect (the game's layers over it are its own water's). */
 static void water_ground_pass(const GfxScene* s, int copies, GfxTex* colour_copy, GfxTex* depth_copy, uint32_t w, uint32_t h)
 {
+    flood_pump(); /* a flood that stopped in open water carried on, a piece a frame (d3d8_water_fill.h) */
     if (g_bake_dirty && g_bake_nv)
     {
         gfx_buf_destroy(g_bake_buf);
@@ -1452,6 +1472,7 @@ static void water_ground_pass(const GfxScene* s, int copies, GfxTex* colour_copy
 }
 
 #include "d3d8_water_sea.h" /* the sea drawn on to the horizon (water_horizon_pass) */
+#include "d3d8_water_mirror.h" /* the world mirrored in the water (water_mirror, water_mirror_bind; water.mirror) */
 
 /* The pass: the frame's kept draws into the scene's target (color, with its depth), each over the scene as it is - the game's
  * world, VanaCore's grass - from scene_finish once the world is done, before the scene effects. From the ones the pass can't
@@ -1471,7 +1492,10 @@ static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s)
     /* the sun's shadows off the water (water.shadows 0): the depth copy is the scene before the water, which the effects tell it by */
     g_scene.s.water_noshadow = copies && !g_water_set.shadows ? 1u : 0u;
     if (copies) /* kept for a water draw that comes after the scene is done (water_keep) */
+    {
         g_water_late.c = colour_copy, g_water_late.d = depth_copy, g_water_late.w = w, g_water_late.h = h, g_water_late.frame = g_scene.frame;
+        water_mirror(color, s, horizon, sea_y); /* the world mirrored in the nearest water's level, for the draws below (water_pass_draw) */
+    }
     gfx_set_targets(color, 0, 0, depth);
     for (uint32_t i = 0; i < g_water_kept_n; ++i)
     {
@@ -1481,7 +1505,11 @@ static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s)
         GfxDraw* d = &k->d;
         d->caster = 0, d->sought = 0, d->piece = 0, d->piece_draw = 0;
         if (copies)
+        {
             water_pass_draw(d, colour_copy, depth_copy, w, h, s);
+            water_mirror_bind(d);
+            rain_water_bind(d);
+        }
         gfx_draw(d);
     }
     if (floors)

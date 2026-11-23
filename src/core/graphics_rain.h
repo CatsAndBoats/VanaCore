@@ -28,6 +28,7 @@ static void read_rain(When when)
     rain.game = flag(L"rain.game", false) ? 1 : 0; // 1 keeps the game's own faint rain drawn under VanaCore's
     rain.lens = number(L"rain.lens", 0.5f, 0.0f, 3.0f); // droplets on the lens while the rain reaches the camera, 0 none
     rain.spatter = number(L"rain.spatter", 1.0f, 0.0f, 3.0f); // how big the spatter thrown off the characters is, 0 none
+    rain.water = number(L"rain.water", 1.0f, 0.0f, 3.0f); // the drops' rings on VanaCore's water (the water pass's), 0 none
     rain.lens_on = flag(L"rain.lens.on", true) ? 1 : 0; // the lens's droplets at all (rain.lens kept as it is when off)
     rain.ground = flag(L"rain.ground", true) ? 1 : 0;   // the wet ground and the puddles
     rain.range = number(L"rain.range", 48.0f, 8.0f, 500.0f); // Splash Range: how far round the camera the drops splash, yalms

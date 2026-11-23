@@ -189,6 +189,10 @@ static const char* vs_wvp(const GfxVsKey* k) { return k->inst ? "iwvp" : "u.wvp"
 static const char* vs_wv(const GfxVsKey* k) { return k->inst ? "iwv" : "u.wv"; }
 static const char* vs_wvit(const GfxVsKey* k) { return k->inst ? "iwvit" : "u.wvit"; }
 
+/* drawn into the sun's maps (GfxVsKey.shadow 1, 2): depth alone, no colour. Not the water's mirror (GFX_VS_MIRROR), whose
+ * position goes through the same matrix and whose colour is the draw's own */
+static int depth_only(const GfxVsKey* k) { return k->shadow && k->shadow != GFX_VS_MIRROR; }
+
 /* drawn from the sun: whatever clip-space position the function makes (the camera's, from the
  * transforms or a vertex shader's constants) goes on through the camera's inverse into the sun's
  * view - one matrix, so any draw of the scene can be drawn again into the shadow map. The pixel
@@ -568,7 +572,7 @@ static void emit_fs_signature(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
 {
     (void)k;
     int pix = pixel_lit(vk);
-    sb_printf(b, vk->shadow ? "void fs_main(VOut %s) {\n" : "float4 fs_main(VOut %s) : SV_Target {\n", pix ? "vin0" : "vin");
+    sb_printf(b, depth_only(vk) ? "void fs_main(VOut %s) {\n" : "float4 fs_main(VOut %s) : SV_Target {\n", pix ? "vin0" : "vin");
     if (pix)
     {
         sb_printf(b, "  VOut vin = vin0;\n  float3 nm_N = float3(0.0, 0.0, 0.0);\n%s  {\n  float3 N = vin.n * (rsqrt(max(dot(vin.n, vin.n), 1e-20)) * %s);\n"
@@ -648,7 +652,7 @@ static void emit_fs_tail(Sb* b, const GfxFsKey* k, const GfxVsKey* vk, const cha
      * a lit fixed-function draw's the one it's lit by (nm_N, emit_fs_signature) - turned to the side of the face the camera sees
      * (the face's own normal from where its pixels are: before the alpha test, whose discard would leave the derivatives without
      * neighbours) */
-    const int vn = k->nmap == 6 && !vk->shadow ? (vk->cpos >= 2 ? 2 : pixel_lit(vk) ? 1 : 0) : 0;
+    const int vn = k->nmap == 6 && !depth_only(vk) ? (vk->cpos >= 2 ? 2 : pixel_lit(vk) ? 1 : 0) : 0;
     if (vn == 2)
         sb_printf(b, "  float3 vn_p = vin.cp.xyw * sun_f.xyz;\n"
                      "  float3 vn_g = cross(ddx(vn_p), ddy(vn_p));\n"
@@ -665,7 +669,7 @@ static void emit_fs_tail(Sb* b, const GfxFsKey* k, const GfxVsKey* vk, const cha
         else if (k->alpha_func < 8)
             sb_printf(b, "  if (!(round(saturate(%s.a) * 255.0) %s u.params.y)) discard;\n", col, cmp[k->alpha_func]);
     }
-    if (vk->shadow) /* depth alone */
+    if (depth_only(vk)) /* depth alone */
     {
         /* shadow 2, a caster fading out of the map (gfx_d3d12.c sun_fade): the share sun_f.x of its texels kept, by an 8x8
          * ordered pattern fixed to the world (sun_f.yz: the map's texel offset, so it holds still as the map follows the
@@ -749,15 +753,15 @@ static void emit_fs_tail(Sb* b, const GfxFsKey* k, const GfxVsKey* vk, const cha
 static void emit_ff_fs(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
 {
     emit_fs_signature(b, k, vk);
-    if ((k->rain == 1 || k->rain == 3) && !vk->shadow) /* VanaCore's rain pass over the scene, or its wet ground's mask (gfx_hlsl_rain.h) */
+    if ((k->rain == 1 || k->rain == 3) && !depth_only(vk)) /* VanaCore's rain pass over the scene, or its wet ground's mask (gfx_hlsl_rain.h) */
     {
         emit_rain_fs(b, k->rain == 3);
         emit_fs_tail(b, k, vk, "col");
         return;
     }
-    if (k->water && !vk->shadow && !vk->rhw)
+    if (k->water && !depth_only(vk) && !vk->rhw)
     {
-        emit_water_fs(b, vk, k->water, k->fog);
+        emit_water_fs(b, vk, k->water, k->fog, (k->st[3].tex != 0) | (k->st[2].tex != 0) << 1);
         emit_fs_tail(b, k, vk, "col");
         return;
     }
@@ -814,11 +818,11 @@ static void emit_ff_fs(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
     }
     if (k->specular_add)
         sb_printf(b, "  cur.rgb = saturate(cur.rgb + vin.s.rgb);\n");
-    if (k->rain == 2 && !vk->shadow) /* the rain's splashes, where the scene is (gfx_hlsl_rain.h) */
+    if (k->rain == 2 && !depth_only(vk)) /* the rain's splashes, where the scene is (gfx_hlsl_rain.h) */
         emit_rain_soft(b);
     /* the rain's wet look over the finished colour (gfx_hlsl_rain.h): a character lit per pixel into the scene - not the sun's,
      * motion or normal passes, whose keys carry the flag along */
-    if (k->wet && pixel_lit(vk) && !vk->shadow && !vk->motion && k->nmap < 4)
+    if (k->wet && pixel_lit(vk) && !depth_only(vk) && !vk->motion && k->nmap < 4)
         emit_wet(b, vk);
     /* [graphics] characters.brightness below 1 (d3d8.c character_light): the characters' finished colour times it, handed over as
      * 1 - k in the ambient's spare alpha (0 for every other draw). After every clamp above, so it is the game's picture dimmed:
@@ -871,16 +875,16 @@ char* gfx_hlsl_generate(const GfxVsKey* vk, const GfxFsKey* fk, const uint32_t* 
     }
     else
         emit_ff_vs(&b, vk, water, pool);
-    if (water && !vk->shadow) /* the water's own functions, before the pixel function (gfx_hlsl_water.h) */
+    if (water && !depth_only(vk)) /* the water's own functions, before the pixel function (gfx_hlsl_water.h) */
         emit_water_functions(&b);
-    if (fk->wet && !fk->prog && pixel_lit(vk) && !vk->shadow && !vk->motion && fk->nmap < 4) /* the rain's (gfx_hlsl_rain.h) */
+    if (fk->wet && !fk->prog && pixel_lit(vk) && !depth_only(vk) && !vk->motion && fk->nmap < 4) /* the rain's (gfx_hlsl_rain.h) */
         emit_rain_functions(&b);
-    if (fk->rain && !fk->prog && !vk->prog && !vk->shadow) /* the rain pass's (gfx_hlsl_rain.h) */
+    if (fk->rain && !fk->prog && !vk->prog && !depth_only(vk)) /* the rain pass's (gfx_hlsl_rain.h) */
         emit_rain_functions(&b), emit_rain_pass_functions(&b);
     if (fk->prog)
     {
         emit_fs_signature(&b, fk, vk);
-        int relight = fk->nmap && fk->nmap < 6 && vk->cpos && !vk->shadow;
+        int relight = fk->nmap && fk->nmap < 6 && vk->cpos && !depth_only(vk);
         if (relight)
             emit_normal_relight(&b, fk->nmap);
         if (!gfx_hlsl_ps1(&b, fk, ps_tokens))
