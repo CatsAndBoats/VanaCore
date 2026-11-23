@@ -144,8 +144,33 @@ static void sea_note(const float lo[3], const float hi[3], int own)
              hi[2] < g_wfloor.zhi[2] - SEA_RIM)
         return;
     const float y = hi[1]; /* the lowest point: a tile's one height; a sea chunk's wave troughs, which the horizon's sheet lies under */
+    const float box[4] = { lo[0], lo[2], hi[0], hi[2] };
+    /* The lowest level at the rim is the sea's. But the game may draw its sea's sheet twice, one over the other: Port Jeuno's is
+     * one water model drawn at 15.0 and again at 19.9, its under-sheet, through a world matrix that scales its heights 200 times.
+     * The sea was taken at 19.9, its sheets at 15 were no tiles of it (sea_own) and were made VanaCore's water too, a second sea 5
+     * yalms over VanaCore's: where their mesh reached, clear and pale over nothing (the void under the docks read as a bed a hand
+     * down), and VanaCore's deep teal beside it, a dark slab with straight edges by the Kazham airship's berth (a player's report,
+     * 2026-11-23). So the sheet that set the level (its x and z box) drawn again more than SEA_PLANES (sheets nearer than that are
+     * one sea: Lower Jeuno's harbour) and up to SEA_STACK over it is the sea's surface, and the level that was its under-sheet:
+     * dropped with the sea's tiles (sea_own), never the level again. Another water higher up at the rim (a river's end) is another
+     * box and leaves the level as it was */
+    const int same = g_sea.n && fabsf(box[0] - g_sea.box[0]) < 2.0f && fabsf(box[1] - g_sea.box[1]) < 2.0f &&
+                     fabsf(box[2] - g_sea.box[2]) < 2.0f && fabsf(box[3] - g_sea.box[3]) < 2.0f;
+    if (g_sea.has_under && fabsf(y - g_sea.under) <= 1.0f)
+        return; /* the sea's under-sheet */
+    if (same && y < g_sea.y - SEA_PLANES && y >= g_sea.y - SEA_STACK)
+    {
+        if (g_water_set.log)
+            rt_log("[recomp] water: the sea's surface at %.2f, over its under-sheet at %.2f (one sheet drawn twice)\n", y, g_sea.y);
+        g_sea.under = g_sea.y, g_sea.has_under = 1;
+        g_sea.y = y, g_sea.n = g_sea.n > SEA_LEAST ? g_sea.n : 1, g_sea.said = 0, ++g_sea.gen;
+        return;
+    }
     if (!g_sea.n || y > g_sea.y + 1.0f)
-        g_sea.y = y, g_sea.n = 1, g_sea.said = 0, ++g_sea.gen;
+    {
+        g_sea.y = y, g_sea.n = 1, g_sea.said = 0, ++g_sea.gen, g_sea.has_under = 0;
+        memcpy(g_sea.box, box, sizeof box);
+    }
     else if (fabsf(y - g_sea.y) <= 1.0f && g_sea.n < 1000000u)
     {
         if (++g_sea.n == SEA_LEAST)
@@ -153,12 +178,14 @@ static void sea_note(const float lo[3], const float hi[3], int own)
     }
 }
 
-/* water.sea: a level surface of the game's own water (lo, hi its box) that is the sea's - at the sea's level (sea_level's tiles) or
- * up to SEA_PLANES over it - while VanaCore's sea plane is drawn (the last frame or this one): dropped, the plane is the sea */
+/* water.sea: a level surface of the game's own water (lo, hi its box) that is the sea's - at the sea's level (sea_level's tiles),
+ * up to SEA_PLANES over it, or its under-sheet's (sea_note) - while VanaCore's sea plane is drawn (the last frame or this one):
+ * dropped, the plane is the sea */
 static int sea_own(const float lo[3], const float hi[3])
 {
     if (!g_water_set.sea || !g_water_set.pass || g_sea.n < SEA_LEAST || g_scene.frame > g_sea.full + 1)
         return 0;
     (void)lo;
-    return hi[1] <= g_sea.y + 0.5f && hi[1] >= g_sea.y - SEA_PLANES; /* the world's y points down: hi[1] the lowest point */
+    /* (the world's y points down: hi[1] the lowest point) */
+    return (hi[1] <= g_sea.y + 0.5f && hi[1] >= g_sea.y - SEA_PLANES) || (g_sea.has_under && fabsf(hi[1] - g_sea.under) <= 0.5f);
 }

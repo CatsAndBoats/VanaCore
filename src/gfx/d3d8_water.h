@@ -950,11 +950,15 @@ static struct
     int said;     /* the log has said */
     uint32_t full; /* the frame (g_scene.frame) VanaCore's sea plane was last drawn (water_horizon_pass): the game's tiles are dropped
                     * only while it is (sea_own), never with no sea at all */
+    float box[4];  /* the x and z box (x0, z0, x1, z1) of the draw that set the level */
+    float under;   /* the level of the sea's under-sheet (has_under: one), that same draw again lower down (sea_note) */
+    int has_under;
 } g_sea;
 #define SEA_PLANES 2.0f /* the game's level water up to this far over the sea's level is the sea's too: Lower Jeuno lays its harbour in
                        * two or three sheets a little apart, which showed as steps and seams in the water */
 #define SEA_RIM 60.0f   /* a tile within this of the zone's floors' box edge, or past it, is the sea's; a marsh's tiles lie well inside */
 #define SEA_LEAST 4     /* tile draws, or chunks, at a level before the sea is drawn on */
+#define SEA_STACK 8.0f  /* the sheet that set the sea's level drawn again up to this far over it is the sea's surface (sea_note) */
 #define SEA_UNDER 0.15f /* the horizon's sheet this far under the tiles' level: where the tiles are, they win the depth test */
 #define SEA_OVER 0.1f   /* ... and this far over the shore's level where the sea has no tiles: it lies over the wet sand's end, which it fades in across */
 #define SEA_EDGE 120.0f /* the sheet fades in from nothing over this much from its inner edge (its first ring's depth 0 to SEA_DEPTH) */
@@ -969,7 +973,7 @@ void d3d8_set_water_floors(const GrassFloors* f)
     g_wfloor.n = 0, g_wfloor.zone = 0, g_wfloor.rim_n = 0, g_bake_n = 0, g_bake_wet_n = 0, g_bake_nv = 0, g_bake_dirty = 1;
     bake_forget();
     g_water_nsun = 0; /* the last zone's sun (water_lights): the new one's lit draws give its own */
-    g_sea.n = 0, g_sea.said = 0, g_dry.total = 0.0f, g_dry.level_n = 0;
+    g_sea.n = 0, g_sea.said = 0, g_sea.has_under = 0, g_dry.total = 0.0f, g_dry.level_n = 0;
     memset(g_bake_said, 0, sizeof g_bake_said);
     if (!f || !f->zone || !f->npairs || !f->tris || !f->terrain || !f->mesh_first || !f->matrices || !f->pairs)
         return;
