@@ -2,6 +2,19 @@
 
 What's new in each VanaCore release. A release's notes on GitHub are its section here (`## <version>`), under New, Changed, Fixed and Misc: write the next version's section with its version bump.
 
+## 0.9.7
+
+### New
+- **Mass Grass:** A new Mega dense option under Coverage fills all the ground the game calls grass, not only its green spots, for thicker grass in places like Konschtat Highlands.
+- **Shadows:** A new Sharp shadow fade setting under Advanced Settings sets how gradually the sharp shadows near you blend into the softer ones farther out.
+
+### Changed
+- **Shadows:** Sharp shadow range is back to 10 by default, and thin shadows past it should now soften gradually as you walk instead of popping in and out.
+- **Mass Grass:** Dry grass now only grows outdoors.
+
+### Fixed
+- **Mass Grass:** Grass should no longer grow on the floor of the Windurst Mog House.
+
 ## 0.9.6
 
 ### New
