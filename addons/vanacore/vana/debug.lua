@@ -12,7 +12,7 @@ the /vana window open or not, in the same look (draw.lua).
                      walls red, floors by their kind of ground in Reflection ground's colours. Never saved either
   Grass              Mass Grass's view of the tufts a floor covers ([graphics] grass.cover.show, grass.c), with its
                      colours. Never saved (its rings are on the Rings tab)
-  DLSS crash tests  the DLSS helper (dlss\VanaCore.Dlss.exe) made to fail at its next frame, each a different way (an
+  DLSS              its Resolution and Frame generation lines, and crash tests: the DLSS helper (dlss\VanaCore.Dlss.exe) made to fail at its next frame, each a different way (an
                      access violation, one on another thread, an unhandled C++ exception, a fail-fast, a hang), to try what
                      a real crash leaves: the chat's line, its report in logs\vanacore.log, the dump. Picked from a
                      list; Trigger asks twice.
@@ -95,7 +95,7 @@ local function crash_state(now)
 end
 
 local function crash_height()
-    return S(NOTE_H) + S(ROW_H) + S(NOTE_H) + S(NOTE_H) * 2 + S(8)
+    return S(NOTE_H) + S(NOTE_H) * 2 + S(6) + S(ROW_H) + S(NOTE_H) + S(NOTE_H) * 2 + S(8)
 end
 
 local function crash_draw(dl, x, y, w, now)
@@ -104,6 +104,18 @@ local function crash_draw(dl, x, y, w, now)
     M.circle(dl, x + S(4), cy, S(3), ready and P.green or P.faint)
     M.text_mid(dl, x + S(14), cy, M.fit(state, w - S(14), fonts.text, SMALL + 0.5), ready and P.text2 or P.dim, fonts.text, SMALL + 0.5)
     y = y + S(NOTE_H)
+
+    -- what the Graphics page's DLSS panel showed under its rows (Resolution, Frame generation): the upscaler running now
+    local info = crash.info or {}
+    local lines = { { 'Resolution', (info.upscaler == 'fsr' and info.fsr or info.dlss) or 'Off' },
+                    { 'Frame generation', info.framegen or 'Off' } }
+    for _, line in ipairs(lines) do
+        local ly = y + S(NOTE_H) / 2
+        M.text_mid(dl, x, ly, line[1], P.dim, fonts.text, SMALL + 0.5)
+        M.text_right_mid(dl, x + w, ly, M.fit(tostring(line[2]), w - S(120), fonts.text, SMALL + 0.5), P.text2, fonts.text, SMALL + 0.5)
+        y = y + S(NOTE_H)
+    end
+    y = y + S(6)
 
     -- the test picked, Trigger beside it, and what it does under them; the list as wide as its longest name (M.dropdown's
     -- padding and chevron), so it doesn't move with the pick
@@ -551,7 +563,7 @@ local TABS = {
     { id = 'views', tab = 'Views', title = 'Debug views', height = views_height, draw = views_draw },
     { id = 'collision', tab = 'Collision', title = 'Collision', height = collision_height, draw = collision_draw },
     { id = 'grass', tab = 'Grass', title = 'Mass Grass', height = grass_height, draw = grass_draw },
-    { id = 'crash', tab = 'DLSS crash', title = 'DLSS crash tests', height = crash_height, draw = crash_draw },
+    { id = 'crash', tab = 'DLSS', title = 'DLSS', height = crash_height, draw = crash_draw },
     { id = 'rings', tab = 'Rings', title = 'Shadow, AO, rain & grass rings', height = rings_height, draw = rings_draw },
     { id = 'record', tab = 'Recording', title = 'Frame recording', height = record_height, draw = record_draw },
 }

@@ -1570,6 +1570,8 @@ local function row_height(row, sec, room)
         return S(ROW_H) + S(14) -- a larger button alone on its line, in the middle (draw_row)
     elseif row.kind == 'action' and (row.action == 'gamepad_rescan' or row.action == 'reset_all') then
         return 0 -- the icon beside the Gamepad choice; no reset of everything here
+    elseif row.kind == 'subheader' and row.headline then
+        return S(8 + 36 + 2) -- drawn as a section's heading, HEAD_H high (M.draw_headline)
     elseif row.kind == 'subheader' and row.text == 'Reset' then
         return 0 -- the heading of that reset
     elseif row.kind == 'subheader' then
@@ -2844,7 +2846,10 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         end
     end
 
-    if row.kind == 'subheader' then
+    if row.kind == 'subheader' and row.headline then
+        M.draw_headline(row, id, x, y, w, alpha, enabled)
+        return h
+    elseif row.kind == 'subheader' then
         -- a sub-panel's heading (sub_room below the row above, 8 above the next: row_height): its title in capitals, semibold
         -- italic and spaced, in teal (rose for danger), then a tag, a line in the title's colour and its switch
         -- (a group's heading, Shadows' Advanced Settings, in rose too: asked for in game, 2026-11-09)
@@ -2900,7 +2905,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
                 after = true
             end
         end
-        for _, other in ipairs(sub_rows) do
+        for _, other in ipairs(M.ROW_RESETS and sub_rows or {}) do
             if M.resettable(other) or other.reset ~= nil then
                 local reset_clicked, reset_hovered = M.icon_button(id .. '.reset', line_end - S(8), cy, 'reset', 9, P.text, P.faint)
                 if reset_clicked then
@@ -3033,7 +3038,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
             local now = clock()
             local confirm = st.confirm
             local asking = confirm ~= nil and confirm.name == 'delete:' .. row.label and now - confirm.at < 3
-            local clicked, hov = M.icon_button(id .. '.delete', right - S(10), cy, 'delete', 13, P.rose, asking and P.rose or P.faint)
+            local clicked, hov = M.icon_button(id .. '.delete', right - S(10), cy, 'trash', 13, P.rose, asking and P.rose or P.faint)
             if hov then
                 M.tooltip(asking and 'Click again to delete it' or row.delete.tip)
             end
@@ -3509,6 +3514,64 @@ local function draw_heading(page, sec, x, y, w, over_title)
         M.hline(dl, tx, line_end, cy, P.line)
     end
     return off
+end
+
+-- A sub-panel's heading drawn as a section's is (row.headline: DLSS 5 in the DLSS panel): the bold title, its Reset
+-- button (row.reset, asked twice) and its switch at the line's end, a line between. It greys nothing after it. Its height
+-- is row_height's (8 above, HEAD_H, 2 below). A field of M: this chunk is near LuaJIT's 200 locals.
+M.draw_headline = function (row, id, x, y, w, alpha, enabled)
+    local dl = imgui.GetWindowDrawList()
+    local cy = y + S(8) + S(HEAD_H) / 2 + S(2)
+    local line_end = x + w - S(RIGHT)
+    local off = false
+    if row.switch ~= nil then
+        local ok, on = pcall(row.switch.get)
+        on = ok and on or false
+        local new, flipped = M.switch(id .. '.switch', line_end - S(M.SW_W), cy, on, enabled, alpha)
+        if flipped then
+            M.flush()
+            pcall(row.switch.set, new)
+            if row.section == nil or M.LIVE_GRAPHICS[row.section] then
+                vana.graphics.reload()
+            end
+            M.rebuild()
+        end
+        off = not on
+        line_end = line_end - S(M.SW_W) - S(10)
+    end
+    if row.reset ~= nil then
+        local now, confirm_id = clock(), id .. '.reset'
+        local asking = st.confirm ~= nil and st.confirm.name == confirm_id and now - st.confirm.at < 3
+        local bw = math.max(M.button_width('Reset', 'reset'), M.button_width('Sure?', 'reset'))
+        local clicked = M.button(id .. '.button', line_end - bw, cy, asking and 'Sure?' or 'Reset', 'reset',
+                                 asking and 'danger' or 'neutral', true, nil, nil, bw)
+        if imgui.IsItemHovered() then
+            M.tooltip(asking and 'Click again to put everything in ' .. row.text .. ' back to its default'
+                      or 'Everything in ' .. row.text .. ' back to its default.\nThe switch beside this stays as it is.')
+        end
+        if clicked then
+            if asking then
+                st.confirm = nil
+                pcall(row.reset)
+                st.picker = nil
+            else
+                st.confirm = { name = confirm_id, at = now }
+            end
+        end
+        line_end = line_end - bw - S(10)
+    end
+    local head_face, head_size = head_font()
+    local tx = x + S(LEFT)
+    local title_w = M.measure(row.text, head_face, head_size)
+    local hovered = M.over(tx, cy - S(12), title_w, S(24))
+    M.text_mid(dl, tx, cy, row.text, off and M.mix(P.white, P.dim, 0.5) or P.white, head_face, head_size, alpha)
+    tx = tx + title_w + S(8)
+    if hovered and M.TIPS.panels[row.text] ~= nil then
+        M.tooltip(M.TIPS.panels[row.text])
+    end
+    if line_end > tx then
+        M.hline(dl, tx, line_end, cy, P.line)
+    end
 end
 
 -- a section: its heading (none for the rows before the first), then its rows; returns its height

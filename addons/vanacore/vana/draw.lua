@@ -125,6 +125,7 @@ M.FA = {
     pen = 0xF304, -- the HUD Manager's edit, after its presets
     eject = 0xF052, -- an addon's Unload, on its page's heading
     font = 0xF031, -- the True Font page
+    play = 0xF04B, -- a Preview button's (Zone Name's, Load Screen's)
     lock_open = 0xF3C1, pointer = 0xF245, -- an addon window's Lock and No Pointer Events (pointer_off: DRAWN)
 }
 
@@ -698,7 +699,13 @@ M.RESET_W = 20   -- a reset icon and the gap after it, before its control
 
 -- A setting's reset icon from x (M.RESET_W across, its control after it): lit when `can_reset` (the setting isn't its
 -- default), brighter under the mouse. Every setting's, a slider's and the rest (vana.lua M.row_reset). Returns clicked.
+-- (2026-11-23: not drawn any more, a setting's nor a sub-panel's: only each panel heading's Reset button stays. The room
+-- it took is kept so no control moves; set true to bring them back.)
+M.ROW_RESETS = false
 function M.reset_icon(id, x, cy, can_reset, enabled, alpha)
+    if not M.ROW_RESETS then
+        return false
+    end
     local hov, clicked = hit(id, x - S(2), cy - S(10), S(18), S(20))
     local lit = ease(id .. 'lit', hov and enabled and 1 or 0, 22)
     icon_centred(imgui.GetWindowDrawList(), x + S(7), cy, 'reset', mix(can_reset and P.dim or P.faint, P.text, lit), 9,

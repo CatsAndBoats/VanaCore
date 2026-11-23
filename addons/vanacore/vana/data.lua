@@ -575,6 +575,17 @@ local function inner_sub(text, nested, group)
     row.group, row.in_group = group == 'group', group == 'in'
     return row
 end
+-- The Advanced Settings groups (DLSS's, Shadows', Mass Grass's: a 'group' heading and the rows under it, drawn in a box):
+-- hidden unless Client > VanaCore > Shaders' Enable Advanced Graphics Settings ([vana] advanced) is on. `advanced` marks
+-- the heading for M.reset_advanced.
+local function advanced_on() return (tonumber(vana.config.get('vana', 'advanced') or '') or 0) ~= 0 end
+local function advanced_group(tip)
+    local sub = inner_sub('Advanced Settings', nil, 'group')
+    sub.advanced = true
+    sub.show_if = advanced_on
+    sub.tip = tip
+    return sub
+end
 -- a sub-panel switched as an effect panel's heading is (effect): off writes <key>.enabled=0 and keeps the strength; on takes
 -- that out and sets the strength to `on` where it's 0. Marked an effect, so a reset keeps an effect that's on, on
 local function effect_sub(text, key, default, on, tag)
@@ -653,12 +664,23 @@ function M.monitor_seen()
 end
 local function dlss5_header()
     M.dlss5_built = M.dlss5_seen()
-    local row = subheader('DLSS 5', 'Experimental', {
+    -- drawn as the DLSS panel's own heading is (headline: vana.lua draw_headline): the title, a Reset button and the switch
+    local row = subheader('DLSS 5', nil, {
         get = dlss5_on,
         set = function (on) vana.config.set('graphics', 'dlss5', on and '1' or '0') end,
     }, 'graphics', 'dlss5')
+    row.headline = true
+    -- its Reset: every DLSS 5 setting on the page (the rows built with the page), its own switch left as it is
+    row.reset = function ()
+        local list = {}
+        for _, other in ipairs(M.st.rows and M.st.rows.graphics or {}) do
+            if other.section == FX and type(other.key) == 'string' and other.key:find('^dlss5_') then
+                list[#list + 1] = other
+            end
+        end
+        M.reset_rows(list)
+    end
     local can = vana.graphics.info().dlss5 ~= false -- (nil: a VanaCore before it said)
-    row.danger = can or dlss5_on() -- red: not for playing with (grey where it can't run)
     -- (on, it's never locked: that's how a DLSS 5 left on is turned off)
     row.lock_if = function () return not dlss5_on() and (not can or not M.dlss_enabled()) end
     return row
@@ -1805,11 +1827,14 @@ TIPS.rows = {
         .. 'Natural: a subtle, true-to-life look.\n'
         .. 'Cinematic: a stronger, film-like look.\n'
         .. 'Default: NVIDIA\'s standard look.',
+    ['graphics.dlss5'] = 'NVIDIA\'s AI look for the picture, on top of DLSS. Needs an RTX 40 or 50 and NVIDIA\'s DLSS 5 file '
+        .. 'in the dlss folder.',
     ['graphics.effects.dlss5_preset'] = 'Which DLSS 5 model runs.\n'
         .. 'Default: the normal one.\n'
         .. 'Model 1 to 4: other models to try.',
-    ['graphics.effects.dlss5_scale'] = 'The size DLSS 5 runs at. Smaller costs less GPU time; its light and colour still '
-        .. 'reach the whole picture, its fine detail comes out softer. DLSS 5 restarts when this changes.',
+    ['graphics.effects.dlss5_scale'] = 'The size DLSS 5 runs at. Lower costs less GPU time; its light and colour still '
+        .. 'reach the whole picture, its fine detail comes out softer. DLSS 5 restarts when this changes.\n'
+        .. 'Low: 30%. Medium: 50%. High: 75%. Max: full size.',
     ['graphics.effects.dlss5_intensity'] = 'How strong DLSS 5\'s effect is.',
     ['graphics.effects.dlss5_tone'] = 'How much DLSS 5 changes the colour and brightness.',
     ['graphics.effects.dlss5_structure'] = 'How much DLSS 5 changes shapes and detail.',
@@ -1844,7 +1869,7 @@ TIPS.rows = {
     ['graphics.effects.dlss5_rebuild'] = 'DLSS 5 may only take up Look, Intensity, Tone, Structure, Skin structure and Find its own mask '
         .. 'when it starts. On: it restarts a second after you stop changing them, so the change shows. DLSS is off for the few '
         .. 'seconds that takes.',
-    ['graphics.effects.dlss5_passes'] = 'How many times the picture goes through DLSS 5, each pass on the one before. More passes '
+    ['graphics.effects.dlss5_passes'] = 'How many times the picture goes through DLSS 5 (1x, 2x or 3x), each pass on the one before. More passes '
         .. 'give a stronger look and cost about as much GPU time again each. DLSS 5 restarts when this changes.',
     ['graphics.effects.dlss5_taper'] = 'Passes 2 and 3 run Tone and Structure at this share of the first pass\'s, so dark detail '
         .. 'isn\'t crushed to black. DLSS 5 restarts when this changes.',
@@ -2845,7 +2870,7 @@ TIPS.panels = {
     ['Game'] = 'The game window: its mode, size and place.',
     ['Toggles'] = 'Every effect as one switch: green is on, red is off. Turn them on one at a time to show what each adds.',
     ['DLSS'] = 'NVIDIA\'s upscaler: draws smaller, then scales up for more FPS. Needs an RTX card and DirectX 12.',
-    ['DLSS 5'] = 'NVIDIA\'s experimental AI look. Not meant for playing.',
+    ['DLSS 5'] = 'NVIDIA\'s AI look for the picture, on top of DLSS. Needs an RTX 40 or 50 and NVIDIA\'s DLSS 5 file in the dlss folder.',
     ['Advanced Settings'] = 'More DLSS 5 controls to try: extra passes, and blending its picture with the game\'s.',
     ['FSR'] = 'AMD\'s upscaler: draws smaller, then scales up for more FPS. Any DirectX 12 card. FSR 4 on Radeon RX 7000 and 9000.',
     ['Camera'] = 'How the game camera zooms and turns.',
@@ -3762,7 +3787,15 @@ local TABS = {
                     toggle('Show character name', 'discord', 'name', true)),
                 subheader('Shaders'),
                 needs_dx({ kind = 'action', label = 'Recompile shaders', text = 'Recompile shaders', action = 'recompile_shaders',
-                           tip = "Compiles the scene effects' shaders again from scratch; the effects are off till they're done" }),
+                           tip = "Compiles the scene effects' shaders again from scratch; the effects are off till they're done",
+                           -- next to it: every setting in the Advanced Settings groups back to its default (M.reset_advanced)
+                           more = { { kind = 'action', label = 'Reset ALL Advanced Settings', text = 'Reset ALL Advanced Settings',
+                                      action = 'reset_advanced', confirm = 'Click again to reset',
+                                      tip = 'Puts every setting in the Advanced Settings boxes (DLSS, Shadows, Mass Grass) back to its '
+                                            .. 'default. The switch beside this stays as it is.' } } }),
+                toggle('Enable Advanced Graphics Settings', 'vana', 'advanced', false),
+                callout('Not recommended', 'It is not recommended to change any of the advanced settings. If anything breaks you '
+                        .. 'will be asked to reset them to default.', 'warning'),
             }) do
                 table.insert(rows, i, row)
             end
@@ -3997,13 +4030,28 @@ local TABS = {
                 needs_dx12(dropdown('Frame generation', 'graphics', 'dlss.framegen', 'off', { { 'off', 'Off' }, { '2x', '2x (RTX 40)' },
                                                                                               { '3x', '3x (RTX 50)' }, { '4x', '4x (RTX 50)' },
                                                                                               { 'fsr', "AMD FSR 2x (any card)" } })),
+                -- DLSS 5 (neural rendering): a switch like Quality's and Frame generation's; needs NVIDIA's nvngx_dlssnr.dll in
+                -- the dlss folder; the Debug window's DLSS tab says when it runs, or why not. Its rows are left out where it can't run
+                needs_dx12(dlss5_header()),
+                needs_dx12(dlss5_why()),
+                needs_dx12(dlss5_why(choice('DLSS 5 Style', FX, 'dlss5_style', '1', { { '1', 'Natural' }, { '2', 'Cinematic' }, { '0', 'Default' } }))),
+                -- the size DLSS 5 runs at (dlss5_scale: its change laid back onto the full-size scene, the helper's nrscale), by name
+                needs_dx12(dlss5_why(choice('DLSS 5 Resolution', FX, 'dlss5_scale', '1', { { '0.3', 'Low' }, { '0.5', 'Medium' },
+                                                                                          { '0.75', 'High' }, { '1', 'Max' } }))),
+                -- passes: the picture through DLSS 5 again, each pass its own (made again when changed), the later ones
+                -- with the local tone and structure at a share of the first's
+                needs_dx12(dlss5_why((function (row) row.rebuild = true return row end)(
+                    choice('DLSS 5 Overdrive', FX, 'dlss5_passes', '1', { { '1', '1x' }, { '2', '2x' }, { '3', '3x' } })))),
+                -- (the Resolution and Frame generation lines are on the Debug window's DLSS tab: debug.lua)
+                -- Advanced Settings, as Shadows' and Mass Grass's are: hidden unless Client > VanaCore > Shaders' Enable Advanced
+                -- Graphics Settings is on. A group runs to the next heading (FSR's) or status row, so the DLSS panel's are placed last
+                advanced_group('Fine-tuning for DLSS: the upscaler model, how the picture is kept steady, and what gets its own '
+                               .. 'motion. Most players never need these.'),
                 -- DLSS's render preset: the transformer models cost more than the older CNN ones (E and F), which are softer
                 -- and cheaper; "Automatic" is NVIDIA's choice for the quality chosen above
                 needs_dx12(dropdown('Upscaler model', FX, 'dlss_preset', '0', { { '0', 'Automatic' }, { '11', 'K: transformer, best quality' },
                                                                                  { '13', 'M: transformer, for Performance' }, { '10', 'J: transformer' },
                                                                                  { '6', 'F: older CNN, fastest' }, { '5', 'E: older CNN' } })),
-                needs_dx12(subheader('Extras')),
-                needs_dx12(toggle('Compare (DLSS off, same size)', FX, 'dlss_compare', false)),
                 -- how far DLSS (and FSR) lean on this frame over their history for the game's effects, and for what moves on its own:
                 -- the camera's motion is all they're told, and it's wrong for those
                 needs_dx12(slider('Stability: effects', FX, 'dlss_reactive', 0.8, 0, 1, 0.05, '%.2f')),
@@ -4016,26 +4064,11 @@ local TABS = {
                 needs_dx12(slider('Frame gen effect motion', FX, 'fg_fx_motion', 0.03, 0, 0.3, 0.01, '%.2f')),
                 -- the zone's plants' own motion too (off: the depth's; frame generation tore them when given their own)
                 needs_dx12(toggle('Motion for plants', FX, 'dlss_motion_plants', false)),
-                -- NVIDIA's own indicator: a machine-wide setting of NVIDIA's (every DLSS game), set through Windows'
-                -- administrator prompt; DLSS reads it when the game starts
-                needs_dx12({ kind = 'toggle', label = "NVIDIA's DLSS overlay (all games)", default = false, restart = true,
-                             get = function () return vana.graphics.dlss_indicator() end,
-                             set = function (on) vana.graphics.dlss_indicator(on) end }),
-                -- DLSS 5 (neural rendering): needs NVIDIA's nvngx_dlssnr.dll in the dlss folder; Resolution below
-                -- says when it runs, or why not
-                needs_dx12(dlss5_header()),
-                needs_dx12(dlss5_why()),
-                needs_dx12(dlss5_why(warning('Not intended for gameplay: still experimental and buggy. Just for fun.'))),
-                needs_dx12(dlss5_why(inner_sub('Picture', true))),
-                needs_dx12(dlss5_why(choice('Look', FX, 'dlss5_style', '1', { { '1', 'Natural' }, { '2', 'Cinematic' }, { '0', 'Default' } }))),
+                inner_sub('Advanced DLSS 5', nil, 'in'),
                 -- DLSS 5's own model number: not named by NVIDIA yet. 0 is its default; the others are for trying, with the
                 -- Resolution line's timing (/vana stats) saying what each costs
                 needs_dx12(dlss5_why(choice('Model (to try)', FX, 'dlss5_preset', '0', { { '0', 'Default' }, { '1', 'Model 1' }, { '2', 'Model 2' },
                                                                                           { '3', 'Model 3' }, { '4', 'Model 4' } }))),
-                -- the size DLSS 5 runs at: its change laid back onto the full-size scene (the helper's nrscale)
-                needs_dx12(dlss5_why(choice('Resolution Scale', FX, 'dlss5_scale', '1', { { '1', '100%' }, { '0.75', '75%' }, { '0.5', '50%' },
-                                                                                          { '0.3', '30%' } }))),
-                needs_dx12(dlss5_why(free(slider('Intensity', FX, 'dlss5_intensity', 1, 0, 5, 0.05)))),
                 needs_dx12(dlss5_why(free(slider('Tone', FX, 'dlss5_tone', 1, 0, 4, 0.05)))),
                 needs_dx12(dlss5_why(free(slider('Structure', FX, 'dlss5_structure', 1, 0, 4, 0.05)))),
                 -- the skin's own structure strength: -1 leaves it to DLSS 5 ("Auto")
@@ -4045,10 +4078,22 @@ local TABS = {
                     return needs_dx12(dlss5_why(row))
                 end)(),
                 needs_dx12(dlss5_why(toggle('Find its own mask', FX, 'dlss5_mask', true))),
+                needs_dx12(dlss5_why((function (row)
+                    row.lock_if = function () return (tonumber(vana.config.get(FX, 'dlss5_passes') or '') or 1) < 2 end
+                    return row
+                end)(slider('Overdrive Strength', FX, 'dlss5_taper', 0.5, 0, 1, 0.05)))),
+                -- DLSS 5's picture blended back with the scene it was handed (the helper's own pass, after DLSS 5)
+                needs_dx12(dlss5_why(free(slider('DLSS 5 amount', FX, 'dlss5_mix', 1, 0, 2, 0.05), 0, 4))),
+                needs_dx12(dlss5_why(slider('DLSS 5 colour', FX, 'dlss5_colour', 1, 0, 1, 0.05))),
+                (function ()
+                    local row = slider('Brightening limit', FX, 'dlss5_brighten', 1, 0, 8, 0.25)
+                    row.format = function (value) return value < 1 and 'Off' or string.format('%.2fx', value) end
+                    return needs_dx12(dlss5_why(row))
+                end)(),
                 -- the game's effects (spells, flames, glows) and DLSS 5: left out of it and laid back over its picture, or a glow
                 -- from them laid over what it sees, past white, as its lights (with both, it lights from the glow and they're
                 -- laid back as drawn)
-                needs_dx12(dlss5_why(inner_sub('Effects', true))),
+                needs_dx12(dlss5_why(inner_sub('Effects', nil, 'in'))),
                 needs_dx12(dlss5_why(toggle('Keep effects out of DLSS 5', FX, 'dlss5_fx_out', false))),
                 needs_dx12(dlss5_why((function (row) row.rebuild = true return row end)(
                     toggle('Effects as light sources', FX, 'dlss5_fx_light', true)))),
@@ -4071,38 +4116,6 @@ local TABS = {
                 end)(slider('Light size for full strength', FX, 'dlss5_fx_norm', 0.02, 0, 0.2, 0.005)))),
                 -- Glow Effects (elight) laid onto DLSS's output, not into what DLSS 5 is handed
                 needs_dx12(dlss5_why(toggle('Glow effects after DLSS 5', FX, 'dlss5_elight_post', true))),
-                -- DLSS 5's Advanced Settings: a sub-panel of DLSS 5's (greyed with it). Ideas from
-                -- FFXI-DLSS5-Clarity's OptiScaler work (its passes, its blend), to try against the defaults. Red, with a warning
-                needs_dx12(dlss5_why((function ()
-                    local sub = subheader('Advanced Settings', 'for trying')
-                    sub.nested, sub.danger = true, true
-                    return sub
-                end)())),
-                needs_dx12(dlss5_why(warning('These are all experimental toggles, use at your own risk...'))),
-                -- DLSS 5 made again when its look changes, once it holds still for a second: NVIDIA's DLL may read the
-                -- look only as it's made (DLSS goes off for the seconds that takes)
-                needs_dx12(dlss5_why(toggle('Rebuild when the look changes', FX, 'dlss5_rebuild', false))),
-                -- passes: the picture through DLSS 5 again, each pass its own (made again when changed), the later ones
-                -- with the local tone and structure at a share of the first's
-                needs_dx12(dlss5_why((function (row) row.rebuild = true return row end)(
-                    choice('Passes', FX, 'dlss5_passes', '1', { { '1', '1' }, { '2', '2' }, { '3', '3' } })))),
-                needs_dx12(dlss5_why((function (row)
-                    row.lock_if = function () return (tonumber(vana.config.get(FX, 'dlss5_passes') or '') or 1) < 2 end
-                    return row
-                end)(slider('Later passes\' strength', FX, 'dlss5_taper', 0.5, 0, 1, 0.05)))),
-                -- DLSS 5's picture blended back with the scene it was handed (the helper's own pass, after DLSS 5)
-                needs_dx12(dlss5_why(free(slider('DLSS 5 amount', FX, 'dlss5_mix', 1, 0, 2, 0.05), 0, 4))),
-                needs_dx12(dlss5_why(slider('DLSS 5 colour', FX, 'dlss5_colour', 1, 0, 1, 0.05))),
-                (function ()
-                    local row = slider('Brightening limit', FX, 'dlss5_brighten', 1, 0, 8, 0.25)
-                    row.format = function (value) return value < 1 and 'Off' or string.format('%.2fx', value) end
-                    return needs_dx12(dlss5_why(row))
-                end)(),
-                needs_dx12(status('Resolution', function () return vana.graphics.info().dlss or 'Off' end)),
-                needs_dx12(status('Frame generation', function ()
-                    local info = vana.graphics.info()
-                    return info.upscaler ~= 'fsr' and info.framegen or 'Off'
-                end)),
                 -- AMD FSR, DLSS's place on any card: FSR 4 on a Radeon RX 7000 or 9000, FSR 3.1 elsewhere. It upscales
                 -- under DirectX 11 or 12 (needs_dx); its frame generation and Compare are Direct3D 12's (needs_dx12)
                 needs_dx(FSR.header()),
@@ -4173,18 +4186,10 @@ local TABS = {
                 choice('Shadow Quality', FX, 'sun_detail', '4096', { { '512', '512' }, { '1024', '1024' }, { '2048', '2048' }, { '4096', '4096' }, { '8192', '8192' } }),
                 slider('Softness', FX, 'sun_soft', 0, 0, 0.2, 0.005, '%.3f'),
                 slider('Underside Shadows', FX, 'sun_face', 1, 0, 1, 0.05),
-                -- Advanced Settings: its rows and its sub-panels (inner_sub ... 'in') in a box, hidden until the button over
-                -- it shows it (2026-11-12; kept in the window's settings.lua: vana.lua M.toggle_group)
-                { kind = 'action', label = 'Toggle Advanced Settings', text = 'Toggle Advanced Settings', big = true,
-                  tip = 'Shows or hides the shadows\' fine-tuning. Most players never need it.',
-                  run = function () M.toggle_group('shadows.advanced') end },
-                (function ()
-                    local sub = inner_sub('Advanced Settings', nil, 'group')
-                    sub.show_if = function () return M.st.groups['shadows.advanced'] == true end
-                    sub.tip = 'Fine-tuning for the shadows: plants, the sharp shadows near you, smoothing, the sun and weather, '
-                        .. 'and how often they\'re redrawn. Most players never need these.'
-                    return sub
-                end)(),
+                -- Advanced Settings: its rows and its sub-panels (inner_sub ... 'in') in a box, hidden unless Client > VanaCore >
+                -- Shaders' Enable Advanced Graphics Settings is on (till 2026-11-23 a button over it showed it)
+                advanced_group('Fine-tuning for the shadows: plants, the sharp shadows near you, smoothing, the sun and weather, '
+                               .. 'and how often they\'re redrawn. Most players never need these.'),
                 -- two sub-panels only (2026-11-12: "a lot of subcategories"): the shadows' own rows under the heading
                 -- itself (Close-up and Look till then), Sun and weather (Conditions and Place the sun), GPU Redraw Options
                 needs_dx12(toggle('Plants cast shadows', FX, 'sun_plants', true)),
@@ -4491,18 +4496,10 @@ local TABS = {
                 needs_dx(toggle('Flowers only', 'graphics', 'grass.flowers_only', false)),
                 -- what grows: the catalogue's assets, each on or off with its share (grass_asset_rows)
                 { kind = 'none', grass_assets = true },
-                -- Advanced Settings, as Shadows' are: hidden till the button shows them (2026-11-22: "reduce the amount of
-                -- options"); a group runs to the next heading, Snow Trails'
-                { kind = 'action', label = 'Toggle Advanced Settings', text = 'Toggle Advanced Settings', big = true,
-                  tip = 'Shows or hides the grass\'s fine-tuning. Most players never need it.',
-                  run = function () M.toggle_group('grass.advanced') end },
-                (function ()
-                    local sub = inner_sub('Advanced Settings', nil, 'group')
-                    sub.show_if = function () return M.st.groups['grass.advanced'] == true end
-                    sub.tip = 'Fine-tuning for the grass: how it thins with distance, where it may grow, the free camera, and how fast '
-                        .. 'it fills in. Most players never need these.'
-                    return sub
-                end)(),
+                -- Advanced Settings, as Shadows' are: hidden unless Enable Advanced Graphics Settings is on (2026-11-22: "reduce
+                -- the amount of options"); a group runs to the next heading, Snow Trails'
+                advanced_group('Fine-tuning for the grass: how it thins with distance, where it may grow, the free camera, and how fast '
+                               .. 'it fills in. Most players never need these.'),
                 -- the rings (grass.ring.spacing: rings 1-3 at it, twice it and three times it, a share of the Range)
                 needs_dx(free(slider('Draw distance detail', 'graphics', 'grass.ring.spacing', 25, 10, 50, 1, '%d%%'), 1, 100)),
                 needs_dx(toggle('Follow free camera', 'graphics', 'grass.freecam', true)),
@@ -4549,6 +4546,7 @@ local TABS = {
                 needs_dx(slider('Softness', 'graphics', 'snow.soft', 0.6, 0, 1, 0.05)),
                 needs_dx(free(slider('Fill-in time', 'graphics', 'snow.fade', 120, 0, 600, 10, '%d s'), 0, 86400)),
                 needs_dx(slider('Sink into snow', 'graphics', 'snow.sink', 0, 0, 0.6, 0.02, '%.2f')),
+                needs_dx(toggle('Trails in sand', 'graphics', 'snow.sand', false)),
                 -- (a Graphics panel since 2026-11-04: it was the Experimental page's Glow Effects Lighting)
                 needs_dx12(effect('Glow Effects', 'elight', 2.5, 2.5)),
                 needs_dx12(slider('Strength', FX, 'elight', 2.5, 0, 10, 0.05)),
@@ -4886,7 +4884,7 @@ local TABS = {
                     return row
                 end)(),
                 -- two buttons on one line (row.also: vana.lua draw_action_row): Show, left of Preview
-                { kind = 'action', label = 'Try it', text = 'Preview', icon = 'play_arrow', action = 'zonename_preview',
+                { kind = 'action', label = 'Try it', text = 'Preview', icon = 'play', action = 'zonename_preview',
                   also = { text = 'Show', icon = 'eye', action = 'zonename_show' },
                   tip = "Show holds the zone's name and the region's (whichever are switched on) on screen, as they will look, to set their font, size, colours and height by; press it again to hide them.\nPreview plays them as they run when you zone in: they fade in, stay and fade away." },
                 -- the loadscreen addon's settings ([loadscreen], read by loadscreen.lua each frame it shows); /loadscreen opens
@@ -4935,7 +4933,7 @@ local TABS = {
                     row.tip = 'How long the screenshot takes to fade away once the zone is in.'
                     return row
                 end)(M.loadscreen_image_row(slider('Fade out', 'loadscreen', 'image.fadeout', 0.8, 0, 3, 0.05, '%.2f s'))),
-                M.loadscreen_row({ kind = 'action', label = 'Preview', text = 'Preview', icon = 'play_arrow', action = 'loadscreen_preview' }),
+                M.loadscreen_row({ kind = 'action', label = 'Preview', text = 'Preview', icon = 'play', action = 'loadscreen_preview' }),
                 -- sparkles rising from portals ([graphics] sparkles.places; by default the one place, sparkles.cpp's)
                 header('Sparkles'),
                 warning('Affects the Nyzul Isle portal in the Alzadaal Undersea Ruins.', 'grey'),
@@ -7179,6 +7177,30 @@ function M.recompile_shaders()
         return
     end
     print("VanaCore: compiling the scene effects' shaders again.")
+end
+
+-- Client > VanaCore > Reset ALL Advanced Settings: every setting in the Advanced Settings groups (the Graphics tab's DLSS,
+-- Shadows and Mass Grass boxes, the headings built by advanced_group) back to its default, its switches too. The tab's rows
+-- are built again to find them, so a box hidden or never opened is reset all the same.
+function M.reset_advanced()
+    local ok, rows = pcall(function () return M.tab_named('graphics').rows() end)
+    if not ok then
+        print('VanaCore: the advanced settings could not be found: ' .. tostring(rows))
+        return
+    end
+    local list, inside = {}, false
+    for _, row in ipairs(rows) do
+        if row.kind == 'header' or row.kind == 'status' then
+            inside = false
+        elseif row.kind == 'subheader' and not row.in_group then
+            inside = row.advanced == true
+        elseif inside then
+            list[#list + 1] = row
+        end
+    end
+    M.reset_rows(list, true)
+    M.rebuild()
+    print('VanaCore: every advanced setting is back to its default.')
 end
 
 -- Client > Gamepads > Rescan gamepads: the list of controllers searched again (a pad plugged in does the same by itself)
