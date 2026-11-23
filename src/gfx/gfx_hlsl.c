@@ -645,7 +645,8 @@ static void emit_hfog(Sb* b, const char* col, int mode)
     sb_printf(b, "  }\n");
 }
 
-static void emit_fs_tail(Sb* b, const GfxFsKey* k, const GfxVsKey* vk, const char* col)
+/* wfog: the fog's colour is the water's wfog (emit_water_fs declares it), not the zone's */
+static void emit_fs_tail(Sb* b, const GfxFsKey* k, const GfxVsKey* vk, const char* col, int wfog)
 {
     /* VanaCore's smooth-normal pass (nmap 6, gfx_d3d12.c vn_replay): the vertex normal in view space - a vertex shader's from its
      * clip-space direction (VOut.cn) through the projection's 1/P00, 1/P11 and P23 (sun_f.xyz: the scene's, FFXI's right-handed);
@@ -738,7 +739,8 @@ static void emit_fs_tail(Sb* b, const GfxFsKey* k, const GfxVsKey* vk, const cha
             sb_printf(b, "  float f;\n  float fd = abs(vin.ez);\n");
             emit_fog_factor(b, "f", k->fog, "fd");
         }
-        sb_printf(b, "  %s.rgb = lerp(u.fogcolor.rgb, %s.rgb, f);\n", col, col);
+        /* VanaCore's water fogs to its own wfog (gfx_hlsl_water.h emit_water_depth: open water to the sky over the horizon) */
+        sb_printf(b, "  %s.rgb = lerp(%s, %s.rgb, f);\n", col, wfog ? "wfog" : "u.fogcolor.rgb", col);
     }
     if (k->pool && !k->prog && !vk->prog && !vk->rhw) /* after the fog, as the composite's is over the game's fogged picture */
         emit_pool(b, col);
@@ -756,13 +758,13 @@ static void emit_ff_fs(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
     if ((k->rain == 1 || k->rain == 3) && !depth_only(vk)) /* VanaCore's rain pass over the scene, or its wet ground's mask (gfx_hlsl_rain.h) */
     {
         emit_rain_fs(b, k->rain == 3);
-        emit_fs_tail(b, k, vk, "col");
+        emit_fs_tail(b, k, vk, "col", 0);
         return;
     }
     if (k->water && !depth_only(vk) && !vk->rhw)
     {
         emit_water_fs(b, vk, k->water, k->fog, (k->st[3].tex != 0) | (k->st[2].tex != 0) << 1);
-        emit_fs_tail(b, k, vk, "col");
+        emit_fs_tail(b, k, vk, "col", 1);
         return;
     }
     sb_printf(b, "  float4 cur = vin.d, tmp = float4(0, 0, 0, 0), tex = float4(1, 1, 1, 1);\n");
@@ -832,7 +834,7 @@ static void emit_ff_fs(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
         sb_printf(b, "  cur.rgb *= 1.0 - u.ambient.w;\n");
     if (k->text_shadow) /* the glyph's ink, whether the sheet keeps it in its alpha or its colour (FFXI adds its text's colour) */
         sb_printf(b, "  cur = float4(0.0, 0.0, 0.0, saturate(min(tex.a, max(tex.r, max(tex.g, tex.b)))) * u.tfactor.a);\n");
-    emit_fs_tail(b, k, vk, "cur");
+    emit_fs_tail(b, k, vk, "cur", 0);
 }
 
 char* gfx_hlsl_generate(const GfxVsKey* vk, const GfxFsKey* fk, const uint32_t* vs_tokens, const uint32_t* ps_tokens)
@@ -891,7 +893,7 @@ char* gfx_hlsl_generate(const GfxVsKey* vk, const GfxFsKey* fk, const uint32_t* 
             goto fail;
         if (relight)
             sb_printf(&b, "  r0.rgb = %s;\n", fk->nmap == 2 ? "nm_view" : "saturate(r0.rgb * nm_gain)");
-        emit_fs_tail(&b, fk, vk, "r0");
+        emit_fs_tail(&b, fk, vk, "r0", 0);
     }
     else
         emit_ff_fs(&b, fk, vk);

@@ -9,7 +9,9 @@
  * the lake mirrored navy. The sky is as good as endlessly far, so what a level surface mirrors of it is the sky in the
  * direction of the view turned over about the surface, wherever on the screen that direction lies: the scene's own colour
  * there (the pass's copy, stage 6) where the scene has nothing nearer (its depth, stage 7, the far plane's), clouds, dusk and
- * all. A direction off the screen's top or sides is read at the edge, and fades back to the two colours over the next quarter
+ * all; where something nearer covers that place, the first sky above it on the screen (six steps up to the top). The ray
+ * passes nowhere near what covers it (a tree on the quay), and the two colours in its place drew the tree's crown, turned
+ * over about the horizon, in navy on a grey sea. A direction off the screen's top or sides is read at the edge, and fades back to the two colours over the next quarter
  * of the screen. Any level's water takes it.
  *   Then the world: the mirror is read at the pixel's own place in the viewport - the mirrored camera sees a level surface's
  * point where the camera does - softened over five taps a texel and a quarter apart. Where the world was drawn in it, it
@@ -39,9 +41,16 @@ static void emit_water_mirror(Sb* b)
         "        float2 suv = float2(0.5 + 0.5 * mr.x * mq.w / mrw, 0.5 - 0.5 * mr.y * mm[0][1] / mrw) + mo;\n"
         "        float2 sout = max(abs(suv - 0.5) - 0.5, 0.0);\n"
         "        float2 tuv = clamp((u.vp.xy + saturate(suv) * u.vp.zw) / wsz, uvlo, uvhi);\n"
-        "        float sd = (%s.SampleLevel(%s, tuv, 0).r - zp.w) / max(ws.x, 1e-6);\n"
-        "        float sk = (sd >= 0.99999 ? 1.0 : 0.0) * (1.0 - smoothstep(0.0, 0.25, max(sout.x, sout.y)));\n"
-        "        sky = lerp(sky, %s.SampleLevel(%s, tuv, 0).rgb, sk * mall);\n"
+        "        float skyhit = 0.0;\n"
+        "        float2 squv = tuv;\n"
+        "        [unroll] for (int sstep = 0; sstep < 6; ++sstep) {\n" /* (not si: the global array the samplers are named by) */
+        "          float2 q = float2(tuv.x, lerp(tuv.y, uvlo.y, sstep / 5.0));\n"
+        "          float sd = (%s.SampleLevel(%s, q, 0).r - zp.w) / max(ws.x, 1e-6);\n"
+        "          if (skyhit < 0.5 && sd >= 0.99999) { skyhit = 1.0; squv = q; }\n"
+        "        }\n"
+        "        float sk = skyhit * (1.0 - smoothstep(0.0, 0.25, max(sout.x, sout.y)));\n"
+        "        hsky = %s.SampleLevel(%s, squv, 0).rgb, hsk = sk * mall;\n" /* (the far sea's fog takes it: emit_water_depth wfog) */
+        "        sky = lerp(sky, hsky, hsk);\n"
         "      }\n"
         "      float mw, mh;\n"
         "      %s.GetDimensions(mw, mh);\n"

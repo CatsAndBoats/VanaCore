@@ -487,8 +487,16 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
         /* the sun's glint off the churned surface came out as a grid of hard-edged bright cells (the glint's high power on the
          * noise's slopes, which flip sign each half cell): under a waterfall's foot the glint stands down and the froth is the light */
         "  spc *= 1.0 - 0.9 * foot;\n");
+    /* hsky, hsk: the sky the scene shows where the surface's mirrored ray points, and how much of it was found (the mirror's
+     * screen-space sky; 0 without it) */
+    sb_printf(b, "  float3 hsky = u.fogcolor.rgb;\n  float hsk = 0.0;\n");
     if (mirror) /* the world mirrored in the water, into sky and F (gfx_hlsl_water_mirror.h) */
         emit_water_mirror(b);
+    /* wfog: what the fog takes open water to (the tail's fog colour for the water, emit_fs_tail). The zone's fog colour alone
+     * took the sea past the fog's end to a flat grey a shade darker than the sky over it: a grey strip under the horizon, the
+     * sea stopping short of it (Port Bastok's quay, overcast, water.horizon on or off). At the grazing angles out there the sea
+     * mirrors the sky just over the horizon, so open water fogs to that sky where the mirror found it */
+    sb_printf(b, "  wfog = lerp(u.fogcolor.rgb, hsky, hsk * wopen);\n");
     sb_printf(b,
         "  float4 col = float4(saturate(lerp(under, sky, F) + spc * (1.5 * q1.w)), 1.0);\n"
         /* the relief at a third on open water: from high above, the fine ripples lit as slopes over a deep, even colour were a
@@ -519,8 +527,8 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
          * fog (fogcolor + (col - fogcolor) * ffx) gives that; over the fog's last 2% (ffx under 0.02) it goes to the fog's colour,
          * as the land does. Nothing is read from behind the water (that was VanaCore's sky, or nothing, under Lower Jeuno's sea) */
         "  if (probe < 0.5) {\n"
-        "    float3 fwant = lerp(u.fogcolor.rgb, col.rgb, max(ffx, 0.4 * wopen));\n"
-        "    col.rgb = u.fogcolor.rgb + (fwant - u.fogcolor.rgb) / max(ffx, 0.02); }\n",
+        "    float3 fwant = lerp(wfog, col.rgb, max(ffx, 0.4 * wopen));\n"
+        "    col.rgb = wfog + (fwant - wfog) / max(ffx, 0.02); }\n",
         "");
     if (ground)
         emit_water_ground_fade(b, dt, ds);
@@ -532,6 +540,7 @@ static void emit_water_depth(Sb* b, const GfxVsKey* vk, int ground, int fog, int
 static void emit_water_fs(Sb* b, const GfxVsKey* vk, int water, int fog, int look)
 {
     const int mirror = look & 1;
+    sb_printf(b, "  float3 wfog = u.fogcolor.rgb;\n"); /* the fog's colour for the water (emit_fs_tail; emit_water_depth sets it) */
     emit_water_surface(b, water, water >= 2 && (look & 2));
     emit_water_light(b, vk);
     if (water >= 2)
