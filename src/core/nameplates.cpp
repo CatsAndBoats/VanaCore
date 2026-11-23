@@ -802,7 +802,9 @@ void plate_shift(Part part, float& dx, float& dy)
     }
     if (part == Part::icon) {
         const bool bag = g_icon_glyph == kBazaar; // nameplates.bazaar.x/.y: the bag from where the pearl's put it
-        dx += (g_names.pearl_x + (bag ? g_names.bazaar_x : 0.0f)) * s;
+        // .x closes the gap to the name as 16:9 has it (g_fix 0.75); a wider window's shape fix narrows the gap but not
+        // the icon, so the move narrows by the square (38 is 21 at 2.39:1), or the name's letters cover the icon
+        dx += (g_names.pearl_x + (bag ? g_names.bazaar_x : 0.0f)) * s * std::min(1.0f, g_fix * g_fix * 16.0f / 9.0f);
         dy += (g_names.pearl_y + (bag ? g_names.bazaar_y : 0.0f)) * s;
     } else {
         dx += g_names.name_x * s;
