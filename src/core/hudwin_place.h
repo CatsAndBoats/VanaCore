@@ -81,65 +81,94 @@ namespace {
 // An item's description moved (itemdetails.move) onto the Equipment window, its stats or the Items list was drawn under
 // them, being 2 and before them in the list: its frame cut and its True Font letters dropped where they covered it (reported
 // 2026-11-06: "When it's moved it should be on its own layer"). On 5 it's drawn over every menu, under those boxes.
+// The layer is the window's for the draw only (draw_all_hook), its own the rest of the frame. The list's insert keeps a
+// window of 5 or more ahead of every other, and each frame the manager gives the keys to the first window of the list that
+// can take them (0x1015E9B7: SetCurMCD(FUN_1015D510())): a window left on 5 that takes keys held them for good. The macro
+// bar's Button Edit box (Copy, Paste, Delete: macroeditoptions.move) did: Esc handed the keys to the row (0x101A4860), the
+// row went into the list behind the box, and the next frame the box had them again, so the menu couldn't be left
+// (reported 2026-11-24: "this menu freezes and I can't exit it at all", a relog to get out).
 constexpr std::ptrdiff_t kWinLayer = 0x60;
 constexpr std::uint8_t kTopLayer = 5;
+// The manager's draw of its windows (FUN_1015E3D0, the nine passes: thiscall, no arguments):
+//   push ecx; push ebx; push esi; push edi; mov edi,ecx; call ...; mov ecx,[...]; test ecx,ecx; je +5; call ...;
+//   mov ecx,[...]; call ...; mov eax,[edi+54h]; test eax,eax; je +1Ch; mov esi,[eax+88h]
+constexpr char kDrawAll[] = "51 53 56 57 8B F9 E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 85 C9 74 05 E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? "
+                            "8B 47 54 85 C0 74 1C 8B B0 88 00 00 00";
+constexpr std::size_t kDrawAllPrologue = 6;
+using DrawAll = void(__fastcall*)(char* manager, void* edx);
+DrawAll g_draw_all = nullptr;
+bool g_draw_all_searched = false;
 struct Raised {
     char* window;
     std::uint8_t was; // its layer before
-    bool seen;        // in the manager's list this frame
 };
 constexpr int kRaisedAtMost = 8;
-Raised g_raised[kRaisedAtMost] = {};
-int g_raised_count = 0;
 
-Raised* raised(const char* window)
+// The table's kOnTop windows with their move on put on the top layer, into `out`: how many
+int raise(Raised (&out)[kRaisedAtMost])
 {
-    for (int i = 0; i < g_raised_count; ++i)
-        if (g_raised[i].window == window)
-            return &g_raised[i];
-    return nullptr;
-}
-
-// Window `window`: raised while it's one of the table's kOnTop with its move on, set back once that's off
-void layer(char* window)
-{
-    const Window* table = table_window(window);
-    const bool top = table != nullptr && (table->can & kOnTop) != 0 && table->move;
-    std::uint8_t& now = at<std::uint8_t>(window, kWinLayer);
-    Raised* was = raised(window);
-    if (was != nullptr)
-        was->seen = true;
-    if (top && now < kTopLayer) {
-        if (was == nullptr && g_raised_count < kRaisedAtMost)
-            was = &(g_raised[g_raised_count++] = {window, now, true});
-        if (was != nullptr) {
-            was->was = now;
+    int raised = 0;
+    __try {
+        int count = 0;
+        for (char* node = at<char*>(g_manager, 0); node != nullptr && count < 256 && raised < kRaisedAtMost;
+             node = at<char*>(node, 0), ++count) {
+            char* window = at<char*>(node, 0x10);
+            if (window == nullptr || at<char*>(window, kWindowLayout) == nullptr)
+                continue;
+            const Window* table = table_window(window);
+            std::uint8_t& now = at<std::uint8_t>(window, kWinLayer);
+            if (table == nullptr || (table->can & kOnTop) == 0 || !table->move || now >= kTopLayer)
+                continue;
+            out[raised++] = {window, now};
             now = kTopLayer;
         }
-    } else if (!top && was != nullptr && now == kTopLayer) {
-        now = was->was;
-        was->window = nullptr; // (dropped below)
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
+    return raised;
+}
+
+// The `count` windows of `raised` set back on their own layers: those still in the manager's list (one gone from it may
+// be freed)
+void lower(const Raised* raised, int count)
+{
+    __try {
+        int walked = 0;
+        for (char* node = at<char*>(g_manager, 0); node != nullptr && walked < 256; node = at<char*>(node, 0), ++walked) {
+            char* window = at<char*>(node, 0x10);
+            for (int i = 0; window != nullptr && i < count; ++i)
+                if (raised[i].window == window && at<std::uint8_t>(window, kWinLayer) == kTopLayer)
+                    at<std::uint8_t>(window, kWinLayer) = raised[i].was;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+// In place of the manager's draw: the moved kOnTop windows on the top layer while it draws
+void __fastcall draw_all_hook(char* manager, void* edx)
+{
+    Raised raised[kRaisedAtMost];
+    const int count = g_manager != nullptr ? raise(raised) : 0;
+    g_draw_all(manager, edx);
+    if (count > 0)
+        lower(raised, count);
 }
 
 } // namespace
 
 void raise_moved()
 {
-    if (g_manager == nullptr) // (as skip's found() left it, from the first window drawn)
+    if (g_draw_all_searched || g_manager == nullptr) // (as skip's found() left it, from the first window drawn)
         return;
-    for (int i = 0; i < g_raised_count; ++i)
-        g_raised[i].seen = false;
-    __try {
-        int count = 0;
-        for (char* node = at<char*>(g_manager, 0); node != nullptr && count < 256; node = at<char*>(node, 0), ++count)
-            if (char* window = at<char*>(node, 0x10); window != nullptr && at<char*>(window, kWindowLayout) != nullptr)
-                layer(window);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    g_draw_all_searched = true;
+    const HMODULE game = GetModuleHandleW(L"FFXiMain.dll");
+    const std::uintptr_t draw = game != nullptr ? scan::find(game, kDrawAll) : 0;
+    if (draw == 0 || !imports::detour(reinterpret_cast<DrawAll>(draw), kDrawAllPrologue, &draw_all_hook, g_draw_all)) {
+        g_draw_all = nullptr;
+        log::write(L"HUD windows: the game's draw of its windows wasn't found in FFXiMain.dll: a moved item description or macro "
+                   L"Button Edit box isn't drawn over the other menus ([client] itemdetails.move, macroeditoptions.move)");
+        return;
     }
-    int kept = 0; // (one gone from the list is forgotten: its address may be another window's next)
-    for (int i = 0; i < g_raised_count; ++i)
-        if (g_raised[i].window != nullptr && g_raised[i].seen)
-            g_raised[kept++] = g_raised[i];
-    g_raised_count = kept;
+    log::write(L"HUD windows: the game's draw of its windows hooked at +0x%X: a moved item description or macro Button Edit box "
+               L"is drawn over the other menus, and takes the keys no sooner for it",
+               static_cast<unsigned>(draw - reinterpret_cast<std::uintptr_t>(game)));
 }

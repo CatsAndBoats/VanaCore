@@ -185,8 +185,10 @@ bool own(const void* ctrl);
 // it again), for another module moving a window from where it is (itemtips.cpp's, those under taller item details)
 void place(void* ctrl, int x, int y);
 
-// Each frame (Present: outside the game's window draw, which goes by it): a window of the table's that goes on top while
-// moved (the item details: itemdetails.move) put on a layer of its own over every menu, and back once its move is off
+// Each frame (Present), until it's done: the game's draw of its windows hooked, so a window of the table's that goes on
+// top while moved (the item details: itemdetails.move; the macro bar's Button Edit box: macroeditoptions.move) is on a
+// layer of its own over every menu while they're drawn, and on its own the rest of the frame (the layer also says which
+// window takes the keys)
 void raise_moved();
 
 // In ImGui's frame (vana.layout.outline(id), /vana's eye on a Position row): a box where window `id` is or goes, Shift +
