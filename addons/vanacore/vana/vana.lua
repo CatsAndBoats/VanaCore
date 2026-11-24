@@ -114,7 +114,7 @@ load_module('gamepadtest') -- the Gamepad Test window (/gamepad test): buttons, 
 load_module('hud') -- the HUD Manager window (/hud): the game windows' boxes and the one picked's settings
 load_module('copy') -- Client > Characters' copies of the Main's settings, addons and windows to the Alts
 load_module('partypreview') -- Party / Alliance's Preview: made-up members in the party and alliance lists
-load_module('zonename') -- the zone's name in the middle of the screen when you zone in (Game Options > Zone Name)
+load_module('zonename') -- the zone's name in the middle of the screen when you zone in (Mods > Zones > Zone Name)
 do -- /vana2: a look at a redesigned window (vana2.lua, drawn with made-up values); one that fails to load never takes /vana with it
     local ok, err = pcall(load_module, 'vana2')
     if not ok then
@@ -167,9 +167,6 @@ do
         if meta.id == 'graphics' then
             -- /vana presets: Graphics at its Presets sub-tab
             page.aliases = { 'presets', 'preset', unpack(page.aliases) }
-        elseif meta.id == 'options' then
-            -- /vana grass: Game Options at its Mass Grass sub-tab (the Graphics tab's panel, shown here: MOVED_PANELS)
-            page.aliases = { 'grass', unpack(page.aliases) }
         end
         PAGES[#PAGES + 1] = page
         local pages = by_group[meta.group].pages
@@ -183,17 +180,26 @@ do
         if tab.name == 'Game Options' then
             -- Experimental, under Game Options: the Graphics tab's experimental panels, moved here (EXPERIMENTAL)
             local experimental = { id = 'experimental', name = 'Experimental', icon = 'flask', tab = M.tab_named('graphics'), virtual = true,
-                                   aliases = { 'snow', 'water', 'glow', 'elight', 'reflections', 'refl', 'normalmap', 'normals' }, buttons = {}, color = P.experimental, preset_pick = true }
+                                   aliases = { 'water', 'glow', 'elight', 'reflections', 'refl', 'normalmap', 'normals' }, buttons = {}, color = P.experimental, preset_pick = true }
             PAGES[#PAGES + 1] = experimental
             pages[#pages + 1] = experimental
+            -- Mods, after Game Options: the Graphics tab's Mass Grass and Snow Trails and Game Options' Loading Screen, moved
+            -- here (MOVED_PANELS, MOVED_OPTIONS); a tab in the header
+            local mods = { id = 'mods', name = 'Mods', icon = 'wand', tab = M.tab_named('graphics'), virtual = true,
+                           aliases = { 'grass', 'snow', 'loadscreen', 'zonelines', 'zones', 'zone', 'zonename' }, buttons = {}, preset_pick = true }
+            PAGES[#PAGES + 1] = mods
+            pages[#pages + 1] = mods
         end
     end
 end
 
 -- the Graphics tab's panels shown on another page instead, by their heading: that page and their order there (Reflections
--- and Glow Effects: Graphics' own). Mass Grass: Game Options' last sub-tab since 2026-11-06 (it was the Experimental page's)
+-- and Glow Effects: Graphics' own). Mass Grass and Snow Trails: the Mods page's (Mass Grass was Game Options' last sub-tab
+-- from 2026-11-06, the Experimental page's before)
 local MOVED_PANELS = { ['Water Shader (Experimental)'] = { 'experimental', 1 }, ['Normal maps (Experimental)'] = { 'experimental', 2 },
-                       ['Snow Trails (Experimental)'] = { 'experimental', 3 }, ['Mass Grass'] = { 'options', 1 } }
+                       ['Snow Trails (Experimental)'] = { 'mods', 2 }, ['Mass Grass'] = { 'mods', 1 } }
+-- the Game Options tab's sections shown on the Mods page instead, by their heading (after the Graphics tab's)
+local MOVED_OPTIONS = { ['Zones'] = true, ['Loading Screen'] = true, ['Sparkles'] = true }
 -- the pages showing them, which a Graphics preset reads too (preset_keys)
 local PANEL_HOSTS = {}
 for _, to in pairs(MOVED_PANELS) do
@@ -223,6 +229,20 @@ local function page_rows(page)
     end
     local rows = st.rows[page.id]
     if rows ~= nil then
+        return rows
+    end
+    if page.id == 'mods' then
+        -- the Graphics tab's Mass Grass and Snow Trails, then Game Options' Zones and Loading Screen (each page builds its own
+        -- rows first, which files these: graphics_to_mods, options_to_mods)
+        page_rows(page_named('graphics'))
+        page_rows(page_named('options'))
+        rows = {}
+        for _, list in ipairs({ st.rows.graphics_to_mods or {}, st.rows.options_to_mods or {} }) do
+            for _, row in ipairs(list) do
+                rows[#rows + 1] = row
+            end
+        end
+        st.rows.mods = rows
         return rows
     end
     local ok, built = pcall(page.tab.rows)
@@ -295,7 +315,7 @@ local function page_rows(page)
             into[#into + 1] = row
         end
         table.sort(chunks, function (a, b) return a.order < b.order end)
-        local moved = { experimental = {}, options = {} }
+        local moved = { experimental = {}, mods = {} }
         for _, c in ipairs(chunks) do
             local into = moved[c.page]
             for _, row in ipairs(c) do
@@ -307,15 +327,25 @@ local function page_rows(page)
                 into[#into + 1] = row
             end
         end
-        st.rows.graphics, st.rows.experimental, st.rows.graphics_to_options = kept, moved.experimental, moved.options
+        st.rows.graphics, st.rows.experimental, st.rows.graphics_to_mods = kept, moved.experimental, moved.mods
         return page.virtual and moved.experimental or kept
     end
     if page.id == 'options' then
-        -- the Graphics tab's Mass Grass, Game Options' last sub-tab (MOVED_PANELS)
-        page_rows(page_named('graphics'))
-        for _, row in ipairs(st.rows.graphics_to_options or {}) do
-            rows[#rows + 1] = row
+        -- the sections shown on the Mods page (MOVED_OPTIONS): a heading and its rows to the next, out of this page's; a HUD
+        -- preset's still (row.preset_page, as the Graphics panels' are filed as Graphics presets')
+        local kept, moved, into = {}, {}, nil
+        for _, row in ipairs(rows) do
+            if row.kind == 'header' then
+                into = MOVED_OPTIONS[row.text] and moved or nil
+            end
+            local list = into or kept
+            list[#list + 1] = row
         end
+        for _, row in ipairs(moved) do
+            row.preset_page = 'options'
+        end
+        rows = kept
+        st.rows.options_to_mods = moved
     end
     if page.id == 'client' then
         -- the window's scale ([vana] scale), under VanaCore's Info: after its Version (the big row), else first
@@ -1585,7 +1615,7 @@ local function row_height(row, sec, room)
     elseif row.kind == 'action' and (row.action == 'gamepad_rescan' or row.action == 'reset_all') then
         return 0 -- the icon beside the Gamepad choice; no reset of everything here
     elseif row.kind == 'subheader' and row.headline then
-        return S(8 + 36 + 2) -- drawn as a section's heading, HEAD_H high (M.draw_headline)
+        return S(8 + 36 + 2) + (st.hybrid and S(M.hy.TITLE_PAD) or 0) -- drawn as a section's heading, HEAD_H high (M.draw_headline); the hybrid layout's with room under
     elseif row.kind == 'subheader' and row.text == 'Reset' then
         return 0 -- the heading of that reset
     elseif row.kind == 'subheader' then
@@ -3507,10 +3537,11 @@ local function draw_heading(page, sec, x, y, w, over_title)
     local card = st.hybrid == true and M.hy.mode ~= nil
     local titled = card and M.hy.mode == 'title'
     local function title_draw(px, text, colour)
+        text = M.hy.caps(text) -- (the hybrid layout's titles in capitals)
         M.text_mid(dl, px, cy, text, colour, head_face, head_size, alpha)
         return M.measure(text, head_face, head_size)
     end
-    local title_w = M.measure(sec.title, head_face, head_size)
+    local title_w = M.measure(M.hy.caps(sec.title), head_face, head_size)
     if over_title ~= nil then
         M.text_mid(dl, tx, cy, over_title, P.dim, fonts.text, SMALL)
         tx = tx + M.measure(over_title, fonts.text, SMALL) + S(6)
@@ -3554,9 +3585,7 @@ local function draw_heading(page, sec, x, y, w, over_title)
     if hovered and not over_pill and M.TIPS.panels[sec.title] ~= nil then
         M.tooltip(M.TIPS.panels[sec.title])
     end
-    if card and not titled then -- (the panel's heading: a line across under it, then the rows)
-        M.hline(dl, x + S(LEFT), x + w - S(RIGHT), y + S(HEAD_H) + S(1), M.hy.LINE, 0.16)
-    elseif line_end > tx then
+    if not card and line_end > tx then -- (the hybrid layout's main titles have no line)
         M.hline(dl, tx, line_end, cy, P.line)
     end
     return off
@@ -3608,18 +3637,17 @@ M.draw_headline = function (row, id, x, y, w, alpha, enabled, carded)
     end
     local head_face, head_size = head_font()
     local tx = x + S(LEFT)
-    local title_w = M.measure(row.text, head_face, head_size)
+    local title = M.hy.caps(row.text) -- (the hybrid layout's titles in capitals)
+    local title_w = M.measure(title, head_face, head_size)
     local hovered = M.over(tx, cy - S(12), title_w, S(24))
     -- (green_on: its title green while its switch is on)
     local colour = (row.green_on and not off) and P.green or P.white
-    M.text_mid(dl, tx, cy, row.text, colour, head_face, head_size) -- (full alpha: a panel's heading isn't greyed with its rows)
+    M.text_mid(dl, tx, cy, title, colour, head_face, head_size) -- (full alpha: a panel's heading isn't greyed with its rows)
     tx = tx + title_w + S(8)
     if hovered and M.TIPS.panels[row.text] ~= nil then
         M.tooltip(M.TIPS.panels[row.text])
     end
-    if carded then -- (a card's heading in the hybrid layout: the line across under it, as M.hy.row's)
-        M.hline(dl, x + S(LEFT), x + w - S(RIGHT), cy + S(18), M.hy.LINE, 0.16)
-    elseif line_end > tx then
+    if not carded and line_end > tx then -- (carded, the hybrid layout's: no line)
         M.hline(dl, tx, line_end, cy, P.line)
     end
 end
@@ -3677,6 +3705,8 @@ local function draw_section(page, sec, x, y, w, over_title, rows, hy)
         if cards ~= nil and cards.mode == 'title' then
             M.hy.close(cards, ry)
             ry = ry + S(10) -- (room before the cards)
+        elseif cards ~= nil then
+            ry = ry + S(M.hy.TITLE_PAD) -- (room under the title)
         end
     end
     local i = 1
@@ -3762,9 +3792,12 @@ local function draw_bundled_presets(x, y, w)
     local now = clock()
     local lx, right = x + S(LEFT), x + w - S(RIGHT)
     local at = y
-    M.text_mid(dl, lx, at + S(HEAD_H) / 2 + S(2), 'Bundled presets', P.white, head_font())
-    M.hline(dl, lx + M.measure('Bundled presets', head_font()) + S(8), right, at + S(HEAD_H) / 2 + S(2), P.line)
-    at = at + S(HEAD_H) + S(2)
+    local title = M.hy.caps('Bundled presets')
+    M.text_mid(dl, lx, at + S(HEAD_H) / 2 + S(2), title, P.white, head_font())
+    if not st.hybrid then
+        M.hline(dl, lx + M.measure(title, head_font()) + S(8), right, at + S(HEAD_H) / 2 + S(2), P.line)
+    end
+    at = at + S(HEAD_H) + S(2) + (st.hybrid and S(M.hy.TITLE_PAD) or 0)
     local now_at = quality_now()
     local enabled = M.effects_available()
     for i, name in ipairs(QUALITY.names) do
@@ -4216,9 +4249,12 @@ local function draw_presets_page(page, x, y, w)
     local at = y + S(6)
     draw_save_row('##presets.save', lx, right, at + S(SAVE_H) / 2)
     at = at + S(SAVE_H) + S(14)
-    M.text_mid(dl, lx, at + S(HEAD_H) / 2 + S(2), 'Saved presets', P.white, head_font())
-    M.hline(dl, lx + M.measure('Saved presets', head_font()) + S(8), right, at + S(HEAD_H) / 2 + S(2), P.line)
-    at = at + S(HEAD_H) + S(2)
+    local title = M.hy.caps('Saved presets')
+    M.text_mid(dl, lx, at + S(HEAD_H) / 2 + S(2), title, P.white, head_font())
+    if not st.hybrid then
+        M.hline(dl, lx + M.measure(title, head_font()) + S(8), right, at + S(HEAD_H) / 2 + S(2), P.line)
+    end
+    at = at + S(HEAD_H) + S(2) + (st.hybrid and S(M.hy.TITLE_PAD) or 0)
     if #st.presets.list == 0 then
         M.icon_centred(dl, lx + S(6), at + S(ROW_H) / 2, 'info', P.dim, 10)
         M.text_mid(dl, lx + S(20), at + S(ROW_H) / 2, 'No presets yet: name the settings you have now and save them.', P.text2, fonts.text, BODY - 1)
@@ -4300,6 +4336,11 @@ M.hy = { H = 44, PAD = 11 } -- H: the header's height; PAD: the list's margin at
 -- the panels' lines (M.hy.card, at a low alpha) and the kinds of row that have no line under them
 M.hy.LINE = '#96C3FF'
 M.hy.FLAT = true -- no box round a panel, only its heading's line (false: the cards)
+M.hy.TITLE_PAD = 6 -- the room under a main title (a section's, a headline's, the presets' lists), where it has no line
+-- a main title (a page's section, a headline, the presets' lists) in the hybrid layout is in capitals
+function M.hy.caps(text)
+    return st.hybrid == true and text:upper() or text
+end
 M.hy.NOSEP = {}
 for kind in ('subheader banner warning callout alert notice hint note tabs layers transfer textfile status controls columns extension_filter header'):gmatch('%S+') do
     M.hy.NOSEP[kind] = true
@@ -5177,7 +5218,7 @@ function M.hy.header(dl, x, y, pw, radius)
             end
         end
     end
-    local FS = 11
+    local FS = 12.5
     local function width(tab, full)
         return S(14) + S(14) + (full and (S(8) + M.text_spaced(nil, 0, 0, tab.label, P.white, fonts.semi, FS, 1, S(1.2))) or 0) + S(14)
     end
@@ -5216,7 +5257,7 @@ function M.hy.header(dl, x, y, pw, radius)
             M.fill(dl, at + S(2), cy - S(14), tw - S(4), S(28), P.hover, S(5), 0, 0.7)
         end
         local color = active and P.cyan or (hov and P.white or P.dim)
-        M.icon_centred(dl, at + S(14) + S(6), cy, tab.page.icon, color, 11)
+        M.icon_centred(dl, at + S(14) + S(6), cy, tab.page.icon, color, 12)
         if full then
             M.text_spaced(dl, at + S(14) + S(14) + S(8), cy, tab.label, color, fonts.semi, FS, 1, S(1.2))
         elseif hov then
@@ -6546,7 +6587,7 @@ vana.events.on('command', function (e)
             return true
         end
     end
-    -- /loadscreen alone: the window at Options > Loading Screen (the loadscreen addon passes it on; /loadscreen preview is its)
+    -- /loadscreen alone: the window at Mods > Loading Screen (the loadscreen addon passes it on; /loadscreen preview is its)
     if (command == '//loadscreen' or command == '/loadscreen') and words[2] == nil then
         local page = page_named('loadscreen')
         if page ~= nil then
@@ -6613,7 +6654,7 @@ vana.events.on('command', function (e)
             or n == -2 and 'VanaCore: the equipment data is still being read: try again in a moment.'
             or n == -1 and 'VanaCore: equip_mods.json is missing: nothing to dump (see the log).'
             or string.format('VanaCore: the stats of %d equipped item%s written to the log (Stats dump:).', n, n == 1 and '' or 's'))
-    elseif what == 'grass' and words[3] ~= nil then -- /vana grass alone: Game Options at its Mass Grass (below)
+    elseif what == 'grass' and words[3] ~= nil then -- /vana grass alone: Mods at its Mass Grass (below)
         grass.command(words)
     elseif what == 'hud' and (words[3] or ''):lower() == 'manager' then
         -- the HUD Manager opened or closed, as /hud does (the game's Config > HUD runs this: /hud may be switched off)
@@ -6680,7 +6721,8 @@ vana.events.on('command', function (e)
             local found = false
             for _, candidate in ipairs(PAGES) do
                 for _, sub in ipairs(candidate.tab ~= nil and subtabs_of(candidate) or {}) do
-                    if not found and sub.run == nil and sub.title:lower() == what then
+                    -- (a name of two words without the space: /vana drawdistance)
+                    if not found and sub.run == nil and (sub.title:lower() == what or sub.title:lower():gsub('[%s/]+', '') == what) then
                         page, st.sub[candidate.id], found = candidate, sub.title, true
                     end
                 end
@@ -6717,11 +6759,13 @@ vana.events.on('command', function (e)
             elseif what == 'nameplates' or what == 'names' then
                 st.sub[page.id] = 'Nameplates' -- Game Options at its Nameplates
             elseif what == 'zone' or what == 'zonename' then
-                st.sub[page.id] = 'Zones' -- Game Options at its Zones (Zone Lines, then Zone Name)
+                st.sub[page.id] = 'Zones' -- Mods at its Zones (Zone Lines, then Zone Name)
             elseif what == 'grass' then
-                st.sub[page.id] = 'Mass Grass' -- Game Options at its Mass Grass
+                st.sub[page.id] = 'Mass Grass' -- Mods at its Mass Grass
+            elseif what == 'snow' then
+                st.sub[page.id] = 'Snow Trails' -- Mods at its Snow Trails
             elseif what == 'loadscreen' then
-                st.sub[page.id] = 'Loading Screen' -- Options at its Loading Screen
+                st.sub[page.id] = 'Loading Screen' -- Mods at its Loading Screen
             end
             open(page)
         else

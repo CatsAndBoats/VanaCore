@@ -840,31 +840,64 @@ function M.segments(id, x, cy, labels, index, enabled, size, alpha_scale)
     return index, changed, over
 end
 
--- Tabs across a section (vana.lua's kind 'tabs': Game Options > Buttons' Global, Main Menu, Action Menu), from `x` to `right`,
--- `y` their top, M.TABS_H tall: each word a tab, the one picked (`index`) white over a line in the accent, the rest dim
--- (lighter under the mouse), a hairline under them all. Returns index and whether it changed.
+-- Tabs across a section (vana.lua's kind 'tabs': Game Options > Buttons' Global, Main Menu, Action Menu), `x` the names' left
+-- less M.TAB_PAD, `y` their top, M.TABS_H tall: a sunken bar round them all, each tab a pill in it, the one picked (`index`) lit
+-- in bright cyan, the rest dim (lighter under the mouse). No line. Returns index and whether it changed.
 M.TABS_H = 30
-M.TAB_PAD = 14 -- either side of each word
+M.TAB_PAD = 14 -- from `x` to the names' left (the bar stands 4 out from the names, a pill's own room is 12 either side)
+
+-- the tab picked's pill: round, shaded left to right, dark blue to the accent's (the header's tabs'), one rectangle for each pixel
+-- row of the corners and one for the rest, so there's no seam. `scale` its alpha.
+local function tab_pill(dl, x, y, w, h, radius, scale)
+    local r, top, rows = math.max(1, math.floor(radius + 0.5)), math.floor(y + 0.5), math.floor(h + 0.5)
+    local function strip(from, to, inset)
+        local function at(frac)
+            return u32(mix('#243462', P.accent_bg, frac), (1 + (0.9 - 1) * frac) * scale)
+        end
+        local l, rr = at(inset / w), at((w - inset) / w)
+        dl:AddRectFilledMultiColor({ x + inset, from }, { x + w - inset, to }, l, rr, rr, l)
+    end
+    for k = 0, r - 1 do
+        local inset = r - math.sqrt(r * r - (r - k - 0.5) ^ 2)
+        strip(top + k, top + k + 1, inset)
+        strip(top + rows - k - 1, top + rows - k, inset)
+    end
+    strip(top + r, top + rows - r, 0)
+end
+
 function M.tabs(id, x, y, right, labels, index, alpha_scale)
     local dl = imgui.GetWindowDrawList()
     local alpha = alpha_scale or 1
     local h = S(M.TABS_H)
-    local base = y + h - S(1)
-    M.hline(dl, x, right, base, P.line, alpha)
-    local changed = false
-    local at = x
+    local pad, inner = S(12), S(3) -- a pill's room either side of its name; the bar's round the pills
+    local widths, total = {}, 0
     for i, label in ipairs(labels) do
-        local w = measure(label, fonts.semi, BODY) + S(M.TAB_PAD) * 2
-        local hovered, clicked = hit(id .. i, at, y, w, h)
+        widths[i] = measure(label, fonts.semi, BODY) + pad * 2
+        total = total + widths[i]
+    end
+    local bar_x = x + S(M.TAB_PAD) - S(4)
+    local bar_y, bar_h = y + S(2), h - S(4)
+    fill(dl, bar_x, bar_y, total + inner * 2, bar_h, P.well, S(7), 0, 0.85 * alpha)
+    outline(dl, bar_x, bar_y, total + inner * 2, bar_h, P.well_edge, S(7), 0, 1, alpha)
+    local changed = false
+    local at = bar_x + inner
+    local py, ph = bar_y + inner, bar_h - inner * 2
+    for i, label in ipairs(labels) do
+        local w = widths[i]
+        local hovered, clicked = hit(id .. i, at, py, w, ph)
         if clicked and index ~= i then
             index, changed = i, true
         end
         local t = ease(id .. i, index == i and 1 or 0)
-        local colour = mix(hovered and P.text or P.dim, P.white, t)
-        text_centred(dl, at, y, w, h - S(3), label, colour, fonts.semi, BODY, alpha)
+        -- the one picked: a lit pill with a faint accent edge, its name in bright cyan; the others dim (a faint pill under the mouse)
         if t > 0.01 then
-            fill(dl, at + S(6), base - S(2), w - S(12), S(3), P.accent, S(1.5), 0, t * alpha)
+            tab_pill(dl, at, py, w, ph, S(5), t * alpha)
+            outline(dl, at, py, w, ph, P.accent, S(5), 0, 1, 0.5 * t * alpha)
+        elseif hovered then
+            fill(dl, at, py, w, ph, P.hover, S(5), 0, 0.8 * alpha)
         end
+        local colour = mix(hovered and P.text or P.dim, P.cyan, t)
+        text_centred(dl, at, py, w, ph, label, colour, fonts.semi, BODY, alpha)
         at = at + w
     end
     return index, changed

@@ -16,7 +16,7 @@ A logout or /shutdown (the server's zone-out of type 1, out_type) shows none of 
 screenshot, no text. The black lifts as the title screen's windows open (as autologin.cpp names them), or after
 LOGOUT_LONGEST should they not be seen; a /shutdown's game is gone before then.
 
-What shows, its scale and position, its colours, its panel and a picture behind it are /vana > Options > Loading Screen
+What shows, its scale and position, its colours, its panel and a picture behind it are /vana > Mods > Loading Screen
 ([loadscreen] in the settings file, read each frame it shows). The picture: one of your screenshots (VanaCore's
 screenshots folder, every day's), a new one picked at random for each load, darkened toward its edges (edges.png).
 
@@ -69,7 +69,7 @@ local function solid(colour, default)
     return #colour == 7 and colour .. 'FF' or colour
 end
 
--- [loadscreen]: what /vana > Options > Loading Screen sets (its defaults are these)
+-- [loadscreen]: what /vana > Mods > Loading Screen sets (its defaults are these)
 local function read_opts()
     local function on(key, default)
         local v = vana.config.get('loadscreen', key)

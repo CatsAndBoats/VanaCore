@@ -1,6 +1,6 @@
 --[[
 vana\zonename.lua: the zone's name, and the region's above it, in the middle of the screen when you zone in, animating in and out
-(Game Options > Zones > Zone Name and Region Name; [client] zonename*).
+(Mods > Zones > Zone Name and Region Name; [client] zonename*).
 
 The zone's name is from vana.gamedata.zones (a zone it has no name for shows no name); the region's is from REGIONS below (a zone
 in no region shows none). Each line has its own switch ([client] zonename, zonename.region) and its own look (font, size,

@@ -4194,6 +4194,16 @@ local TABS = {
                 free(slider('Characters', 'graphics', 'drawdistance.mobs', 5, 1, 10, 1, '%.0fx'), 0.1, 100),
                 free(slider('Boat rides', 'graphics', 'drawdistance.ship', 1, 1, 10, 1, '%.0fx'), 0.1, 100),
                 scenery_detail,
+                -- (what was the Hiding sub-panel: with the distances, above the Advanced Settings group)
+                toggle('Hide other players', 'graphics', 'hide.players', false),
+                toggle('Hide other players\' pets', 'graphics', 'hide.pets', false),
+                toggle('Hide other players\' trusts', 'graphics', 'hide.trusts', false),
+                -- (Fog is above the Advanced Settings group, which ends the panel: its rows run to the next heading)
+                subheader('Fog'),
+                distance_fog,
+                -- shown in hundreds (7 is 700; fog.start keeps its own units)
+                custom_fog(shown_as(free(slider('Custom fog starts at', 'graphics', 'fog.start', 1, 1, 20, 1, '%d'), 0, 50), 0.01)),
+                custom_fog(shown_as(free(slider('Custom fog ends at', 'graphics', 'fog.end', 4, 1, 100, 1, '%d'), 0, 200), 0.01)),
                 advanced_group('Fine-tuning for the draw distance: filling in far ground that can be missing, the whole zone in view, '
                                .. 'and how the far scenery is drawn. Most players never need these.'),
                 toggle('Fill in missing far ground', 'graphics', 'drawdistance.fill', false),
@@ -4203,15 +4213,6 @@ local TABS = {
                 needs_dx12(toggle('Batch repeated scenery', FX, 'batch', true)),
                 -- far scenery hidden behind what's drawn left undrawn (occlusion.cpp, gfx_d3d12_occl.h); Count only logs it
                 needs_dx12(choice('Skip hidden scenery', 'graphics', 'occl', '1', { { '0', 'Off' }, { '1', 'On' }, { '2', 'Count only' } })),
-                subheader('Hiding'),
-                toggle('Hide other players', 'graphics', 'hide.players', false),
-                toggle('Hide other players\' pets', 'graphics', 'hide.pets', false),
-                toggle('Hide other players\' trusts', 'graphics', 'hide.trusts', false),
-                subheader('Fog'),
-                distance_fog,
-                -- shown in hundreds (7 is 700; fog.start keeps its own units)
-                custom_fog(shown_as(free(slider('Custom fog starts at', 'graphics', 'fog.start', 1, 1, 20, 1, '%d'), 0, 50), 0.01)),
-                custom_fog(shown_as(free(slider('Custom fog ends at', 'graphics', 'fog.end', 4, 1, 100, 1, '%d'), 0, 200), 0.01)),
                 effect('Shadows', 'sun', 0.6),
                 note("The game's own shadows are turned off while these are on, on purpose: they would draw twice. "
                      .. "Turning these off leaves the game's off: Config > Shadows puts them back."),
@@ -4673,7 +4674,7 @@ local TABS = {
     {
         name = 'Options',
         search = true,
-        aliases = { 'world', 'camera', 'trusts', 'zonelines', 'zones', 'zone', 'npc', 'damage', 'loadscreen' },
+        aliases = { 'world', 'camera', 'trusts', 'npc', 'damage' }, -- (Zones and Loading Screen are the Mods page's: vana.lua MOVED_OPTIONS)
         rows = function ()
             -- A kind of damage number's colours on one line (vana.lua kind 'colours'): its colour (`none` what it is unset),
             -- the gradient's second colour, then a Gradient checkbox; one colour, the first, while that's off (the second
@@ -6747,7 +6748,7 @@ local function set_extension(row, on)
     M.refresh_at = vana.time.clock() + 0.4
 end
 
--- Options > Loading Screen: the loadscreen addon loaded now, its switch (loaded or unloaded and its boot.txt line, as
+-- Mods > Loading Screen: the loadscreen addon loaded now, its switch (loaded or unloaded and its boot.txt line, as
 -- the Addons tab's switch does), its rows locked while it's off, and Preview (/loadscreen preview)
 function M.loadscreen_loaded()
     for _, entry in ipairs(vana.addons.loaded and vana.addons.loaded() or {}) do
