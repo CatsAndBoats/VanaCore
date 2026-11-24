@@ -2,6 +2,7 @@
 
 VanaCore finds everything in FFXiMain.dll by pattern (`scan::find`), never by address. This is what that held up against
 when the CatsEyeXI client was compared with retail's, and how to keep it so. Checked 2026-10-31, offline, nothing run.
+Every pattern, feature by feature, and what VanaCore does with it: [`ffximain-offsets.md`](ffximain-offsets.md).
 
 | | header | image | built |
 |---|---|---|---|
