@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "addonbox.hpp"
+#include "backdrop.hpp"
 #include "d3d8.hpp"
 #include "hideui.hpp"
 #include "imgui_legacy.hpp"
@@ -474,6 +475,7 @@ void render(void* device, const ImDrawData& data, unsigned width, unsigned heigh
     set_state(device);
     for (int n = 0; n < data.CmdListsCount; ++n) {
         const ImDrawList& list = *data.CmdLists[n];
+        backdrop::before_list(&list); // (a window with a blurred backdrop: what's drawn before it goes into the layer the blur is of)
         g_vertices.resize(static_cast<size_t>(list.VtxBuffer.Size));
         for (int i = 0; i < list.VtxBuffer.Size; ++i) {
             const ImDrawVert& from = list.VtxBuffer.Data[i];

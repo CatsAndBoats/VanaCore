@@ -3,8 +3,8 @@ vana\hud.lua: the HUD Manager (/hud, or Open Manager under the /vana window's HU
 every game window's box is up in it (vana.lua's hud.boxes: Shift + drag moves one, a click picks it here). Loaded by
 vana.lua with the shared table M; drawn each frame it's open, the /vana window hidden till it's closed (hud.open_manager).
 
-  title line   its name, the HUD presets (the one picked is loaded) and their edit (the /vana window at HUD > Presets),
-               Addon View, Open only and the HUD page's Grid, Snap and Names switches as icons, and close
+  title line   its name, the HUD presets (the one picked is loaded), their edit (the Presets window) and the HUD's settings
+               (the Settings window), Addon View, Open only and the HUD page's Grid, Snap and Names switches as icons, and close
   element      the game windows (the HUD page's element sections, data.lua) in a drop-down, < and > stepping through
                them (with Open only, only those open in the game now); the one picked has its box picked in the game
                too, for the arrow keys. Its reset after it
@@ -14,7 +14,9 @@ Addon View (/hud addons, [vana] hud.addons): yellow boxes over the addons' and p
 in place of the game windows' blue ones (vana.lua's hud.addon_boxes); the drop-down is the addons, and the settings the
 picked one's windows, each's X, Y and Scale as Addons > Layout has them (hud.addon_section).
 
-What the mouse does to the boxes is the HUD page's Controls, at the top of its Settings.
+What the mouse does to the boxes is the Settings window's Controls, at its top (the HUD page's Settings, data.lua).
+The Settings and Presets windows are the HUD page's Settings section and its presets, drawn here (side_window): the page
+isn't in /vana's list of pages.
 --]]
 
 local M = ...
@@ -24,9 +26,9 @@ local BODY, SMALL = M.BODY, M.SMALL
 local st = M.st
 
 -- pick: the element shown (its section's title), nil for none; back: the /vana window's page, hidden while this is open;
--- edit: the presets' edit clicked, the /vana window opened the next frame (vana.lua's present)
 -- addon: the Addon View's addon shown (its owner, 'ashita/xiui'), nil for none; view: the view drawn last frame
-M.hudman = { open = false, pick = nil, back = nil, edit = false, addon = nil, view = nil }
+-- settings_open, presets_open: the Settings and Presets windows (beside this one), opened by the icons on its title line
+M.hudman = { open = false, pick = nil, back = nil, addon = nil, view = nil, settings_open = false, presets_open = false }
 local hm = M.hudman
 
 local WIN_W = 384
@@ -50,7 +52,7 @@ local UNDER_VANA = 8192
 local SWITCHES = {
     { kind = 'toggle', label = 'Addon View', icon = 'puzzle', section = 'vana', key = 'hud.addons', default = false,
       tip = "The addons' windows and text, in yellow boxes, in place of the game's windows",
-      on_color = { P.hud, '#FFF6C4' }, -- (in the boxes' yellow while on)
+      on_color = { P.green, M.mix(P.green, '#FFFFFF', 0.55) }, -- (green while on)
       usable = function () return vana.layout.box ~= nil end },
     { kind = 'toggle', label = 'Open only', icon = 'filter', section = 'vana', key = 'hud.open_only', default = false,
       tip = 'Only the windows open in the game now (in the Addon View, the addons drawing now): their boxes, and them in the list',
@@ -318,6 +320,8 @@ local function row_height(row, first)
         return first and S(ROW_H) or S(SUB_H)
     elseif row.kind == 'widget' then
         return S(ROW_H)
+    elseif row.kind == 'controls' then
+        return S(ROW_H) * #row.items + S(8)
     elseif row.kind == 'layout' then
         return S(ROW_H) * (1 + #sub_lines(row))
     elseif row.kind == 'toggle' or row.kind == 'choice' or row.kind == 'slider' or row.kind == 'colour' then
@@ -519,6 +523,16 @@ local function draw_row(sec, row, x, y, w, first)
              x + S(20), cy, w - S(M.SW_W) - S(30), P.hud, 1)
         return h
     end
+    if row.kind == 'controls' then
+        -- what the mouse does to the boxes: a line each, its keys on the left, what it does after
+        for i, item in ipairs(row.items) do
+            local cy = y + S(ROW_H) * (i - 0.5) + S(4)
+            local keys = table.concat(item.keys, ' + ')
+            M.text_mid(dl, x, cy, keys, P.hud, fonts.semi, SMALL)
+            M.text_mid(dl, x + math.max(S(110), M.measure(keys, fonts.semi, SMALL) + S(12)), cy, item.text, P.text2, fonts.text, SMALL)
+        end
+        return h
+    end
     local alpha, enabled = M.row_state(row, {})
     local cy = y + S(ROW_H) / 2
     local right = x + w
@@ -573,6 +587,164 @@ local function rows_height(view)
         h = h + row_height(row, i == 1)
     end
     return h
+end
+
+-------------------------------------------------------------------------------
+-- The Settings and Presets windows: beside the HUD Manager, each its title, a close and a body that scrolls
+-------------------------------------------------------------------------------
+
+local SETTINGS_W, PRESETS_W = 400, 470
+local SIDE_MAX = 560 -- a window's height before its body scrolls
+local SETTINGS_H = 330  -- the Settings window's body, first opened
+local PRESETS_H = 170   -- the Presets window's body, when it's first opened (then it's the player's: dragged at its corner)
+local sizes = {}     -- a resizable window's size, dragged at its corner { w, h }
+local sides = {}     -- the windows' rectangles as last drawn { x, y, w, h }, for a picker's place
+
+-- A window `key` ('settings', 'presets') `pw` wide and `body_h` high under its title line, put beside the HUD Manager (at
+-- x, y, the first time). `body(bx, by, bw)` draws it and returns its height. Returns whether its close was clicked.
+local function side_window(key, title, pw, body_h, x, y, k, body, resizable)
+    local screen_w, screen_h = vana.ui.screen()
+    screen_w, screen_h = (screen_w and screen_w > 0) and screen_w or 1920, (screen_h and screen_h > 0) and screen_h or 1080
+    local dw, dh = M.display(screen_w, screen_h)
+    local ph = S(TITLE_H) + math.max(S(48), math.min(body_h, S(SIDE_MAX), screen_h - S(TITLE_H) - S(40)))
+    imgui.SetNextWindowPos({ math.max(0, x - (pw + S(12)) * k), y + (key == 'presets' and S(24) * k or 0) }, M.FIRST_USE_EVER)
+    local flags = M.WINDOW_FLAGS + ((st.open and not st.minimised) and UNDER_VANA or 0)
+    if resizable then -- (dragged at its bottom right corner, three lines as /vana's: the size kept here between frames)
+        sizes[key] = sizes[key] or { pw, ph }
+        pw, ph = sizes[key][1], sizes[key][2]
+    end
+    imgui.SetNextWindowSize({ pw, ph }, 0)
+    local COL, VAR = M.COL, M.VAR
+    local colours = {
+        { COL.ChildBg, P.bg, 0 }, { COL.ScrollbarBg, P.bg, 0 }, { COL.ScrollbarGrab, '#3A4158', 1 },
+        { COL.ScrollbarGrabHovered, '#4A5270', 1 }, { COL.ScrollbarGrabActive, P.accent_lo, 1 },
+    }
+    for _, c in ipairs(colours) do
+        imgui.PushStyleColor(c[1], M.rgba(c[2], c[3]))
+    end
+    imgui.PushStyleVar(VAR.WindowPadding, { 0, 0 })
+    imgui.PushStyleVar(VAR.WindowRounding, 0)
+    imgui.PushStyleVar(VAR.WindowBorderSize, 0)
+    imgui.PushStyleVar(VAR.ChildRounding, 0)
+    imgui.PushStyleVar(VAR.ChildBorderSize, 0)
+    imgui.PushStyleVar(VAR.ItemSpacing, { 0, 0 })
+    imgui.PushStyleVar(VAR.ScrollbarSize, S(6))
+    imgui.PushStyleVar(VAR.ScrollbarRounding, S(3))
+    local closed = false
+    if imgui.Begin(title .. '###vana_hud_' .. key, nil, flags) then
+        local wx, wy = imgui.GetWindowPos()
+
+        local cx = math.max(0, math.min(wx, dw - pw * k))
+        local cy = math.max(0, math.min(wy, dh - ph * k))
+        local clipped = false
+        if cx ~= wx or cy ~= wy then
+            imgui.SetWindowPos({ cx, cy }, 0)
+            wx, wy = imgui.GetWindowPos()
+            imgui.PushClipRect({ 0, 0 }, { dw, dh }, false)
+            clipped = true
+        end
+        sides[key] = { wx, wy, pw, ph }
+        local dl = imgui.GetWindowDrawList()
+        local radius = S(6)
+        M.fill(dl, wx - 1, wy, pw + 2, ph + 2, '#000000', radius + 1, 0, 0.35)
+        M.fill(dl, wx, wy, pw, ph, P.bg, radius)
+        M.outline(dl, wx, wy, pw, ph, P.border, radius)
+        local ty = wy + S(TITLE_H) / 2
+        M.gradient_text(dl, wx + S(PAD), ty, title, '#FFF7D1', P.hud, fonts.semi, BODY + 1)
+        local clicked, over = M.icon_button('##hudm.side.' .. key .. '.close', wx + pw - S(PAD) - S(4), ty, 'close', 12, P.rose)
+        if over then
+            M.tooltip('Close')
+        end
+        closed = clicked
+        M.hline(dl, wx, wx + pw, wy + S(TITLE_H), P.border)
+        imgui.SetCursorScreenPos({ wx, wy + S(TITLE_H) + 1 })
+        -- (a resizable window's body stops above the corner, so its grip gets the mouse)
+        local grip = resizable and S(16) or 0
+        if imgui.BeginChild('##hudm.side.' .. key .. '.body', { pw, ph - S(TITLE_H) - 1 - grip }, 0, M.NO_NAV) then
+            local bx, by = imgui.GetCursorScreenPos()
+            local bw = (imgui.GetContentRegionAvail())
+            local used = body(bx, by, bw) or 0
+            imgui.SetCursorScreenPos({ bx, by + used })
+            imgui.Dummy({ 1, 1 })
+        end
+        imgui.EndChild()
+        if resizable then
+            local g = S(18)
+            local hovered, _, active = M.hit('##hudm.side.' .. key .. '.resize', wx + pw - g, wy + ph - g, g, g)
+            local size = sizes[key]
+            if active then
+                local mx, my = imgui.GetMousePos()
+                size.grab = size.grab or { wx + pw - mx, wy + ph - my }
+                size[1] = math.max(S(340), math.min(mx + size.grab[1] - wx, dw))
+                size[2] = math.max(S(TITLE_H) + S(110), math.min(my + size.grab[2] - wy, dh))
+            else
+                size.grab = nil
+            end
+            if hovered or active then
+                imgui.SetMouseCursor(6) -- ImGuiMouseCursor_ResizeNWSE
+            end
+            local colour = M.u32((hovered or active) and P.accent or P.dim)
+            local right, bottom = wx + pw - S(5), wy + ph - S(5)
+            for _, n in ipairs({ 4, 8, 12 }) do
+                dl:AddLine({ right - S(n), bottom }, { right, bottom - S(n) }, colour, math.max(1, S(1.25)))
+            end
+            if hovered and not active then
+                M.tooltip('Drag to resize')
+            end
+        end
+        if key == 'presets' then
+            M.hud.presets_dialog(wx, wy, pw, ph) -- (its Export, Import and Load dialog, over it)
+        end
+        if clipped then
+            imgui.PopClipRect()
+        end
+    else
+        sides[key] = nil
+    end
+    imgui.End()
+    imgui.PopStyleVar(8)
+    imgui.PopStyleColor(#colours)
+    return closed
+end
+
+-- the Settings window and the Presets window, when each is open (`x`, `y`: the HUD Manager's place, k its scale); returns
+-- whether a picker (a colour's, a typed number) of the Settings window was drawn, beside that window
+function M.draw_side_windows(x, y, k, screen_w, screen_h)
+    if hm.settings_open then
+        local sec = M.hud.settings_section()
+        if sec == nil then
+            hm.settings_open = false
+        else
+            local view = view_of(sec)
+            local closed = side_window('settings', 'HUD Settings', S(SETTINGS_W), S(SETTINGS_H), x, y, k,
+                                       function (bx, by, bw)
+                                           local ry = by + S(7)
+                                           for i, row in ipairs(view) do
+                                               ry = ry + draw_row(sec, row, bx + S(PAD), ry, bw - S(PAD) * 2, i == 1)
+                                           end
+                                           return ry - by + S(7)
+                                       end, true)
+            hm.settings_open = hm.settings_open and not closed
+        end
+    else
+        sides.settings = nil
+    end
+    if hm.presets_open then
+        local closed = side_window('presets', 'HUD Presets', S(PRESETS_W), S(PRESETS_H), x, y, k,
+                                   function (bx, by, bw)
+                                       return M.hud.presets_body(bx, by, bw)
+                                   end, true)
+        hm.presets_open = hm.presets_open and not closed
+    else
+        sides.presets = nil
+    end
+    local p = st.picker
+    if p ~= nil and M.hud_owns(p) and p.id:sub(1, 15) == '##hudm.Settings' and sides.settings ~= nil then
+        local r = sides.settings
+        M.draw_pickers(r[1], r[2], r[3], r[4], screen_w, screen_h)
+        return true
+    end
+    return false
 end
 
 -------------------------------------------------------------------------------
@@ -678,7 +850,7 @@ function M.draw_hud(now)
     imgui.PushStyleVar(VAR.ItemSpacing, { 0, 0 })
     imgui.PushStyleVar(VAR.ScrollbarSize, S(6))
     imgui.PushStyleVar(VAR.ScrollbarRounding, S(3))
-    local closing, editing = false, false
+    local closing = false
     local x, y = 0, 0
     if imgui.Begin('HUD###vana_hud', nil, M.WINDOW_FLAGS + ((st.open and not st.minimised) and UNDER_VANA or 0)) then
         x, y = imgui.GetWindowPos()
@@ -709,14 +881,27 @@ function M.draw_hud(now)
             M.tooltip(hm.back ~= nil and 'Close, back to the VanaCore window' or 'Close (/hud)')
         end
         closing = close_clicked
-        local switches_x = draw_switches(dl, close_x - S(TOGGLE_W), ty)
+        local switches_x = draw_switches(dl, close_x - S(TOGGLE_W) * 2, ty) -- (the settings' gear takes the place next to close)
         local px = lx + title_w + S(12)
-        local pick_right = M.hud.preset_pick('##hudm.preset', px, ty, switches_x - S(EDIT_GAP) * 2 - px)
-        local edit_clicked, over_edit = M.icon_button('##hudm.edit', pick_right + S(EDIT_GAP), ty, 'pen', 11, P.text)
+        -- (the edit is one more of the icons: a step left of the first, as far apart as they are)
+        local edit_x = switches_x + S(11) - S(TOGGLE_W)
+        M.hud.preset_pick('##hudm.preset', px, ty, edit_x - S(EDIT_GAP) - px)
+        local edit_clicked, over_edit = M.icon_button('##hudm.edit', edit_x, ty, 'pen', 11,
+                                                      hm.presets_open and P.hud or P.text)
         if over_edit then
-            M.tooltip('Edit the HUD presets (the VanaCore window, HUD > Presets)')
+            M.tooltip('The HUD presets: load, save, update, export, import and delete them (a window)')
         end
-        editing = edit_clicked
+        local settings_clicked, over_settings = M.icon_button('##hudm.settings', close_x - S(TOGGLE_W), ty, 'gear', 11,
+                                                              hm.settings_open and P.hud or P.text)
+        if over_settings then
+            M.tooltip("The HUD's settings: what the mouse does to the boxes, the grid, snapping, names and auto save (a window)")
+        end
+        if edit_clicked then
+            hm.presets_open = not hm.presets_open
+        end
+        if settings_clicked then
+            hm.settings_open = not hm.settings_open
+        end
         M.hline(dl, x, x + pw, y + S(TITLE_H), P.border)
 
         -- the element: the game windows by name, in categories (the Addon View: the addons, by kind); its reset after it
@@ -794,13 +979,11 @@ function M.draw_hud(now)
     end
     rest.seen = false
 
-    if M.hud_owns(st.picker) then -- a colour's picker or a typed number, beside this window
+    local side_picker = M.draw_side_windows(x, y, k, screen_w, screen_h)
+    if M.hud_owns(st.picker) and not side_picker then -- a colour's picker or a typed number, beside this window
         M.draw_pickers(x, y, pw, ph, screen_w, screen_h)
     end
     if closing then
         M.hud.close_manager()
-    elseif editing then
-        -- (not now: the press brings this window to the front at the frame's end, over the /vana window opened by it)
-        hm.edit = true
     end
 end

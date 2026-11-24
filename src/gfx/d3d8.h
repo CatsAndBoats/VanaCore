@@ -239,6 +239,8 @@ int d3d8_plugin_wheel_over(int x, int y);
 /* That layer as drawn this frame (BGRA, premultiplied), into pixels with pitch (NULL: only its size);
  * 0 when nothing was drawn into it. */
 int d3d8_ui_layer(uint32_t* w, uint32_t* h, void* pixels, uint32_t pitch);
+/* vanacore_gfx_ui_split: the interface's draws from here to Present go into a second layer, over the first */
+void d3d8_ui_split(void);
 /* Rectangles of the game's picture kept over what's drawn after them: each take copies one from the back buffer (x, y,
  * w, h in its pixels, as the game knows them; D3D8_RAISE_MOST a frame at most), put lays the copies back there and cuts
  * their places out of the layer above, so the game's own pixels show over everything. Put does nothing unless a take

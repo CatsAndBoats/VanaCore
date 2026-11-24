@@ -14,6 +14,7 @@
 #include <vanacore/plugin_api.h>
 #include <vanacore/version.hpp>
 
+#include "backdrop.hpp"
 #include "chat.hpp"
 #include "compat/ashita/host.hpp"
 #include "entityhp.hpp"
@@ -571,6 +572,13 @@ int __cdecl entity_request_max_hp(const std::uint32_t* ids, std::uint32_t count,
     return refused == nullptr ? VANACORE_OK : VANACORE_UNAVAILABLE;
 }
 
+int __cdecl backdrop(float x, float y, float width, float height, float radius, float strength)
+{
+    if (caller() == nullptr)
+        return VANACORE_NOT_A_PLUGIN;
+    return vanacore::backdrop::ask(x, y, width, height, radius, strength) ? 1 : 0;
+}
+
 const VanaCorePluginApi& table()
 {
     static const std::string version = [] {
@@ -586,6 +594,7 @@ const VanaCorePluginApi& table()
         &chat_input_caret,
         &gameui_window, &gameui_windows, &gameui_press,
         &entity, &entity_by_id, &entity_vitals, &entity_request_max_hp,
+        &backdrop,
     };
     return api;
 }

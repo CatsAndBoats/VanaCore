@@ -830,6 +830,16 @@ int vanacore_gfx_wait_step(unsigned bit, char* words, int size);
  * frame is drawn at. 0 (the default) after. */
 void vanacore_gfx_set_own_pixels(int on);
 
+/* Rectangles behind VanaCore's own windows, over which the frame is shown blurred at the next Present (frosted glass): n of
+ * them, 6 floats each (x, y, width, height, corner radius, strength 0 to 1), in the window's pixels, as the interface layer is
+ * drawn. Called every frame there are any. 1 when the renderer draws them (Direct3D 12), 0 when it doesn't (nothing is kept then). */
+int vanacore_gfx_set_backdrops(const float* rects, int n);
+
+/* From the interface's draw, at the first of the windows that asked for a backdrop (only when vanacore_gfx_set_backdrops said
+ * the renderer draws them): what has been drawn so far this frame stays in one layer, drawn under the blur, and what follows
+ * goes into another, over it, so the windows behind the glass are blurred with the picture. Undone at Present. */
+void vanacore_gfx_ui_split(void);
+
 /* 1 when the game's interface, laid out w x h (its menu resolution), has been squeezed toward the middle this frame
  * (vanacore_gfx_set_ui_aspect's shape in a window of another): text VanaCore places over the game's windows (the item
  * count, the Network window's dot) follows the squeeze then, and only then. The game's interface isn't squeezed when

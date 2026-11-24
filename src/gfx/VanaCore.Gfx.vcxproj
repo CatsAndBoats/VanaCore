@@ -119,6 +119,7 @@
     <ClInclude Include="gfx_backend.h" />
     <ClInclude Include="gfx_hlsl_water.h" />
     <ClInclude Include="gfx_hlsl_water_mirror.h" />
+    <ClInclude Include="gfx_d3d11_backdrop.h" />
     <ClInclude Include="gfx_d3d11_glow.h" />
     <ClInclude Include="gfx_d3d11_mirror.h" />
     <ClInclude Include="gfx_d3d11_smooth.h" />
@@ -128,6 +129,7 @@
     <ClInclude Include="gfx_d3d12_copies.h" />
     <ClInclude Include="gfx_d3d12_measure.h" />
     <ClInclude Include="gfx_d3d12_mirror.h" />
+    <ClInclude Include="gfx_d3d12_backdrop.h" />
     <ClInclude Include="gfx_d3d12_sky.h" />
     <ClInclude Include="gfx_d3d12_occl.h" />
     <ClInclude Include="gfx_sun_bounds.h" />

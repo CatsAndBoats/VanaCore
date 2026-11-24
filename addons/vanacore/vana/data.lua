@@ -5623,16 +5623,15 @@ local TABS = {
             end
             local rows = {
                 (function (row) row.nav_icon = 'font' return row end)(header('True Font')), -- (its icon by its sub-tab in the list)
-                -- Disable True Font ([client] truefont.disable=1), in red: every interface area's off at once, wherever its own
+                -- (the launcher's Font Quality: PageProfiles.xaml FormGfxFontQuality), first on the page
+                callout('Font Quality', 'Set to Uncompressed in Launcher > Account > Graphics Settings.', nil, false),
+                -- Disable True Font ([client] truefont.disable=1): every interface area's off at once, wherever its own
                 -- switch is, each area's settings kept; the rest of the page locked meanwhile. Menus & Lists off kept on the
                 -- areas following it, Buttons and Equipment's among them, whose switches are on Game Options (reported in game
-                -- 2026-11-08). Not the nameplates or damage numbers: they keep their own switches (2026-11-09)
-                (function (row) row.danger = true return row end)(subheader('Disable True Font', nil, {
-                    get = function () return get('client', 'truefont.disable') == '1' end,
-                    set = function (on) vana.config.set('client', 'truefont.disable', on and '1' or '0') end,
-                }, 'client', 'truefont.disable')),
-                -- (the launcher's Font Quality: PageProfiles.xaml FormGfxFontQuality)
-                callout('Font Quality', 'Set to Uncompressed in Launcher > Account > Graphics Settings.', nil, false),
+                -- 2026-11-08). Not the nameplates or damage numbers: they keep their own switches (2026-11-09). A row at the
+                -- just before Default Font, in a box of its own, as the Advanced Settings are (row.boxed: vana.lua's draw_section)
+                (function (row) row.colour, row.bold, row.boxed = M.P.rose, true, true return row end)(
+                    toggle('Disable True Font', 'client', 'truefont.disable', false)),
                 subheader('Default Font'),
                 -- (the nameplates' too while theirs isn't set: [graphics], read with the graphics settings, graphics.cpp)
                 (function (row) row.changed = function () vana.graphics.reload() end return row end)(
@@ -5701,7 +5700,7 @@ local TABS = {
                  'The timers under your status icons (29m, 3h), each centred under its icon. Also on Game Options > Status Icons.')
             -- (the Target window's title and name are on Game Options > Target and HUD > Target Window, not here: 2026-11-07)
             -- (the Equipment window's two, slot names and stats, are on Game Options > Equipment alone: 2026-11-06)
-            for i = 3, #rows do -- (all but the heading and Disable True Font locked while it's on)
+            for i = 5, #rows do -- (all but the heading, the notice, Default Font's own heading and Disable True Font locked while it's on)
                 local was = rows[i].lock_if
                 rows[i].lock_if = function () return get('client', 'truefont.disable') == '1' or (was ~= nil and was()) end
             end

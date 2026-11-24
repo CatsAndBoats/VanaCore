@@ -865,6 +865,9 @@ int vanacore_gfx_wait_step(unsigned bit, char* words, int size)
 
 void vanacore_gfx_set_own_pixels(int on) { d3d8_set_own_pixels(on); }
 
+int vanacore_gfx_set_backdrops(const float* rects, int n) { return g_start_ok ? gfx_present_backdrops(rects, n) : 0; }
+void vanacore_gfx_ui_split(void) { d3d8_ui_split(); }
+
 int vanacore_gfx_ui_squeezed(uint32_t w, uint32_t h) { return d3d8_ui_squeezed(w, h); }
 
 int vanacore_gfx_plugin_wheel_over(int x, int y) { return d3d8_plugin_wheel_over(x, y); }

@@ -58,6 +58,7 @@ callbacks already use. Strings are UTF-8.
 | `entity_by_id(id, &out)` | the same for a server id (every slot is looked at: keep the index and call `entity` by it each frame) |
 | `entity_vitals(id, &out)` | `vana.game.vitals`: a party or alliance member's HP, MP and TP with their **maximums**, also while they are in another zone, in a `VanaCoreVitals`. `VANACORE_UNKNOWN` for anyone else |
 | `entity_request_max_hp(ids, count, callback, user)` | asks CatsEyeXI's server for the maximum HP of up to 8 entities by server id, a monster's too; `callback(user, answers, count)` runs on the game's thread, once, in a following frame. [Below](#asking-the-server-for-a-maximum-hp) |
+| `backdrop(x, y, width, height, radius, strength)` | asks for the picture behind a rectangle of the plugin's ImGui window to be shown blurred under its fill (frosted glass, `strength` 0 to 1; every frame; 1 when the last frame's was drawn). [Below](#frosted-glass-behind-a-window) |
 
 What a call returns: `VANACORE_OK` (0), `VANACORE_HELD` (1, `holder` names who has it), `VANACORE_NOT_UP` and
 `VANACORE_BUSY` (2 and 3, `gameui_press`), `VANACORE_UNKNOWN` (an element or action VanaCore doesn't know),
@@ -71,9 +72,29 @@ over it (they would be while you don't hide `chat_log`, the player showing both)
 Not for plugins yet: `vana.gameui.add`, `replace`, `on`/`catch` and `watch` (they call back into Lua). In place of
 `watch`, read `gameui_window` every frame and look at its `changes`.
 
-The API's version is 3 (`entity`, `entity_by_id`, `entity_vitals`, `entity_request_max_hp`; 2 since 0.8.205 had `gameui_window`, `gameui_windows`,
+The API's version is 4 (`backdrop`; 3 had `entity`, `entity_by_id`, `entity_vitals`, `entity_request_max_hp`; 2 since 0.8.205 had `gameui_window`, `gameui_windows`,
 `gameui_press`): a plugin built with this header gets `NULL` from an older VanaCore. Players get the new one from the
 launcher.
+
+## Frosted glass behind a window
+
+`backdrop(x, y, width, height, radius, strength)` (version 4) asks for the picture behind a rectangle to be shown blurred under a window's
+translucent fill, as `vana.ui.backdrop` does for an addon ([drawing](../addons/06-drawing.md#frosted-glass-behind-a-window-vanauibackdrop)).
+Call it every frame from inside the plugin's ImGui window, between its `Begin` and `End`, with the rectangle in the pixels the
+window's draw list takes:
+
+```c
+ImVec2 pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+int blurred = vana != NULL && vana->backdrop != NULL && vana->backdrop(pos.x, pos.y, size.x, size.y, 8.0f, 0.75f) == 1;
+/* fill the window with ImGuiCol_WindowBg at about 50% alpha when blurred, nearly solid when not */
+```
+
+`strength` is how blurred, 0 to 1 (outside is held to it): 0 hardly at all, 0.5 the usual frosted glass, 1 about twice that.
+Each rectangle has its own.
+
+It returns 1 when the renderer drew the last frame's request, so a plugin can pick a see-through fill or a plainer one: not in the
+first frame, and not with a renderer that can't (only DirectX 12 blurs yet). Up to 8 rectangles at a time; a window drawn scaled
+by Addons > Layout is followed. VANACORE_NOT_A_PLUGIN from anywhere but a plugin's callback.
 
 ## Entities and maximum HP
 

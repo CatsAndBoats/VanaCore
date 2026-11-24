@@ -920,6 +920,32 @@ const char gfx_hlsl_util[] =
     "float4 present_layer_fs(PO i) : SV_Target {\n"
     "  return tx2[ti[0].x].Sample(smp[si[0].x], i.uv);\n"
     "}\n"
+    /* frosted glass: the blurred frame (the whole of it, as present_fs draws the frame) inside a rounded rectangle: x, y, width,
+     * height and corner radius in target pixels in ti[0].y .. ti[1].y (floats); an alpha for the edge, drawn over the frame.
+     * The picture is two blurs of it (ti[0].x and ti[1].z) blended by ti[1].w (a float): the strength, in the blur's levels */
+    "float4 backdrop_fs(PO i) : SV_Target {\n"
+    "  float4 r = float4(asfloat(ti[0].y), asfloat(ti[0].z), asfloat(ti[0].w), asfloat(ti[1].x));\n"
+    "  float rad = asfloat(ti[1].y);\n"
+    "  float2 q = abs(i.pos.xy - (r.xy + r.zw * 0.5)) - (r.zw * 0.5 - rad);\n"
+    "  float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - rad;\n"
+    "  float3 a = tx2[ti[0].x].Sample(smp[si[0].x], i.uv).rgb, b = tx2[ti[1].z].Sample(smp[si[0].x], i.uv).rgb;\n"
+    "  return float4(lerp(a, b, asfloat(ti[1].w)), saturate(0.5 - d));\n"
+    "}\n"
+    /* what the blur starts from when VanaCore's windows below the glass are to be blurred too: the frame (input 0, ti[0].x) with
+     * that layer (premultiplied, input 1, ti[0].y) over it, shrunk to a half by fx_down's four taps */
+    "float4 backdrop_comp_fs(PO i) : SV_Target {\n"
+    "  uint fw, fh, lw, lh;\n"
+    "  tx2[ti[0].x].GetDimensions(fw, fh);\n"
+    "  tx2[ti[0].y].GetDimensions(lw, lh);\n"
+    "  float2 tf = 1.0 / float2(fw, fh), tl = 1.0 / float2(lw, lh);\n"
+    "  float3 sum = 0.0;\n"
+    "  [unroll] for (int k = 0; k < 4; ++k) {\n"
+    "    float2 d = float2((k & 1) ? 1.0 : -1.0, (k & 2) ? 1.0 : -1.0);\n"
+    "    float4 l = tx2[ti[0].y].Sample(smp[si[0].x], i.uv + d * tl);\n"
+    "    sum += l.rgb + tx2[ti[0].x].Sample(smp[si[0].x], i.uv + d * tf).rgb * (1.0 - l.a);\n"
+    "  }\n"
+    "  return float4(sum * 0.25, 1.0);\n"
+    "}\n"
     /* the same, sharpened by k (0..1, ti[0].y): contrast-adaptive, a negative lobe over the four
      * neighbors that shrinks where the neighborhood is already near black or white (no halos on hard
      * edges); gfx_metal.m's present_cas_fs */

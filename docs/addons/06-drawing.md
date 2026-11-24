@@ -245,6 +245,31 @@ vana.layout.highlight(name)         -- outline it this frame and the next
 
 Window positions ImGui itself keeps are in `config\imgui.ini`.
 
+### Frosted glass behind a window: `vana.ui.backdrop`
+
+A window with a translucent fill can have the game's picture behind it blurred, as frosted glass. Ask for it each frame,
+inside the window's `Begin`, with the rectangle in the pixels the window's draw list takes:
+
+```lua
+local x, y = imgui.GetWindowPos()
+local blurred = vana.ui.backdrop(x, y, width, height, 12, 0.75)   -- x, y, w, h, the corner radius, how blurred
+-- draw the window's fill over it, see-through enough to show the blur: more so when `blurred`
+```
+
+The last number, `strength`, is optional: 0 to 1, how blurred the picture is (anything outside is held to it). 0 is hardly
+blurred, 0.5 (what you get without one) is the usual frosted glass, 1 is about twice that. Each rectangle has its own.
+
+It returns `true` when the renderer drew the last frame's request: not in the first frame, and not with a renderer that
+can't (only DirectX 12 blurs yet), so a window can choose a fill that lets the blur show, or a plainer one. Up to 8 at a
+time; a window drawn scaled by Addons > Layout is followed. The blur is of the finished picture (after DLSS and frame
+generation) and of the VanaCore windows drawn below the lowest one that asks (other addons', `/vana`), so those are blurred
+behind the glass too. Windows above it show sharp through a fill, and so does a glass window under another one. The
+game's own windows laid over yours (`vana.ui.game_on_top`) are not blurred behind. A screenshot taken with the interface in
+it has the window but not the blur.
+
+Ashita and Windower addons have the `vana` global too: `if vana and vana.ui and vana.ui.backdrop then ... end` inside their
+own window. An Ashita plugin asks with the plugin API's `backdrop` ([plugins](../plugins/README.md#frosted-glass-behind-a-window)).
+
 ### The game's windows over yours: `vana.ui.game_on_top`
 
 ImGui is drawn after the game, so your windows cover the game's own (an NPC's choices, the action menu, item details,

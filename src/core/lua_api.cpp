@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "addonbox.hpp"
+#include "backdrop.hpp"
 #include "addonpkg_lua.hpp"
 #include "addons.hpp"
 #include "asm_text.hpp"
@@ -1992,6 +1993,7 @@ void open_ui(lua_State* L)
     set_function(L, "fonts", &ui_fonts);
     set_function(L, "remove_font", &ui_remove_font);
     set_function(L, "image", &ui_image);
+    backdrop::add(L); // backdrop: frosted glass behind an ImGui window
     lua_setfield(L, -2, "ui");
     widgets::push(L); // vana.world: vana.ui boxes at a nameplate or a point in the world (docs/addons/18-widgets.md)
     lua_setfield(L, -2, "world");

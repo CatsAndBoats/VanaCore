@@ -610,6 +610,7 @@ static ID3D12PipelineState* g_present_layer_pso; /* VanaCore's interface layer o
 static GfxTex* g_present_layer;                  /* ... for this Present */
 
 void gfx_present_layer(GfxTex* layer) { g_present_layer = layer; }
+static void bd_blur(int32_t src, uint32_t w, uint32_t h), bd_below(void), bd_quads(uint32_t w, uint32_t h), bd_done(void); /* gfx_d3d12_backdrop.h */
 #endif
 
 /* FFXI_D3D12_DEBUG=1 or FFXI_D3D12_GBV=1: the debug layer's messages, printed after each submission */
@@ -4868,6 +4869,7 @@ static void present_draw(D3D12_CPU_DESCRIPTOR_HANDLE rtv, uint32_t w, uint32_t h
     ID3D12GraphicsCommandList* l = list();
     const int part_was = gpu_part_cur();
     gpu_part(GP_PRESENT);
+    bd_blur(src, w, h); /* frosted glass behind VanaCore's windows: the frame blurred first, drawn under the layer below */
     ID3D12GraphicsCommandList_OMSetRenderTargets(l, 1, &rtv, FALSE, NULL);
     D3D12_VIEWPORT v = { 0, 0, (float)w, (float)h, 0, 1 };
     D3D12_RECT sc = { 0, 0, (LONG)w, (LONG)h };
@@ -4885,6 +4887,7 @@ static void present_draw(D3D12_CPU_DESCRIPTOR_HANDLE rtv, uint32_t w, uint32_t h
     if (dn)
         dn->rw = w, dn->rh = h;
     ID3D12GraphicsCommandList_DrawInstanced(l, 3, 1, 0, 0);
+    bd_below(), bd_quads(w, h);
 #ifdef VANACORE
     /* VanaCore's interface, drawn at the window's size, over the frame at whatever size it was drawn */
     GfxTex* layer = g_present_layer;
@@ -9440,6 +9443,8 @@ static void fx_pass(FxTex* to, int kind, const FxU* u, const int32_t* in, int n,
     fx_draw(heap_cpu(&g_rtv, to->rtv), to->w, to->h, g_fx.pso[kind], vp, u, in, n, dx, dy);
     fx_state(to, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
+
+#include "gfx_d3d12_backdrop.h" /* frosted glass behind VanaCore's windows (bd_blur, bd_quads) */
 
 static int g_aura_on; /* a place of style 1 (a character's aura) is in the scene (sparkles): it glows by the characters' mask */
 
@@ -15372,7 +15377,7 @@ static int fg_present(GfxTex* bb)
         }
         fx_state(t, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
-    g_present_layer = NULL;
+    g_present_layer = NULL, bd_done();
     /* the time between the game's frames, smoothed: each job's frames spread over it */
     const uint64_t now = gfx_now_ns();
     double dt = g_fg.last_ns ? (double)(now - g_fg.last_ns) * 1e-9 : 1.0 / 60.0;
@@ -16545,7 +16550,7 @@ void gfx_present(GfxTex* bb)
                 dred_mark(list(), GS_N);
             present_draw(heap_cpu(&g_rtv, t->rtv), t->w, t->h, bb->srv);
 #ifdef VANACORE
-            g_present_layer = NULL;
+            g_present_layer = NULL, bd_done();
 #endif
             fx_state(t, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         }
@@ -16632,8 +16637,8 @@ static ID3D12RootSignature* make_root(void)
     return root;
 }
 
-/* the present or overlay pipeline, onto the swap chain's format */
-static ID3D12PipelineState* util_pipeline(const char* vs, const char* ps, int blend)
+/* the present or overlay pipeline, onto the swap chain's format (or `fmt`) */
+static ID3D12PipelineState* util_pipeline_f(const char* vs, const char* ps, int blend, DXGI_FORMAT fmt)
 {
     ID3DBlob* v = compile(gfx_hlsl_util, vs, "vs_5_1");
     ID3DBlob* f = v ? compile(gfx_hlsl_util, ps, "ps_5_1") : NULL;
@@ -16659,7 +16664,7 @@ static ID3D12PipelineState* util_pipeline(const char* vs, const char* ps, int bl
         pd.RasterizerState.DepthClipEnable = TRUE;
         pd.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         pd.NumRenderTargets = 1;
-        pd.RTVFormats[0] = DXGI_FORMAT_B8G8R8A8_UNORM;
+        pd.RTVFormats[0] = fmt;
         pd.SampleDesc.Count = 1;
         if (FAILED(ID3D12Device_CreateGraphicsPipelineState(g_dev, &pd, &IID_ID3D12PipelineState, (void**)&p)))
             p = NULL;
@@ -16669,6 +16674,10 @@ static ID3D12PipelineState* util_pipeline(const char* vs, const char* ps, int bl
     if (f)
         ID3D10Blob_Release(f);
     return p;
+}
+static ID3D12PipelineState* util_pipeline(const char* vs, const char* ps, int blend)
+{
+    return util_pipeline_f(vs, ps, blend, DXGI_FORMAT_B8G8R8A8_UNORM);
 }
 
 #ifdef VANACORE
@@ -17122,7 +17131,7 @@ int gfx_shutdown(void)
         &g_fx.rl, &g_fx.cmask, &g_fx.amask[0], &g_fx.amask[1], &g_fx.gi, &g_fx.gic, &g_fx.lz[0], &g_fx.lz[1], &g_fx.lz[2], &g_fx.lz[3], &g_fx.glow[0], &g_fx.glow[1],
         &g_fx.glow_kept, &g_fx.cl[0], &g_fx.cl[1], &g_fx.nrl[0], &g_fx.nrl[1], &g_fx.nrl[2], &g_fx.nrm[0], &g_fx.nrm[1], &g_fx.pp,
         &g_fx.up1[0], &g_fx.up1[1], &g_fx.sky[0], &g_fx.sky[1], &g_fx.meas, &g_fx.d0, &g_fx.d1,
-        &g_fx.foc[0], &g_fx.foc[1], &g_fx.hist[0], &g_fx.hist[1], &g_fx.gih[0], &g_fx.gih[1], &g_nd, &g_nh, &g_mo.t, &g_mo.m };
+        &g_fx.foc[0], &g_fx.foc[1], &g_fx.hist[0], &g_fx.hist[1], &g_fx.gih[0], &g_fx.gih[1], &g_nd, &g_nh, &g_mo.t, &g_mo.m, &g_bd.t[0], &g_bd.t[1], &g_bd.t[2], &g_bd.t[3], &g_bd.t[4] };
     for (size_t i = 0; i < sizeof fx / sizeof fx[0]; ++i)
         fx_tex_drop(fx[i]);
     for (int s = 0; s < 2; ++s)
@@ -17172,7 +17181,7 @@ int gfx_shutdown(void)
      * pipelines, the game's pipelines and the samplers: made again as they're asked for */
     InterlockedExchange(&g_fx_rebuild, 1);
     fx_rebuild_take();
-    ID3D12PipelineState** psos[] = { &g_present_pso, &g_present_cas_pso, &g_overlay_pso, &g_present_layer_pso };
+    ID3D12PipelineState** psos[] = { &g_present_pso, &g_present_cas_pso, &g_overlay_pso, &g_present_layer_pso, &g_bd.pso, &g_bd.comp };
     for (size_t i = 0; i < sizeof psos / sizeof psos[0]; ++i)
         if (*psos[i])
             ID3D12PipelineState_Release(*psos[i]), *psos[i] = NULL;
@@ -17394,6 +17403,8 @@ int gfx_init(void* window, int vsync)
     g_present_cas_pso = util_pipeline("present_vs", "present_cas_fs", 0);
 #ifdef VANACORE
     g_present_layer_pso = util_pipeline("present_vs", "present_layer_fs", 2);
+    g_bd.pso = util_pipeline("present_vs", "backdrop_fs", 1);
+    g_bd.comp = util_pipeline_f("present_vs", "backdrop_comp_fs", 0, DXGI_FORMAT_R16G16B16A16_FLOAT);
 #endif
     fx_config();
     g_overlay_pso = util_pipeline("overlay_vs", "overlay_fs", 1);

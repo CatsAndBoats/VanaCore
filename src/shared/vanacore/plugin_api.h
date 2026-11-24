@@ -39,8 +39,8 @@ extern "C" {
 #endif
 
 /* 1: the first table (to chat_input_caret). 2: gameui_window, gameui_windows, gameui_press. 3: entity, entity_by_id,
- * entity_vitals, entity_request_max_hp. */
-#define VANACORE_PLUGIN_API_VERSION 3
+ * entity_vitals, entity_request_max_hp. 4: backdrop. */
+#define VANACORE_PLUGIN_API_VERSION 4
 
 /* What a call returns */
 #define VANACORE_OK 0             /* done (or undone) */
@@ -311,6 +311,19 @@ typedef struct VanaCorePluginApi {
      * asked; VANACORE_BAD_ARGUMENT for no ids, more than 8 or a NULL callback; VANACORE_UNAVAILABLE when it can't be sent
      * now (not in the game yet, or too many requests waiting). A plugin that is unloaded is never called back. */
     int(__cdecl* entity_request_max_hp)(const uint32_t* ids, uint32_t count, VanaCoreMaxHpCallback callback, void* user);
+
+    /* ---- frosted glass behind a window (version 4): vana.ui.backdrop ---- */
+
+    /* Asks for the picture behind the rectangle (x, y, width, height, and the corners' radius, in the pixels ImGui's draw
+     * list takes in the window being drawn) to be shown blurred under that window's fill. Call it every frame, from inside
+     * the plugin's ImGui window (between its Begin and End); a window drawn scaled by Addons > Layout is followed. Up to 8 at
+     * a time. The blur is of the picture and of the VanaCore windows below the lowest window that asks, under that window and
+     * the ones above it, so the window's own fill must be see-through for it to show. Returns 1 when the renderer drew the last frame's request (not in the first frame, and not with a renderer that
+     * can't: only DirectX 12 blurs yet), 0 when it didn't or the call was made outside a window, so a plugin can choose a
+     * fill that lets the blur show or a plainer one; VANACORE_NOT_A_PLUGIN from anywhere but a plugin's callback.
+     * `strength` is how blurred, 0 to 1 (a value outside is held to it): 0 hardly at all, 0.5 the usual frosted glass (what
+     * vana.ui.backdrop gives without one), 1 about twice that. */
+    int(__cdecl* backdrop)(float x, float y, float width, float height, float radius, float strength);
 } VanaCorePluginApi;
 
 typedef const VanaCorePluginApi*(__cdecl* VanaCoreGetPluginApi_f)(uint32_t version);

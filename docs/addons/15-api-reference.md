@@ -118,6 +118,7 @@ Events: `load`, `unload`, `present`, `command`, `unhandled`, `text_in`, `text_ou
 | `vana.ui.fonts() → { family, ... }` | The fonts in VanaCore's fonts folder (icon fonts left out) |
 | `vana.ui.remove_font(family) → true` | Takes a font added to VanaCore's fonts folder out: unloaded now, its file moved to the Recycle Bin. `nil, why` for an icon font or one not added |
 | `vana.ui.game_on_top([on])` | The game's windows are drawn over this addon's ImGui windows where they meet (on unless `false`; dropped on unload) |
+| `vana.ui.backdrop(x, y, w, h [, radius [, strength]])` | Frosted glass: the picture behind that rectangle (the ImGui window's drawing pixels) blurred under the window's fill, asked for every frame; `strength` 0 to 1 (default 0.5, 1 about twice as blurred). `true` when the renderer draws it (DirectX 12; not in the first frame) |
 | `vana.ui.interface_hidden() → bool` | True while the game's interface is hidden (F11, `[ui] hide.key`) |
 | `vana.ui.set_interface_hidden(on) → bool` | Hides or shows the interface as F11 does (hiding works in the world only); true if it's hidden after |
 

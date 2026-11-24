@@ -58,6 +58,7 @@
 #include "gamewin.hpp"
 #include "graphics.hpp"
 #include "gearload.hpp"
+#include "backdrop.hpp"
 #include "gui.hpp"
 #include "hideui.hpp"
 #include "imports.hpp"
@@ -860,6 +861,7 @@ void draw(void* device, const d3d8::SurfaceDesc& desc, unsigned width, unsigned 
             g_visual.draw(device, kMargin, tag_y);
         if (toast > 0.0f && !hidden)
             toast_draw(device, width, height, toast);
+        backdrop::flush(!hidden && gui::visible()); // frosted glass behind VanaCore's windows: the renderer blurs it at Present
         gui::draw(device, width, height); // ImGui: plugins' and addons' windows, under VanaCore's own
         ui::draw(device);
         widgets::draw_over_ui(device); // vana.world.place over_ui

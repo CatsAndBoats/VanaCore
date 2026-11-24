@@ -97,6 +97,7 @@ exit /b 0</Command>
     <ClCompile Include="autologin.cpp" />
     <ClCompile Include="chatpages.cpp" />
     <ClCompile Include="helpbar.cpp" />
+    <ClCompile Include="backdrop.cpp" />
     <ClCompile Include="buffwin.cpp" />
     <ClCompile Include="buttons.cpp" />
     <ClCompile Include="buttonspace.cpp" />
@@ -360,6 +361,7 @@ exit /b 0</Command>
     <ClInclude Include="autologin.hpp" />
     <ClInclude Include="chatpages.hpp" />
     <ClInclude Include="helpbar.hpp" />
+    <ClInclude Include="backdrop.hpp" />
     <ClInclude Include="buffwin.hpp" />
     <ClInclude Include="buttons.hpp" />
     <ClInclude Include="buttonspace.hpp" />

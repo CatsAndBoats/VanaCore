@@ -50,6 +50,30 @@ constexpr std::ptrdiff_t kWorldEventCall = 8;
 constexpr char kWorldVolume[] = "8B 96 E0 01 00 00 6A 00 50 52 E8 ?? ?? ?? ?? 83 C4 0C 32 C0 5E 83 C4 20 C3";
 constexpr std::ptrdiff_t kWorldVolumeCall = 10;
 
+// The world's loops, which start through the menus' sound call and have volumes of their own. The weather's (rain, wind:
+// FUN_10035F80, the weather object's sound; the loop's handle kept in a global): ...; mov ecx,[esi+38h]; mov [],ecx;
+// call ftol; push eax; push 40h; mov ecx,esi; call <the menus' sound call>
+constexpr char kWeatherStart[] = "56 8B 74 24 08 85 F6 75 1D 8B 0D ?? ?? ?? ?? 85 C9 74 ?? A1 ?? ?? ?? ?? 50 E8 ?? ?? ?? ?? 89 35 ?? ?? ?? ?? "
+                                 "5E C3 39 35 ?? ?? ?? ?? 74 ?? D9 05 ?? ?? ?? ?? D8 0D ?? ?? ?? ?? 8B 4E 38 89 0D ?? ?? ?? ?? E8 ?? ?? ?? "
+                                 "?? 50 6A 40 8B CE E8";
+constexpr std::ptrdiff_t kWeatherStartCall = 77;
+// Its volume (FUN_10035DC0, a fade's): fld [<volume>]; ...; mov eax,[<on>]; ...; fld [<volume>]; fmul [<127>]; push 0;
+// call ftol; push eax; mov eax,[<the loop>]; push eax; call <a playing sound's volume>
+constexpr char kWeatherVolume[] = "D9 05 ?? ?? ?? ?? D9 05 ?? ?? ?? ?? D8 0D ?? ?? ?? ?? A1 ?? ?? ?? ?? 85 C0 D8 4C 24 04 D9 1D ?? ?? ?? ?? "
+                                  "74 ?? A0 ?? ?? ?? ?? 84 C0 74 ?? D8 1D ?? ?? ?? ?? DF E0 F6 C4 44 7B ?? D9 05 ?? ?? ?? ?? D8 0D ?? ?? ?? "
+                                  "?? 6A 00 E8 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 50 E8";
+constexpr std::ptrdiff_t kWeatherVolumeCall = 0x55, kWeatherOn = 0x13, kWeatherLevel = 0x3D, kWeatherScale = 0x43,
+                         kWeatherLoop = 0x50;
+// The scheduler's two loops (an event's or zone's ambience): call; fmul [<127>]; call ftol; push eax; push 40h;
+// mov ecx,edi; call <the menus' sound call>; then push eax; jmp, or the loop kept in a table
+constexpr char kSchedulerStart1[] = "E8 ?? ?? ?? ?? D8 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 50 6A 40 8B CF E8 ?? ?? ?? ?? 50 E9";
+constexpr char kSchedulerStart2[] = "E8 ?? ?? ?? ?? D8 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 50 6A 40 8B CF E8 ?? ?? ?? ?? 8B 96 88 00 00 00 8B 4A 20";
+constexpr std::ptrdiff_t kSchedulerStartCall = 21;
+// Their volume (FUN_10035F00): fld [esp]; push 0; call ftol; push eax; mov eax,[<the loop>]; push eax; call <a playing
+// sound's volume>; add esp,0Ch; mov byte ptr [],1
+constexpr char kSchedulerVolume[] = "D9 44 24 00 6A 00 E8 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 50 E8 ?? ?? ?? ?? 83 C4 0C C6 05 ?? ?? ?? ?? 01";
+constexpr std::ptrdiff_t kSchedulerVolumeCall = 18;
+
 using UiPlay = int(__thiscall*)(void* self, int pan, int volume);
 using Request = int(__thiscall*)(void* self, void* params, int volume);
 using SetVolume = int(__cdecl*)(int sound, int volume, int time);
@@ -62,6 +86,11 @@ Request g_request = nullptr;
 SetVolume g_set_volume = nullptr;
 std::uintptr_t g_menu_returns[kMenuSounds] = {}; // where the menu sounds' calls return to
 std::uintptr_t g_kept_return = 0, g_event_return = 0, g_volume_return = 0;
+std::uintptr_t g_loop_starts[3] = {};  // where the world's loops' starts return to (the weather's, the scheduler's two)
+std::uintptr_t g_loop_volumes[2] = {}; // where their volumes' calls return to
+// The weather loop as it plays, to put a new World Sounds Volume on it at once: its handle, whether there's weather,
+// its volume before the share (a float) and the scale to 0-127
+std::uintptr_t g_weather_loop = 0, g_weather_on = 0, g_weather_level = 0, g_weather_scale = 0;
 
 std::uintptr_t call_target(std::uintptr_t call)
 {
@@ -92,16 +121,20 @@ int scaled(int volume, int share)
     return (v * std::max(share, 0) + 50) / 100;
 }
 
-bool menu_sound(std::uintptr_t from)
+template <std::size_t N>
+bool among(const std::uintptr_t (&returns)[N], std::uintptr_t from)
 {
-    return std::find(std::begin(g_menu_returns), std::end(g_menu_returns), from) != std::end(g_menu_returns);
+    return from != 0 && std::find(std::begin(returns), std::end(returns), from) != std::end(returns);
 }
 
 int __fastcall ui_hook(void* self, void*, int pan, int volume)
 {
-    const int share = g_ui.load(std::memory_order_relaxed);
-    if (share < 100 && menu_sound(reinterpret_cast<std::uintptr_t>(_ReturnAddress())))
-        volume = scaled(volume, share);
+    const auto from = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const int ui = g_ui.load(std::memory_order_relaxed), world = g_world.load(std::memory_order_relaxed);
+    if (world < 100 && among(g_loop_starts, from))
+        volume = scaled(volume, world);
+    else if (ui < 100 && among(g_menu_returns, from))
+        volume = scaled(volume, ui);
     return g_ui_play(self, pan, volume);
 }
 
@@ -117,7 +150,8 @@ int __fastcall request_hook(void* self, void*, void* params, int volume)
 int __cdecl volume_hook(int sound, int volume, int time)
 {
     const int share = g_world.load(std::memory_order_relaxed);
-    if (share < 100 && sound > 0 && reinterpret_cast<std::uintptr_t>(_ReturnAddress()) == g_volume_return)
+    const auto from = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    if (share < 100 && sound > 0 && (from == g_volume_return || among(g_loop_volumes, from)))
         volume = scaled(volume, share);
     return g_set_volume(sound, volume, time);
 }
@@ -164,6 +198,54 @@ const wchar_t* find_all(HMODULE game, std::uintptr_t& ui, std::uintptr_t& reques
     return nullptr;
 }
 
+// A world loop's start: where its call of `ui` returns to, or 0
+std::uintptr_t loop_start(HMODULE game, const char* pattern, std::ptrdiff_t call, std::uintptr_t ui)
+{
+    const std::uintptr_t at = scan::find(game, pattern);
+    return at != 0 && is_call_to(at + call, ui) ? at + call + 5 : 0;
+}
+
+std::uintptr_t loop_volume(HMODULE game, const char* pattern, std::ptrdiff_t call, std::uintptr_t volume, std::uintptr_t& site)
+{
+    site = scan::find(game, pattern);
+    return site != 0 && is_call_to(site + call, volume) ? site + call + 5 : 0;
+}
+
+// The world's loops (rain and the other weather, the scheduler's ambience), each found or left to the game; logged
+void find_loops(HMODULE game, std::uintptr_t ui, std::uintptr_t volume)
+{
+    g_loop_starts[0] = loop_start(game, kWeatherStart, kWeatherStartCall, ui);
+    g_loop_starts[1] = loop_start(game, kSchedulerStart1, kSchedulerStartCall, ui);
+    g_loop_starts[2] = loop_start(game, kSchedulerStart2, kSchedulerStartCall, ui);
+    std::uintptr_t weather = 0, scheduler = 0;
+    g_loop_volumes[0] = loop_volume(game, kWeatherVolume, kWeatherVolumeCall, volume, weather);
+    g_loop_volumes[1] = loop_volume(game, kSchedulerVolume, kSchedulerVolumeCall, volume, scheduler);
+    if (g_loop_volumes[0] != 0) {
+        g_weather_on = scan::operand(weather, kWeatherOn);
+        g_weather_level = scan::operand(weather, kWeatherLevel);
+        g_weather_scale = scan::operand(weather, kWeatherScale);
+        g_weather_loop = scan::operand(weather, kWeatherLoop);
+    }
+    const int found = static_cast<int>(std::count_if(std::begin(g_loop_starts), std::end(g_loop_starts), [](auto r) { return r != 0; }) +
+                                       std::count_if(std::begin(g_loop_volumes), std::end(g_loop_volumes), [](auto r) { return r != 0; }));
+    if (found != 5)
+        log::write(L"Sound: %d of the 5 calls of the world's loops (the weather's, the scheduler's) found: World Sounds Volume "
+                   L"leaves the others to the game",
+                   found);
+}
+
+// A new World Sounds Volume on the weather loop playing now (else it waits for the weather's next fade)
+void refresh_weather(int share)
+{
+    if (g_weather_loop == 0 || g_set_volume == nullptr || *reinterpret_cast<const std::uintptr_t*>(g_weather_on) == 0)
+        return;
+    const int loop = *reinterpret_cast<const int*>(g_weather_loop);
+    if (loop <= 0)
+        return;
+    const float level = *reinterpret_cast<const float*>(g_weather_level) * *reinterpret_cast<const float*>(g_weather_scale);
+    g_set_volume(loop, scaled(static_cast<int>(level), share), 0);
+}
+
 void install()
 {
     g_tried = true;
@@ -177,6 +259,7 @@ void install()
         log::write(L"Sound: %ls isn't as VanaCore knows it in FFXiMain.dll: World and Interface Sounds Volume do nothing", missing);
         return;
     }
+    find_loops(game, ui, volume);
     // The menus' calls go through the request too: hooked first, so the request is never seen half done
     const bool hooked = imports::detour(reinterpret_cast<SetVolume>(volume), kVolumePrologue, &volume_hook, g_set_volume) &&
                         imports::detour(reinterpret_cast<Request>(request), kRequestPrologue, reinterpret_cast<Request>(&request_hook),
@@ -195,10 +278,12 @@ void install()
 
 void set(int world, int ui)
 {
-    g_world.store(std::clamp(world, 0, 100), std::memory_order_relaxed);
+    const int before = g_world.exchange(std::clamp(world, 0, 100), std::memory_order_relaxed);
     g_ui.store(std::clamp(ui, 0, 100), std::memory_order_relaxed);
     if (!g_tried && (world < 100 || ui < 100))
         install();
+    if (g_tried && before != g_world.load(std::memory_order_relaxed))
+        refresh_weather(g_world.load(std::memory_order_relaxed));
 }
 
 } // namespace vanacore::soundmix

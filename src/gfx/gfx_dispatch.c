@@ -523,6 +523,12 @@ void gfx_present_layer(GfxTex* layer)
     quads_flush();
     g_backend->present_layer(layer);
 }
+int gfx_present_backdrops(const float* rects, int n) { return g_backend->present_backdrops(rects, n); }
+void gfx_present_layer_below(GfxTex* layer)
+{
+    quads_flush();
+    g_backend->present_layer_below(layer);
+}
 void gfx_finish(void)
 {
     quads_flush();

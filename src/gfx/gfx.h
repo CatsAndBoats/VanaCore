@@ -599,6 +599,14 @@ void gfx_present(GfxTex* backbuffer);
 /* A premultiplied layer of the window's size to lay over the frame at the next gfx_present (VanaCore's
  * own interface), or NULL. */
 void gfx_present_layer(GfxTex* layer);
+/* Rectangles over which the frame is blurred at the next gfx_present, under the layer: frosted glass behind VanaCore's own
+ * windows. `rects`: n of them, 6 floats each (x, y, width, height, corner radius, strength 0 to 1), in the layer's pixels.
+ * Asked for again every frame, dropped once presented. 1 when this back end draws them, 0 when it doesn't (nothing is kept then). */
+int gfx_present_backdrops(const float* rects, int n);
+/* A premultiplied layer of the window's size drawn UNDER the backdrops at the next gfx_present (the frame, then this, then the
+ * blur of both behind each rectangle, then gfx_present_layer's): the windows below the lowest one with a backdrop, so that
+ * those are blurred too. NULL for none. Back ends that draw no backdrops never get one. */
+void gfx_present_layer_below(GfxTex* layer);
 #endif
 /* Waits for the GPU (tests). */
 void gfx_finish(void);

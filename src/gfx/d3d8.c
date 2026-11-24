@@ -820,6 +820,9 @@ static GfxTex* g_plain;
 static GfxTex* g_ui_layer;
 static uint32_t g_ui_w, g_ui_h;
 static int g_ui_drawn; /* drawn into this frame */
+/* ... and from d3d8_ui_split (a window with a blurred backdrop) on, into this one, over the first, which the blur is of */
+static GfxTex* g_ui_layer2;
+static int g_ui_split, g_ui_drawn2;
 static int g_raise_taken; /* the rectangles d3d8_raise_take copied this frame, not put back yet */
 /* The game's interface was squeezed toward the middle this frame ([ui] aspect: ui_squeeze mapped one of its draws).
  * VanaCore's text over the game's windows follows the squeeze only then: with a menu target of another shape than
@@ -1390,8 +1393,9 @@ static void IDirect3DDevice8_Present(Guest* g)
         g_present_hook();
     Obj* bb = obj(g_dev.backbuffer);
 #ifdef VANACORE
-    gfx_present_layer(g_ui_drawn ? g_ui_layer : NULL);
-    g_ui_drawn = 0;
+    gfx_present_layer(g_ui_split ? (g_ui_drawn2 ? g_ui_layer2 : NULL) : g_ui_drawn ? g_ui_layer : NULL);
+    gfx_present_layer_below(g_ui_split && g_ui_drawn ? g_ui_layer : NULL);
+    g_ui_drawn = g_ui_drawn2 = g_ui_split = 0;
     g_ui_squeezed = 0;
     g_raise_taken = 0;
 #endif
@@ -2705,18 +2709,22 @@ static int ui_layer_bound(void)
         return 0;
     if (!g_ui_layer || w != g_ui_w || h != g_ui_h)
     {
-        gfx_tex_destroy(g_ui_layer);
+        gfx_tex_destroy(g_ui_layer), gfx_tex_destroy(g_ui_layer2), g_ui_layer2 = NULL;
         g_ui_layer = gfx_tex_create(GFX_TEX_2D, FMT_A8R8G8B8, w, h, 1, GFX_USE_RT);
-        g_ui_w = w, g_ui_h = h, g_ui_drawn = 0;
+        g_ui_w = w, g_ui_h = h, g_ui_drawn = g_ui_drawn2 = 0;
         if (!g_ui_layer)
             return 0;
     }
-    gfx_set_targets(g_ui_layer, 0, 0, NULL);
-    if (!g_ui_drawn)
+    if (g_ui_split && !g_ui_layer2 && !(g_ui_layer2 = gfx_tex_create(GFX_TEX_2D, FMT_A8R8G8B8, w, h, 1, GFX_USE_RT)))
+        g_ui_split = 0; /* (no second layer: all of it in the first, as without a split) */
+    GfxTex* layer = g_ui_split ? g_ui_layer2 : g_ui_layer;
+    int* drawn = g_ui_split ? &g_ui_drawn2 : &g_ui_drawn;
+    gfx_set_targets(layer, 0, 0, NULL);
+    if (!*drawn)
     {
         uint32_t vp[6] = { 0, 0, w, h, 0, 0x3F800000u };
         gfx_clear(0, NULL, 1, 0x00000000u, 1.0f, 0, vp);
-        g_ui_drawn = 1;
+        *drawn = 1;
     }
     return 1;
 }
@@ -3406,13 +3414,38 @@ void d3d8_set_own_pixels(int on)
     g_own_pixels = on != 0;
 }
 
+void d3d8_ui_split(void) { g_ui_split = 1; }
+
 int d3d8_ui_layer(uint32_t* w, uint32_t* h, void* pixels, uint32_t pitch)
 {
-    if (!g_ui_layer || !g_ui_drawn)
+    GfxTex* first = g_ui_layer && g_ui_drawn ? g_ui_layer : NULL;
+    GfxTex* second = g_ui_split && g_ui_layer2 && g_ui_drawn2 ? g_ui_layer2 : NULL;
+    if (!first && !second)
         return 0;
     *w = g_ui_w, *h = g_ui_h;
-    if (pixels)
-        gfx_tex_read(g_ui_layer, 0, 0, pixels, pitch);
+    if (!pixels)
+        return 1;
+    gfx_tex_read(first ? first : second, 0, 0, pixels, pitch);
+    if (first && second)
+    {
+        /* split (a blurred backdrop): the second layer over the first, both premultiplied */
+        uint8_t* over = (uint8_t*)malloc((size_t)pitch * g_ui_h);
+        if (!over)
+            return 1;
+        gfx_tex_read(second, 0, 0, over, pitch);
+        for (uint32_t y = 0; y < g_ui_h; ++y)
+        {
+            uint8_t* d = (uint8_t*)pixels + (size_t)y * pitch;
+            const uint8_t* s = over + (size_t)y * pitch;
+            for (uint32_t x = 0; x < g_ui_w; ++x, d += 4, s += 4)
+                for (int c = 0; c < 4; ++c)
+                {
+                    const uint32_t v = s[c] + (d[c] * (255u - s[3]) + 127u) / 255u;
+                    d[c] = (uint8_t)(v > 255u ? 255u : v);
+                }
+        }
+        free(over);
+    }
     return 1;
 }
 
@@ -3491,12 +3524,15 @@ void d3d8_raise_put(void)
         rect[0] = (int32_t)floor(gx * g_ui_w / pw), rect[1] = (int32_t)floor(gy * g_ui_h / ph);
         rect[2] = (int32_t)ceil((gx + gw) * g_ui_w / pw), rect[3] = (int32_t)ceil((gy + gh) * g_ui_h / ph);
     }
-    if (!g_ui_layer || !g_ui_drawn || !cut)
+    if (!cut)
         return;
     const uint32_t vp[6] = { 0, 0, g_ui_w, g_ui_h, 0, f2u(1.0f) };
-    gfx_set_targets(g_ui_layer, 0, 0, NULL);
-    gfx_clear(cut, rects, 1, 0x00000000u, 1.0f, 0, vp);
-    apply_targets();
+    GfxTex* layers[2] = { g_ui_layer && g_ui_drawn ? g_ui_layer : NULL, g_ui_split && g_ui_drawn2 ? g_ui_layer2 : NULL };
+    for (int i = 0; i < 2; ++i)
+        if (layers[i])
+            gfx_set_targets(layers[i], 0, 0, NULL), gfx_clear(cut, rects, 1, 0x00000000u, 1.0f, 0, vp);
+    if (layers[0] || layers[1])
+        apply_targets();
 }
 
 /* --- the device lost and made again (d3d8.h) ----------------------------------------------------------
@@ -3535,6 +3571,7 @@ void d3d8_device_lost(void)
         gfx_tex_destroy(g_nrm[i].tex), g_nrm[i].tex = NULL, g_nrm[i].tried = 0;
     /* VanaCore's own: the interface layer and the raised copies are made again as they're drawn */
     gfx_tex_destroy(g_ui_layer), g_ui_layer = NULL, g_ui_w = g_ui_h = 0, g_ui_drawn = 0;
+    gfx_tex_destroy(g_ui_layer2), g_ui_layer2 = NULL, g_ui_drawn2 = g_ui_split = 0;
     gfx_tex_destroy(g_plain), g_plain = NULL;
     chatfont_lost();
     winimage_lost();

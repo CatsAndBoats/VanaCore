@@ -111,6 +111,10 @@ function install.open(path, waiting)
         return
     end
     local info, why = api.package_info(path)
+    local old = install.prompt
+    if old ~= nil and old.path ~= path and old.state ~= 'done' and api.package_release ~= nil then
+        pcall(api.package_release, old.path) -- (a prompt put aside keeps no claim on its file: it would never be offered again)
+    end
     install.prompt = {
         path = path, waiting = waiting, info = info, why = why, state = 'ask', opens = true, at = clock(),
         boot = install.boot,
@@ -409,11 +413,11 @@ end
 local function draw_prompt(p, now)
     local screen_w, screen_h = vana.ui.screen()
     screen_w, screen_h = (screen_w and screen_w > 0) and screen_w or 1920, (screen_h and screen_h > 0) and screen_h or 1080
-    if not st.open then -- the /vana window's frame keeps the scale and the animations' clock; shut, they're kept here
-        st.dt = math.max(0, math.min(0.1, now - st.last))
-        st.last = now
-        M.compute_scale(now, screen_h, M.user_scale() * 100)
-    end
+    -- the /vana window's frame keeps the scale and the animations' clock, but it isn't drawn while a prompt is up (vana.lua's
+    -- present): they're kept here
+    st.dt = math.max(0, math.min(0.1, now - st.last))
+    st.last = now
+    M.compute_scale(now, screen_h, M.user_scale() * 100)
     local pw = S(W)
     local room = pw - S(PAD) * 2
     local c = content(p, room)

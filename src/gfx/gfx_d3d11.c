@@ -2397,6 +2397,7 @@ static void draw_overlay(uint32_t w, uint32_t h)
 }
 
 void gfx_present_layer(GfxTex* layer) { g_present_layer_tex = layer; }
+#include "gfx_d3d11_backdrop.h" /* gfx_present_backdrops (not drawn on Direct3D 11 yet) */
 
 static void fx_rebuild_take(void);
 

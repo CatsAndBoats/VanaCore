@@ -71,6 +71,8 @@
     X(uint64_t, frame, (void), ())                                                                                     \
     X(void, present, (GfxTex * backbuffer), (backbuffer))                                                              \
     X(void, present_layer, (GfxTex * layer), (layer))                                                                  \
+    X(int, present_backdrops, (const float* rects, int n), (rects, n))                                                 \
+    X(void, present_layer_below, (GfxTex * layer), (layer))                                                            \
     X(void, finish, (void), ())                                                                                        \
     X(void, set_sync_pipelines, (int on), (on))                                                                        \
     X(uint32_t, failures, (void), ())                                                                                  \
