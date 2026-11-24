@@ -2867,7 +2867,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     end
 
     if row.kind == 'subheader' and row.headline then
-        M.draw_headline(row, id, x, y, w, alpha, enabled)
+        M.draw_headline(row, id, x, y, w, alpha, enabled, ctx.panel_head == true and st.hybrid == true)
         return h
     elseif row.kind == 'subheader' then
         -- a sub-panel's heading (sub_room below the row above, 8 above the next: row_height): its title in capitals, semibold
@@ -2940,6 +2940,8 @@ local function draw_row(page, sec, row, x, y, w, ctx)
             end
         end
         local tx = lx
+        -- (a card's heading in the hybrid layout, M.hy.row: the line across under it in place of the one after the title)
+        local card_head = ctx.panel_head == true and st.hybrid == true
         tx = tx + M.text_spaced(dl, tx, cy, title, color, sub_font, SMALL, alpha, spacing) + S(10)
         if row.tag ~= nil then
             M.text_mid(dl, tx, cy, row.tag, P.dim, fonts.text, SMALL - 0.5, alpha)
@@ -2949,7 +2951,9 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         if pill_w > 0 then
             tx = tx + pill_w + S(8)
         end
-        if line_end > tx then
+        if card_head then
+            M.hline(dl, lx, right, cy + S(18), M.hy.LINE, 0.16)
+        elseif line_end > tx then
             M.hline(dl, tx, line_end, cy, color, 0.8 * alpha)
         end
         local panel_tip = row.tip or M.TIPS.panels[row.text] -- (its own, where two tabs' sub-panels share a title)
@@ -3498,6 +3502,14 @@ local function draw_heading(page, sec, x, y, w, over_title)
     local tx = x + S(LEFT)
     local title_color = head.danger and P.rose or head.warn and P.amber or P.white
     local head_face, head_size = head_font()
+    -- the hybrid layout's panel (M.hy.card): a line under the heading in a card's (a page's title, 'title' mode, is a card of its
+    -- own with only the title in it: no line)
+    local card = st.hybrid == true and M.hy.mode ~= nil
+    local titled = card and M.hy.mode == 'title'
+    local function title_draw(px, text, colour)
+        M.text_mid(dl, px, cy, text, colour, head_face, head_size, alpha)
+        return M.measure(text, head_face, head_size)
+    end
     local title_w = M.measure(sec.title, head_face, head_size)
     if over_title ~= nil then
         M.text_mid(dl, tx, cy, over_title, P.dim, fonts.text, SMALL)
@@ -3510,11 +3522,11 @@ local function draw_heading(page, sec, x, y, w, over_title)
         for _, part in ipairs(head.parts) do
             local ok, active = pcall(part[2] or function () return false end)
             local colour = (ok and active) and P.green or title_color
-            M.text_mid(dl, px, cy, part[1], colour, head_face, head_size, alpha)
-            px = px + M.measure(part[1], head_face, head_size)
+            px = px + title_draw(px, part[1], colour)
         end
+        title_w = px - tx
     else
-        M.text_mid(dl, tx, cy, sec.title, off and M.mix(title_color, P.dim, 0.5) or title_color, head_face, head_size, alpha)
+        title_draw(tx, sec.title, off and M.mix(title_color, P.dim, 0.5) or title_color)
     end
     tx = tx + title_w + S(8)
     if head.icon ~= nil then
@@ -3542,7 +3554,9 @@ local function draw_heading(page, sec, x, y, w, over_title)
     if hovered and not over_pill and M.TIPS.panels[sec.title] ~= nil then
         M.tooltip(M.TIPS.panels[sec.title])
     end
-    if line_end > tx then
+    if card and not titled then -- (the panel's heading: a line across under it, then the rows)
+        M.hline(dl, x + S(LEFT), x + w - S(RIGHT), y + S(HEAD_H) + S(1), M.hy.LINE, 0.16)
+    elseif line_end > tx then
         M.hline(dl, tx, line_end, cy, P.line)
     end
     return off
@@ -3551,7 +3565,7 @@ end
 -- A sub-panel's heading drawn as a section's is (row.headline: DLSS 5 in the DLSS panel): the bold title, its Reset
 -- button (row.reset, asked twice) and its switch at the line's end, a line between. It greys nothing after it. Its height
 -- is row_height's (8 above, HEAD_H, 2 below). A field of M: this chunk is near LuaJIT's 200 locals.
-M.draw_headline = function (row, id, x, y, w, alpha, enabled)
+M.draw_headline = function (row, id, x, y, w, alpha, enabled, carded)
     local dl = imgui.GetWindowDrawList()
     local cy = y + S(8) + S(HEAD_H) / 2 + S(2)
     local line_end = x + w - S(RIGHT)
@@ -3597,13 +3611,15 @@ M.draw_headline = function (row, id, x, y, w, alpha, enabled)
     local title_w = M.measure(row.text, head_face, head_size)
     local hovered = M.over(tx, cy - S(12), title_w, S(24))
     -- (green_on: its title green while its switch is on)
-    M.text_mid(dl, tx, cy, row.text, (row.green_on and not off) and P.green or P.white,
-               head_face, head_size) -- (full alpha: a panel's heading isn't greyed with its rows)
+    local colour = (row.green_on and not off) and P.green or P.white
+    M.text_mid(dl, tx, cy, row.text, colour, head_face, head_size) -- (full alpha: a panel's heading isn't greyed with its rows)
     tx = tx + title_w + S(8)
     if hovered and M.TIPS.panels[row.text] ~= nil then
         M.tooltip(M.TIPS.panels[row.text])
     end
-    if line_end > tx then
+    if carded then -- (a card's heading in the hybrid layout: the line across under it, as M.hy.row's)
+        M.hline(dl, x + S(LEFT), x + w - S(RIGHT), cy + S(18), M.hy.LINE, 0.16)
+    elseif line_end > tx then
         M.hline(dl, tx, line_end, cy, P.line)
     end
 end
@@ -3638,23 +3654,37 @@ M.draw_group = function (page, sec, list, a, b, x, y, w, ctx)
     return math.max(ry, by + bh) + S(6)
 end
 
-local function draw_section(page, sec, x, y, w, over_title, rows)
+-- `hy`: in the hybrid layout, where the sections are panels (M.hy.begin: ctx.cards)
+local function draw_section(page, sec, x, y, w, over_title, rows, hy)
     local ry = y
     M.hide_resets = sec.title == 'DLSS' -- (no reset icons beside the DLSS panel's settings: draw.lua reset_icon)
     local ctx = { off = false, panel_off = false } -- (panel_off: the heading's switch or effect, for each sub-panel's: draw_row)
-    -- (a bare heading isn't drawn but in a search's results: Client > VanaCore's, the banner under it says it)
-    if sec.head ~= nil and not (sec.head.bare and st.search[1] == '') then
-        local off = draw_heading(page, sec, x, y, w, over_title)
-        ctx.off, ctx.panel_off = off, off
-        ry = y + S(HEAD_H) + S(2)
-    end
     -- status rows (what the panel reports, not a setting: DLSS's Resolution and Frame generation, the gamepads) sit in
     -- a sunken box, a run of them in one
     local list = rows or sec.rows
     ctx.list = list -- (a sub-panel's reset: the rows under it, as drawn)
+    M.hy.mode = nil
+    local cards = hy and M.hy.begin(ctx, page, sec, list, x, w, rows) or nil
+    -- (a bare heading isn't drawn but in a search's results: Client > VanaCore's, the banner under it says it)
+    if sec.head ~= nil and not (sec.head.bare and st.search[1] == '') then
+        -- (the heading in a card: with the rows after it, or alone when the cards are the sub-panels' under it)
+        if cards ~= nil then
+            M.hy.open(cards, cards.key .. '|head', y, S(HEAD_H) + S(2) + (cards.mode == 'card' and M.hy.span(cards, 1, false) + S(2) or 0))
+        end
+        local off = draw_heading(page, sec, x, y, w, over_title)
+        ctx.off, ctx.panel_off = off, off
+        ry = y + S(HEAD_H) + S(2)
+        if cards ~= nil and cards.mode == 'title' then
+            M.hy.close(cards, ry)
+            ry = ry + S(10) -- (room before the cards)
+        end
+    end
     local i = 1
     while i <= #list do
         local row = list[i]
+        if cards ~= nil then
+            M.hy.row(ctx, row, i, ry)
+        end
         if row.kind == 'status' then
             local j, total = i, 0
             while j <= #list and list[j].kind == 'status' do
@@ -3697,9 +3727,17 @@ local function draw_section(page, sec, x, y, w, over_title, rows)
             end
             i = j
         else
-            ry = ry + draw_row(page, sec, row, x, ry, w, ctx)
+            local rh = draw_row(page, sec, row, x, ry, w, ctx)
+            ry = ry + rh
+            -- (a panel's rows in the hybrid layout: a faint line between one and the next)
+            if cards ~= nil and cards.cur ~= nil and rh > 0 and i < #list and not M.hy.NOSEP[row.kind] and list[i + 1].kind ~= 'subheader' then
+                M.hline(imgui.GetWindowDrawList(), x + S(LEFT), x + w - S(RIGHT), ry, M.hy.LINE, 0.07)
+            end
             i = i + 1
         end
+    end
+    if cards ~= nil then
+        M.hy.finish(cards, ry)
     end
     M.hide_resets = false
     return ry - y + S(4)
@@ -4259,6 +4297,13 @@ local SEARCH_H = 30
 -- shown tab's own sub-tabs, drawn as they are under a page in the list of pages (the same rows, the same scrollbar). The
 -- System pages (Plugins, Addons, Pivot) are Client's: its list goes on with a line, then them with their icons, then the tools
 M.hy = { H = 44, PAD = 11 } -- H: the header's height; PAD: the list's margin at the left (the classic layout's is PAD)
+-- the panels' lines (M.hy.card, at a low alpha) and the kinds of row that have no line under them
+M.hy.LINE = '#96C3FF'
+M.hy.FLAT = true -- no box round a panel, only its heading's line (false: the cards)
+M.hy.NOSEP = {}
+for kind in ('subheader banner warning callout alert notice hint note tabs layers transfer textfile status controls columns extension_filter header'):gmatch('%S+') do
+    M.hy.NOSEP[kind] = true
+end
 
 -- the tab a page is under: the System pages are under Client, Experimental under Graphics
 function M.hy.home(page)
@@ -4625,6 +4670,104 @@ local function draw_sidebar(x, y, w, h)
     imgui.EndChild()
 end
 
+-- THE PANELS, in the hybrid layout (/vana3): a section is drawn as cards, a faint fill with a hairline edge, 6 round, 8 in from
+-- the page's edges. A section with sub-panels (its subheaders that aren't a group's or a headline: Client > Game's Display,
+-- Resolution ...) is a title and a card for each sub-panel; any other is one card, its heading and rows in it, and a headline
+-- (DLSS 5, FSR beside DLSS) starts another. What isn't in a card (the rows before the first sub-panel, a section with no
+-- heading) is on the page. A card's height is what it was drawn at last (the rows set it as they go: M.hy.card_h); the first
+-- time, its rows' heights added up. draw_section keeps its state in ctx.cards.
+M.hy.card_h = {}
+
+-- the section drawn in the panels' way; returns its height with the gap under it. Inside it the names stand 16 from a card's
+-- left edge and the controls 16 from its right (the card is 4 out on the left of draw_section's x, 7 wider than its w)
+function M.hy.card(page, sec, x, y, w, over_title, rows)
+    return draw_section(page, sec, x + S(12), y, w - S(27), over_title, rows, true) + S(10)
+end
+
+-- a row that starts a card of its own: 'sub' (a sub-panel's heading) or 'headline', else nil
+function M.hy.start_kind(cards, row)
+    if row.kind ~= 'subheader' or row.nested or row.group or row.in_group or row.text == 'Reset'
+        or row_height(row, cards.sec, note_width(cards.w)) == 0 then
+        return nil
+    end
+    return row.headline and 'headline' or 'sub'
+end
+
+-- the state of a section's cards (ctx.cards), and the way it's drawn: 'card' (the heading in the first card, with the rows
+-- up to the first sub-panel) or 'title' (no rows before it: the heading alone in a card); M.hy.mode says it to the headings
+-- (draw_heading, draw_row)
+function M.hy.begin(ctx, page, sec, list, x, w, rows)
+    local cards = { x = x, w = w, sec = sec, list = list, mode = 'card',
+                    key = page.id .. '|' .. tostring(sec.key or sec.title) .. (rows ~= nil and '|search' or '') }
+    ctx.cards = cards
+    -- (a heading with no rows before its first sub-panel is a card of its own, the page's title: no line under it)
+    if M.hy.span(cards, 1, false) == 0 then
+        cards.mode = 'title'
+    end
+    M.hy.mode = cards.mode
+    return cards
+end
+
+-- the heights of the rows from list[from] up to the next card's (list[from] itself is the card's first when `own`)
+function M.hy.span(cards, from, own)
+    local total = 0
+    for j = from, #cards.list do
+        local row = cards.list[j]
+        if not (own and j == from) and M.hy.start_kind(cards, row) ~= nil then
+            break
+        end
+        total = total + row_height(row, cards.sec, note_width(cards.w))
+    end
+    return total
+end
+
+-- a card from `y0`, drawn before its rows (so it's under them) at the height it had last time, or `est`. With M.hy.FLAT there's
+-- no box round the card (boxes in boxes: the Advanced Settings, the status rows): its heading's line and the rows' only.
+function M.hy.open(cards, key, y0, est)
+    local h = M.hy.card_h[key] or est
+    local top, bottom = st.view_top, st.view_bottom
+    if not M.hy.FLAT and (top == nil or (y0 + h >= top and y0 <= bottom)) then
+        local dl = imgui.GetWindowDrawList()
+        local bx, bw = cards.x - S(4), cards.w + S(11)
+        M.fill(dl, bx, y0, bw, h, '#FFFFFF', S(6), 0, 0.04)
+        M.outline(dl, bx, y0, bw, h, M.hy.LINE, S(6), 0, 1, 0.16)
+    end
+    cards.cur = { key = key, y0 = y0 }
+end
+
+-- the card open ends at `bottom`: that's its height for the next frame
+function M.hy.close(cards, bottom)
+    if cards.cur ~= nil then
+        M.hy.card_h[cards.cur.key] = bottom - cards.cur.y0
+        cards.cur = nil
+    end
+end
+
+-- called for each row at `ry`: one that starts a card closes the one open and opens its own (ctx.panel_head says the row's
+-- heading is a card's: draw_row, M.draw_headline). The card's top is 4.5 above the heading's line less its room above
+-- (draw_row's subheader: sub_room, the heading's line at ROW_H / 2 below), a headline's 10 down (M.draw_headline)
+function M.hy.row(ctx, row, i, ry)
+    local cards = ctx.cards
+    local kind = M.hy.start_kind(cards, row)
+    ctx.panel_head = kind ~= nil
+    if kind == nil then
+        return
+    end
+    M.hy.close(cards, ry + (kind == 'sub' and S(3) or S(2)))
+    local key = cards.key .. '|' .. i .. '|' .. tostring(row.text)
+    if kind == 'sub' then
+        local room = sub_room(row, cards.sec)
+        M.hy.open(cards, key, ry + room + S(ROW_H) / 2 - S(18), M.hy.span(cards, i, true) + S(8.5) - room)
+    else
+        M.hy.open(cards, key, ry + S(10), M.hy.span(cards, i, true) - S(8))
+    end
+end
+
+function M.hy.finish(cards, ry)
+    M.hy.close(cards, ry + S(2))
+    M.hy.mode = nil
+end
+
 local function draw_page(x, y, w, h, hy)
     local dl = imgui.GetWindowDrawList()
     local page = st.page
@@ -4777,17 +4920,24 @@ local function draw_page(x, y, w, h, hy)
     if imgui.BeginChild('##page.' .. child, { w, bottom - y - title_h - 1 }, 0, M.NO_NAV) then
         local cx, cy0 = imgui.GetCursorScreenPos()
         local cw = (imgui.GetContentRegionAvail())
-        local at = cy0 + S(3)
+        local at = cy0 + S(hy and 8 or 3)
+        -- (the hybrid layout's sections are panels: M.hy.card)
+        local function section(pg, sec, over, rws)
+            if hy then
+                return M.hy.card(pg, sec, cx, at, cw, over, rws)
+            end
+            return draw_section(pg, sec, cx, at, cw, over, rws)
+        end
         if searching then
             for _, r in ipairs(results) do
-                at = at + draw_section(r.page, r.section, cx, at, cw, r.page.name .. ' ›', r.rows)
+                at = at + section(r.page, r.section, r.page.name .. ' ›', r.rows)
             end
         elseif on_presets then
             at = at + draw_presets_page(page, cx, at, cw)
         else
             for _, sec in ipairs(sections_of(page, rows)) do
                 if shown == nil or shown.all or sec.head == nil or sec.title == shown.title then
-                    at = at + draw_section(page, sec, cx, at, cw)
+                    at = at + section(page, sec)
                 end
             end
         end
@@ -6522,7 +6672,20 @@ vana.events.on('command', function (e)
     else
         local asked = what == 'help' or what == '?'
         local hud_presets = what == 'hudpreset' or what == 'hudpresets' -- alone: the HUD page at its Presets
-        local page = not asked and page_named(hud_presets and 'hud' or what) or nil
+        local dlss = what == 'dlss' or what == 'fsr' -- alone: the Graphics page at its DLSS / FSR
+        local page = not asked and page_named(hud_presets and 'hud' or dlss and 'graphics' or what) or nil
+        if not asked and (what or '') ~= '' and not (page ~= nil and (page.id == what or page.name:lower() == what)) then
+            -- a sub-tab's name alone (/vana windows, /vana shadows, /vana game): its page at it
+            st.search[1] = ''
+            local found = false
+            for _, candidate in ipairs(PAGES) do
+                for _, sub in ipairs(candidate.tab ~= nil and subtabs_of(candidate) or {}) do
+                    if not found and sub.run == nil and sub.title:lower() == what then
+                        page, st.sub[candidate.id], found = candidate, sub.title, true
+                    end
+                end
+            end
+        end
         if page ~= nil and page.hidden then -- (the HUD page: the HUD Manager's windows now)
             if hud_presets then
                 hud.edit_presets()
@@ -6541,6 +6704,8 @@ vana.events.on('command', function (e)
                 st.sub[page.id] = 'Commands' -- the Client page at its Commands
             elseif what == 'boot' then
                 st.sub[page.id] = 'Boot.txt' -- the Client page at its Boot.txt
+            elseif dlss then
+                st.sub[page.id] = 'DLSS / FSR'
             elseif what == 'presets' or what == 'preset' or hud_presets then
                 st.sub[page.id] = 'Presets' -- the Graphics page at its Presets, or the HUD page at its
             elseif what == 'truefont' or what == 'font' or what == 'fonts' then
