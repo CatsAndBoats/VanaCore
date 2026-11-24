@@ -1380,7 +1380,7 @@ local function pair(label, tip, sliders)
     return row
 end
 
--- Interface > Buttons: tabs across it (vana.lua's kind 'tabs'), each the menus' buttons' rows of one set of [client] keys
+-- Game Options > Buttons: tabs across it (vana.lua's kind 'tabs'), each the menus' buttons' rows of one set of [client] keys
 -- (buttons.cpp): Global, buttons.*; Main Menu, mainmenu.buttons.* (the main menu and the menus it opens in its place);
 -- Action Menu, action.buttons.* (the Action Menu and its Magic and Abilities lists). Their labels' True Font: buttons.font
 -- (the titles' pinned to it), mainmenu.font and action.font. Main Menu and Action Menu each have an Enable ([client]
@@ -2322,7 +2322,7 @@ TIPS.rows = {
     ['client.chat.history'] = 'How many lines you have sent that Up and Down bring back in the chat line. The game keeps 9.',
     ['client.chat.shadow'] = 'A dark shadow or outline behind the game font\'s chat text, so it reads over bright scenery. True Font has its own Outline.',
     ['client.chat.shadow.opacity'] = 'How dark the chat text shadow is.',
-    ['client.truefont.disable'] = 'Every True Font area of the interface off at once: the game\'s own letters in the menus, buttons, lists, windows and chat, wherever each area\'s switch is (Buttons and Equipment are on Interface). The nameplates and damage numbers keep their own switches. Each area\'s settings are kept for when this is turned off.',
+    ['client.truefont.disable'] = 'Every True Font area of the interface off at once: the game\'s own letters in the menus, buttons, lists, windows and chat, wherever each area\'s switch is (Buttons and Equipment are on Game Options). The nameplates and damage numbers keep their own switches. Each area\'s settings are kept for when this is turned off.',
     ['client.truefont.family'] = 'The font every True Font area uses unless it has its own. Custom Fonts adds any .ttf or .otf to the lists.',
     ['client.truefont.japanese'] = 'The font for kana, kanji and other full-width letters in every True Font area. Each area\'s font uses Windows\' Japanese font where it has none.',
     ['client.truefont.outline'] = 'A black outline round True Font\'s letters, this many pixels wide. 0 is none. Each area\'s own Outline (under its font) once that is moved.',
@@ -2331,7 +2331,7 @@ TIPS.rows = {
     ['client.chat.font'] = 'What draws the chat\'s letters: the game\'s own font, or True Font, a font on your PC drawn at the screen\'s own size so it stays sharp.',
     ['client.chat.font.size'] = 'The font\'s size, in pixels at the interface\'s size. The chat\'s rows are 16 apart.',
     ['client.chat.font.spacing'] = 'More room between the chat\'s letters, or less below 0.',
-    ['client.menu.font'] = 'What draws the letters in menus and lists: the game\'s own font, or True Font. Each letter keeps the game\'s spacing, so no window\'s layout moves. The chat input has its own (Interface > Chat).',
+    ['client.menu.font'] = 'What draws the letters in menus and lists: the game\'s own font, or True Font. Each letter keeps the game\'s spacing, so no window\'s layout moves. The chat input has its own (Game Options > Chat).',
     ['client.items.font'] = 'What draws the item lists\' letters (Items, storage, Equipment, trades, shops, the auction house).',
     ['client.lists.font'] = 'What draws the Merit Points menu\'s lists. Each setting follows General until it\'s set here.',
     ['client.tips.font'] = 'What draws an item\'s details: the box that comes up for the item the cursor is on.',
@@ -2873,7 +2873,7 @@ TIPS.rows = {
     ['client.gamesettings.extended'] = "Config > Gameplay gets World Sounds Volume and Interface Sounds Volume under Music Volume. English menus only. Applies once the window is closed.",
     ['client.macrooptions.equipfirst'] = "An equip set's options (Edit, Copy ... Style Lock) with Equip at the top, the cursor starting on it. Applies the next time the box opens.",
     ['vana.hud.names'] = "Writes each window's name in its box's top left corner.",
-    ['vana.hud.autosave'] = 'The HUD preset you loaded is kept up to date: every change to the HUD and Interface settings is saved back into it.',
+    ['vana.hud.autosave'] = 'The HUD preset you loaded is kept up to date: every change to the HUD and Game Options settings is saved back into it.',
     ['vana.hud.snap'] = 'A window moved with Shift + drag snaps to the grid: the edge nearer a line goes to it. Works with the grid hidden too.',
 }
 -- Every True Font size goes down to 0, which leaves its letters out (chatfont.cpp read_want): said on each one's tooltip
@@ -5625,7 +5625,7 @@ local TABS = {
                 (function (row) row.nav_icon = 'font' return row end)(header('True Font')), -- (its icon by its sub-tab in the list)
                 -- Disable True Font ([client] truefont.disable=1), in red: every interface area's off at once, wherever its own
                 -- switch is, each area's settings kept; the rest of the page locked meanwhile. Menus & Lists off kept on the
-                -- areas following it, Buttons and Equipment's among them, whose switches are on Interface (reported in game
+                -- areas following it, Buttons and Equipment's among them, whose switches are on Game Options (reported in game
                 -- 2026-11-08). Not the nameplates or damage numbers: they keep their own switches (2026-11-09)
                 (function (row) row.danger = true return row end)(subheader('Disable True Font', nil, {
                     get = function () return get('client', 'truefont.disable') == '1' end,
@@ -5697,10 +5697,10 @@ local TABS = {
                  'Every letter in a trade\'s window and the delivery box (sent and received, with its Recipient box): amounts, text and buttons. Only the settings here change it.')
             area('Current Gil', 'gil.font', 11, true, -- (the gil box beside Equipment, Items, a trade, the delivery box)
                  'The Current Gil box wherever it shows (beside Equipment, Items, a trade, the delivery box): its title and amount. Only the settings here change it.')
-            area('Status Timers', 'buffs.font', 13, true, -- (the status icons' timers, each centred under its icon; Interface > Status Icons too)
-                 'The timers under your status icons (29m, 3h), each centred under its icon. Also on Interface > Status Icons.')
+            area('Status Timers', 'buffs.font', 13, true, -- (the status icons' timers, each centred under its icon; Game Options > Status Icons too)
+                 'The timers under your status icons (29m, 3h), each centred under its icon. Also on Game Options > Status Icons.')
             -- (the Target window's title and name are on Game Options > Target and HUD > Target Window, not here: 2026-11-07)
-            -- (the Equipment window's two, slot names and stats, are on Interface > Equipment alone: 2026-11-06)
+            -- (the Equipment window's two, slot names and stats, are on Game Options > Equipment alone: 2026-11-06)
             for i = 3, #rows do -- (all but the heading and Disable True Font locked while it's on)
                 local was = rows[i].lock_if
                 rows[i].lock_if = function () return get('client', 'truefont.disable') == '1' or (was ~= nil and was()) end

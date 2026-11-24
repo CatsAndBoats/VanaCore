@@ -840,7 +840,7 @@ function M.segments(id, x, cy, labels, index, enabled, size, alpha_scale)
     return index, changed, over
 end
 
--- Tabs across a section (vana.lua's kind 'tabs': Interface > Buttons' Global, Main Menu, Action Menu), from `x` to `right`,
+-- Tabs across a section (vana.lua's kind 'tabs': Game Options > Buttons' Global, Main Menu, Action Menu), from `x` to `right`,
 -- `y` their top, M.TABS_H tall: each word a tab, the one picked (`index`) white over a line in the accent, the rest dim
 -- (lighter under the mouse), a hairline under them all. Returns index and whether it changed.
 M.TABS_H = 30

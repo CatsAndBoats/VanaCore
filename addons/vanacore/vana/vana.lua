@@ -15,7 +15,7 @@ In game (//vana works the same):
   /vana pivot             the Pivot page: the DAT overlays (/pivot too)
   /vana hud               the HUD page: the grid and the HUD presets
   /vana preset <name>     loads the Graphics, Effects and Experimental preset of that name (a scripts\boot.txt line can); alone, Presets
-  /vana hudpreset <name>  loads the HUD and Interface preset of that name; alone, the HUD page at its Presets
+  /vana hudpreset <name>  loads the HUD and Game Options preset of that name; alone, the HUD page at its Presets
   /hud [element]          the HUD Manager (hud.lua): every game window's box, and the one picked's settings
   /hud addons             the HUD Manager in its Addon View: the addons' windows' boxes; /hud <addon> at that one
   /vana hud manager       the HUD Manager opened or closed, as /hud (the game's Config > HUD runs it)
@@ -4943,7 +4943,7 @@ function hud.on(key)
 end
 
 -- Auto save ([vana] hud.autosave, on by default): the HUD preset loaded ([vana] hud.preset) takes every change of its
--- settings (the HUD's and Interface's), checked while /vana or the HUD Manager is open: as either opens, and after this
+-- settings (the HUD's and Game Options'), checked while /vana or the HUD Manager is open: as either opens, and after this
 -- state writes a setting (hud.changed), at most every second and a half; none loaded, none saved. The kind of presets
 -- shown is put back after. A check reads every one of those settings (~700, ~60 ms), so it isn't run on a timer.
 function hud.autosave()
@@ -5769,7 +5769,7 @@ local function scale_command(size)
     print('VanaCore: window scale ' .. percent .. '% ([vana] scale)' .. (st.open and '.' or '; /vana opens it.'))
 end
 
--- /vana preset <name> (a Graphics and Effects preset) and /vana hudpreset <name> (a HUD and Interface one): the preset
+-- /vana preset <name> (a Graphics and Effects preset) and /vana hudpreset <name> (a HUD and Game Options one): the preset
 -- of that name loaded, as its Load in the window does, so a line in scripts\boot.txt or a macro can load one (asked
 -- 2026-10-24). The name is the rest of the line, in any case; one that isn't saved lists those that are. The kind of
 -- presets shown is put back after (hud.autosave's way), so the window's own list stays as it was.
@@ -5822,7 +5822,7 @@ local function print_commands(command, unknown)
         { ' boot', 'edit scripts\\boot.txt, what runs at each start' },
         { ' install [file]', 'install an addon package (.vcaddon), shown first' },
         { ' preset <name>', 'load a Graphics, Effects and Experimental preset (a boot.txt line can)' },
-        { ' hudpreset <name>', 'load a HUD and Interface preset' },
+        { ' hudpreset <name>', 'load a HUD and Game Options preset' },
         { ' reset ui', 'every addon\'s window to the top-left corner' },
         { ' close', 'close the window' },
         { ' minimize', 'shrink it to a tile (the logo) that opens it again' },
