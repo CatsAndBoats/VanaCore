@@ -291,7 +291,7 @@ end
 local FX = M.FX
 local AO_TAPS = { 6, 10, 16, 24, 32 } -- the occlusion's taps by ao_quality (gfx_d3d12.c AO_TAPS)
 local AO_KEEP = { 1, 0.75, 0.5, 0.3 } -- ... the share kept past each ring (fx_ao)
-local AO_QUALITY = { 'Low', 'Medium', 'High', 'Ultra', 'Max' }
+local AO_QUALITY = { 'Low', 'Medium', 'High', 'Max', 'above Max' }
 -- the view's colours, as ring_tint draws them (gfx_d3d12.c)
 local RING_COLOURS = { { P.green, 'every tap' }, { '#E8D45C', 'past ring 1' }, { '#E8945C', 'past ring 2' }, { P.rose, 'past ring 3' } }
 

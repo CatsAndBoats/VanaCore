@@ -603,6 +603,17 @@ local function advanced_group(tip)
 end
 -- a sub-panel switched as an effect panel's heading is (effect): off writes <key>.enabled=0 and keeps the strength; on takes
 -- that out and sets the strength to `on` where it's 0. Marked an effect, so a reset keeps an effect that's on, on
+-- A strength slider that was an effect's switch and heading's (effect_sub) with no switch now: above 0 is on, 0 is off.
+-- The effect switched off before (<key>.enabled=0) with a strength is switched on, as the number says; moving the slider
+-- clears it too (row.changed).
+function M.unswitched(row, key)
+    if tonumber(vana.config.get(FX, key .. '.enabled') or '') == 0 and (tonumber(vana.config.get(FX, key) or '') or 0) > 0 then
+        vana.config.set(FX, key .. '.enabled', nil)
+    end
+    row.changed = function () vana.config.set(FX, key .. '.enabled', nil) end
+    return row
+end
+
 local function effect_sub(text, key, default, on, tag)
     local row = subheader(text, tag, {
         get = function ()
@@ -1950,8 +1961,8 @@ TIPS.rows = {
     ['graphics.effects.sun_near'] = 'How far from you shadows stay extra sharp.',
     ['graphics.effects.sun_handoff'] = 'How gradually the sharp shadows near you blend into the softer ones farther out. Higher is smoother as you walk.',
     ['graphics.effects.sun_mid'] = 'Sharper shadows a little way off, out this far from you. 0 is off. Costs about as much as the far shadows.',
-    ['graphics.effects.sun_detail'] = 'How sharp nearby shadows are.\n'
-        .. 'Higher is sharper and uses more video memory. 8192 uses 256 MB.',
+    ['graphics.effects.sun_detail'] = 'How sharp nearby shadows are: Low is 512, Medium 1024, High 2048 and Max 4096 pixels across.\n'
+        .. 'Higher is sharper and uses more video memory. For sharper still, set sun_detail=8192 in vanacore.ini (256 MB).',
     ['graphics.effects.sun_far_hold'] = 'Distant shadows of things that don\'t walk are redrawn every this many frames. Faster.\n'
         .. '0 redraws them every frame.',
     ['graphics.effects.sun_near_hold'] = 'Nearby shadows of things that don\'t walk are kept while the camera stays put, up to this many frames. Much faster.\n'
@@ -1960,7 +1971,8 @@ TIPS.rows = {
     ['graphics.effects.sun_rings'] = 'Takes fewer samples for shadows farther from the camera, where they cover less of the screen. Saves frames.\n'
         .. 'Past each ring fewer are kept (all 16, then 12, 8, 6). Off takes them all everywhere.',
     ['graphics.effects.sun_ring_spacing'] = 'How far apart the shadow rings are, out from the camera. Wider is smoother in the distance and slower.',
-    ['graphics.effects.sun_soft'] = 'Softer shadow edges the farther a shadow falls. 0 is hard-edged.',
+    ['graphics.effects.sun_soft'] = 'Softer shadow edges the farther a shadow falls. Sharp (0) is hard-edged; Low is 0.05, Medium 0.1 and High 0.2.\n'
+        .. 'For a value in between, set sun_soft in vanacore.ini.',
     ['graphics.effects.sun_soft_zone'] = 'Blurs the shadows on rock, ground and characters, this far across them, so the hard edges of low-polygon shapes come out smooth. 0 leaves them as sharp as the map draws them.',
     ['graphics.effects.sun_min'] = 'Ignores things this close to a surface, which stops rocks shading themselves.',
     ['graphics.effects.sun_face'] = 'Shades the sides of things that face away from the sun: the underside of a roof or a ledge, the far side of a rock or a wall. 1 shades them fully, 0 leaves them lit.',
@@ -1981,7 +1993,7 @@ TIPS.rows = {
     ['graphics.effects.ao_chars'] = 'How much of that shading characters take, against the world. 1 is the same, 0 none, 2 twice as much.',
     ['graphics.effects.ao_soft_chars'] = 'Smooths that shading across a character\'s own body, so its polygons don\'t show as flat patches. 0 is off.',
     ['graphics.effects.ao_quality'] = 'How clean the shading in corners and creases is.\n'
-        .. 'Each step up is cleaner and slower. Max is the cleanest.',
+        .. 'Each step up is cleaner and slower. Max is the cleanest here; set ao_quality=4 in vanacore.ini for one step more (32 taps).',
     ['graphics.effects.ao_rings'] = 'Takes fewer samples for that shading farther from the camera, where it covers less of the screen. Saves frames.\n'
         .. 'Past each ring fewer are kept (all, then 75%, 50%, 30%). Off takes them all everywhere.',
     ['graphics.effects.ao_ring_spacing'] = 'How far apart the rings are, out from the camera. Wider is cleaner in the distance and slower.',
@@ -2001,7 +2013,7 @@ TIPS.rows = {
         .. 'Anything built: wood and props too.\n'
         .. 'Any: everywhere not green.',
     ['graphics.effects.refl_quality'] = 'How clean the reflections are.\n'
-        .. 'Low to Max: each step is smoother and slower.',
+        .. 'Low to Max: each step is smoother and slower. For one step more, set refl_quality=4 in vanacore.ini.',
     -- Glow effects (the light fire, glows and spells give what's near them)
     ['graphics.effects.elight'] = 'How brightly fire, glows and spells light what is near them.',
     ['graphics.effects.elight_radius'] = 'How far their light reaches.',
@@ -2031,18 +2043,22 @@ TIPS.rows = {
     ['graphics.effects.rays_decay'] = 'How quickly the beams fade away.',
     ['graphics.effects.rays_length'] = 'How long the beams are.',
     -- Lighting (was Day & Night)
-    ['graphics.effects.ambient_force'] = 'The least light anything gets. Higher lifts the darkest places; 1 lights everything fully, with no shading.',
+    ['graphics.effects.ambient_force'] = 'The least light anything gets, day and night, indoors and out, so nothing is too dark to see. 0 is off. '
+        .. 'Higher lifts the darkest places; 1 lights everything fully, with no shading. As Windower\'s game_forceambientlight.',
     ['graphics.effects.night'] = 'How dark the night gets outdoors. 1 is the darkest.',
     ['graphics.effects.night_moon'] = 'How far the night picture turns a cool moonlit blue. Lamps, fires and spells keep their colour.',
     ['graphics.effects.night_bright'] = 'How strongly the moon lights what faces it, as the sun does by day. Its shadows come with it.',
     ['graphics.effects.night_bright_ambient'] = 'Raises the night\'s light everywhere, in the shade too. Too much washes the picture out.',
-    ['graphics.effects.day_bright'] = 'How much stronger the sun is. 1 doubles it; higher blows the sunlit places out to full brightness.',
-    ['graphics.effects.indoor_bright'] = 'How much brighter indoor zones are.',
+    ['graphics.effects.day_bright'] = 'How much stronger the sun is, outdoors by day: what faces it is lit brighter and the shade stays as it is. 0 is off. '
+        .. '1 doubles it; higher blows the sunlit places out to full brightness. Lower Bloom\'s threshold as well for a blown-out look.',
+    ['graphics.effects.indoor_bright'] = 'How much brighter indoor zones are: Mog Houses, caves, dungeons and other zones with no sun in the sky. '
+        .. 'Outdoor zones are left as they are. 0 is off. Only works in zones the game counts as indoors.',
     ['graphics.effects.player_light'] = 'How bright the light round you is at night. Needs Dark night on.',
     ['graphics.effects.player_light_radius'] = 'How wide the pool of light round you is.',
     ['graphics.effects.player_light_warm'] = 'The light\'s colour: 0 is white, 1 a torch\'s orange.',
     ['graphics.effects.player_light_day'] = 'By day, how much darker the world round the pool is, so the light still shows. 0 is no pool by day.',
-    ['graphics.effects.day_night_warmth'] = 'How strong the tint is: warmer by day, cooler at night.',
+    ['graphics.effects.day_night_warmth'] = 'Tints the picture warmer by day and cooler at night, outdoors, on top of Warmth. 0 is off.\n'
+        .. 'The higher, the stronger the tint. It works through the Colour grade, so that must be on too.',
     ['graphics.effects.moon_size'] = 'How big the moon is in the sky.',
     ['graphics.effects.moon_brightness'] = 'How bright the moon is in the sky.',
     -- Texture filtering
@@ -2217,7 +2233,7 @@ TIPS.rows = {
     ['graphics.glow.quality'] = 'How smooth a big glow is.\n'
         .. 'Low: the fastest. A wide glow can look stepped.\n'
         .. 'Medium: the usual.\n'
-        .. 'High, Ultra: smoother, and cost more.',
+        .. 'High, Max: smoother, and cost more.',
     ['graphics.trusts.spawn'] = 'Never: Do not play any Trust summoning effects.\n'
         .. 'When summoned: Only when you actually see the Trust being summoned.\n'
         .. 'Always: Always play the Trust summon animation, even when Trusts pop in as you run around.',
@@ -3812,7 +3828,10 @@ local TABS = {
                                       action = 'reset_advanced', confirm = 'Click again to reset',
                                       tip = 'Puts every setting in the Advanced Settings boxes (DLSS, Shadows, Mass Grass) back to its '
                                             .. 'default. The switch beside this stays as it is.' } } }),
-                toggle('Enable Advanced Graphics Settings', 'vana', 'advanced', false),
+                (function (row) -- (its name and its switch in the danger red: it's the switch for settings that can break things)
+                    row.colour = M.P.rose
+                    return row
+                end)(toggle('Enable Advanced Graphics Settings', 'vana', 'advanced', false)),
                 callout('Not recommended', 'It is not recommended to change any of the advanced settings. If anything breaks you '
                         .. 'will be asked to reset them to default.', 'warning'),
             }) do
@@ -4189,7 +4208,6 @@ local TABS = {
                                    set = function (on) vana.config.set('graphics', 'drawdistance.enabled', on and '1' or '0') end }
                     return row
                 end)(header('Draw distance')),
-                subheader('Distance'),
                 free(slider('Scenery', 'graphics', 'drawdistance', 5, 1, 10, 1, '%.0fx'), 0.1, 100),
                 free(slider('Characters', 'graphics', 'drawdistance.mobs', 5, 1, 10, 1, '%.0fx'), 0.1, 100),
                 free(slider('Boat rides', 'graphics', 'drawdistance.ship', 1, 1, 10, 1, '%.0fx'), 0.1, 100),
@@ -4216,6 +4234,13 @@ local TABS = {
                 effect('Shadows', 'sun', 0.6),
                 note("The game's own shadows are turned off while these are on, on purpose: they would draw twice. "
                      .. "Turning these off leaves the game's off: Config > Shadows puts them back."),
+                -- day and night alike, at the top of the panel under its heading (what was the Day and night sub-panel)
+                slider('Distance', FX, 'sun_distance', 150, 10, 300, 5, '%d'),
+                -- (8192 is an ini edit: the box shows the number for a value it doesn't list)
+                choice('Shadow Quality', FX, 'sun_detail', '4096', { { '512', 'Low' }, { '1024', 'Medium' }, { '2048', 'High' }, { '4096', 'Max' } }),
+                -- (a value between these, or past them, is an ini edit: the box lights none)
+                choice('Softness', FX, 'sun_soft', '0', { { '0', 'Sharp' }, { '0.05', 'Low' }, { '0.1', 'Medium' }, { '0.2', 'High' } }),
+                slider('Underside Shadows', FX, 'sun_face', 1, 0, 1, 0.05),
                 -- what most players set (2026-11-05: "shadows is getting mad complicated"); the rest under Advanced Settings.
                 -- By day and by night apart (a player, 2026-11-06): the night's pair go to the renderer in the day's place from
                 -- 18:00 to 06:00 outdoors (gfx_dispatch.c gfx_sun_hours); the day's Strength at 0 is no shadows at night either
@@ -4229,11 +4254,6 @@ local TABS = {
                 }, FX, 'sun_moon'),
                 slider('Strength', FX, 'sun_moon_strength', 0.6, 0, 1, 0.05),
                 choice('Cast by', FX, 'sun_moon_casters', '0', { { '0', 'All' }, { '1', 'Characters' }, { '2', 'Environment' } }),
-                subheader('Day and night'),
-                slider('Distance', FX, 'sun_distance', 150, 10, 300, 5, '%d'),
-                choice('Shadow Quality', FX, 'sun_detail', '4096', { { '512', '512' }, { '1024', '1024' }, { '2048', '2048' }, { '4096', '4096' }, { '8192', '8192' } }),
-                slider('Softness', FX, 'sun_soft', 0, 0, 0.2, 0.005, '%.3f'),
-                slider('Underside Shadows', FX, 'sun_face', 1, 0, 1, 0.05),
                 -- Advanced Settings: its rows and its sub-panels (inner_sub ... 'in') in a box, hidden unless Client > VanaCore >
                 -- Shaders' Enable Advanced Graphics Settings is on (till 2026-11-23 a button over it showed it)
                 advanced_group('Fine-tuning for the shadows: plants, the sharp shadows near you, smoothing, the sun and weather, '
@@ -4287,22 +4307,26 @@ local TABS = {
                 header('Lighting'),
                 -- the least ambient light everything the game lights has, day and night, indoors and out (gfx/d3d8_night.h):
                 -- Windower's game_forceambientlight, Ashita's /ambient; 1 lights everything full. At the top (2026-11-07)
-                effect_sub('Force ambient light', 'ambient_force', 0, 0.5),
-                slider('Level', FX, 'ambient_force', 0, 0, 1, 0.05),
+                -- no heading and no switch (2026-11-24): above 0 is on, 0 is off. A Force ambient light switched off before
+                -- (ambient_force.enabled=0) with a strength is switched on, as the number says; moving the slider does too
+                M.unswitched(slider('Ambient Light Strength', FX, 'ambient_force', 0, 0, 1, 0.05), 'ambient_force'),
                 -- the sun's light raised through the day, outdoors (gfx/d3d8_sun.c d3d8_brighten: 1 + it, 06:00 to 18:00): what
                 -- faces the sun brighter up to full light, the shade left; with Bloom's threshold down and the grade's Whites
-                -- up, a blown-out day (2026-11-12)
-                effect_sub('Sun strength', 'day_bright', 0, 1, 'Outdoors by day'),
-                slider('Strength', FX, 'day_bright', 0, 0, 3, 0.05),
+                -- up, a blown-out day (2026-11-12). Under the ambient light with no heading or switch too (2026-11-24)
+                M.unswitched(slider('Sun Strength', FX, 'day_bright', 0, 0, 3, 0.05), 'day_bright'),
+                -- the same raise indoors (gfx/d3d8_night.h night_light, d3d8_sun.c d3d8_inside): a Mog House, a zone lit by a
+                -- fixed light alone (caves, dungeons, rooms), or one whose sun hasn't moved 10 s after zoning in; lamps and effects left.
+                -- Up here with no heading or switch too (2026-11-24)
+                M.unswitched(slider('Indoor Brightness', FX, 'indoor_bright', 0, 0, 5, 0.05), 'indoor_bright'),
+                -- the light on players, NPCs and monsters (VanaCore's renderer): they come up out of the dark, the zone stays as it is.
+                -- Under these since 2026-11-24 (they were the Characters sub-panel's rows)
+                needs_dx(free(slider('Character brightness', 'graphics', 'characters.brightness', 1, 0.5, 3, 0.05, '%.2fx'), 0, 10)),
+                needs_dx(slider('Character ambient light', 'graphics', 'characters.ambient', 0, 0, 2, 0.1, '%.1f')),
                 -- Night: Off, Dark or Bright on its heading, their sliders side by side under it (see `night` above)
                 night.dark,
                 night.bright,
                 night.head,
                 night.columns,
-                -- the same raise indoors (gfx/d3d8_night.h night_light, d3d8_sun.c d3d8_inside): a Mog House, a zone lit by a
-                -- fixed light alone (caves, dungeons, rooms), or one whose sun hasn't moved 10 s after zoning in; lamps and effects left
-                effect_sub('Indoor brightness', 'indoor_bright', 0, 1, 'Only works in zones considered indoors'),
-                slider('Brightness', FX, 'indoor_bright', 0, 0, 5, 0.05),
                 -- a light hung over the player, shining down: a pool round them (gfx_d3d12.c player_light, both renderers);
                 -- Strength lights the pool at night with Dark night on only (it gives back the light Dark night took: gfx_shared.c
                 -- gfx_player_light); by day the world round it goes darker (Darken around); at night without Dark night, nothing
@@ -4311,25 +4335,17 @@ local TABS = {
                 slider('Radius', FX, 'player_light_radius', 8, 3, 20, 0.5, '%.1f'),
                 slider('Warm colour', FX, 'player_light_warm', 0.5, 0, 1, 0.05),
                 slider('Darken around by day', FX, 'player_light_day', 0.5, 0, 1, 0.05),
-                -- the grade's warmth through the Vana'diel day (GfxScene.day_night): warmer by day, cooler at night, outdoors.
-                -- Laid by the Colour grade, so it needs that on (gfx_d3d12.c grade_wanted, the D3D11 composite's u.grade.x)
-                effect_sub('Temperature', 'day_night_warmth', 0, 1, 'Warm days, cool nights'),
-                slider('Strength', FX, 'day_night_warmth', 0, 0, 2, 0.05),
                 subheader('Moon'),
                 slider('Size', FX, 'moon_size', 1, 0.25, 4, 0.05),
                 slider('Brightness', FX, 'moon_brightness', 1, 0, 2, 0.05),
-                -- the light on players, NPCs and monsters (VanaCore's renderer): they come up out of the dark, the zone stays as it is
-                subheader('Characters'),
-                needs_dx(free(slider('Character brightness', 'graphics', 'characters.brightness', 1, 0.5, 3, 0.05, '%.2fx'), 0, 10)),
-                needs_dx(slider('Character ambient light', 'graphics', 'characters.ambient', 0, 0, 2, 0.1, '%.1f')),
                 effect('Ambient occlusion', 'ao', 1.0),
                 slider('Strength', FX, 'ao', 1.0, 0, 2, 0.05),
                 slider('Reach', FX, 'radius', 2.0, 0.2, 10, 0.1, '%.1f'),
-                slider('On characters', FX, 'ao_chars', 1.25, 0, 2, 0.05),
+                slider('Characters Strength', FX, 'ao_chars', 1.25, 0, 2, 0.05),
                 slider('Smoothing on characters', FX, 'ao_soft_chars', 0.4, 0, 2, 0.05, '%.2f'),
                 -- the taps a pixel (6 to 32), every one at the scene's full size
-                choice('Quality', FX, 'ao_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Ultra' },
-                                                           { '4', 'Max' } }),
+                -- (4, the 32 taps, is an ini edit: the box lights none; Max is the 24 it has always run with)
+                choice('Quality', FX, 'ao_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
                 -- fewer of those taps past each of three rings out from the camera (fx_ao): all, then 75%, 50%, 30%
                 toggle('Rings', FX, 'ao_rings', true),
                 slider('Ring spacing', FX, 'ao_ring_spacing', 15, 5, 60, 1, '%d'),
@@ -4356,8 +4372,8 @@ local TABS = {
                 choice('Ground', FX, 'refl_floors', '1', { { '0', 'Any' }, { '1', 'Stone and metal' }, { '2', 'Stone, metal, wood' },
                                                            { '3', 'Anything built' } }),
                 -- the ray's steps (16 to 128) and the blur's taps: more is cleaner and costs more
-                choice('Quality', FX, 'refl_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Ultra' },
-                                                             { '4', 'Max' } }),
+                -- (4 is an ini edit, as the occlusion's)
+                choice('Quality', FX, 'refl_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
                 -- normal maps from a texture pack folder ([graphics] textures), bending the sun's per-pixel light (the renderer:
                 -- DirectX 12); shown on the Experimental page (vana.lua MOVED_PANELS, by the heading)
                 warn(effect('Normal maps (Experimental)', 'normalmap', 0, 1)),
@@ -4628,6 +4644,10 @@ local TABS = {
                 slider('Saturation', FX, 'sat', 1.12, 0, 2, 0.02),
                 slider('Contrast', FX, 'contrast', 0.2, 0, 1, 0.05),
                 slider('Warmth', FX, 'warmth', 0, -1, 1, 0.05),
+                -- the grade's warmth through the Vana'diel day (GfxScene.day_night): warmer by day, cooler at night, outdoors.
+                -- Laid by the Colour grade, so it needs that on (gfx_d3d12.c grade_wanted, the D3D11 composite's u.grade.x). On
+                -- Graphics > Lighting as Temperature, with its own heading and switch, till 2026-11-24
+                M.unswitched(slider('Day/night warmth', FX, 'day_night_warmth', 0, 0, 2, 0.05), 'day_night_warmth'),
                 slider('Hue', FX, 'hue', 0, -180, 180, 1, '%d\194\176'),
                 slider('Brightness', FX, 'brightness', 0, -1, 1, 0.05),
                 slider('Shadows', FX, 'shadows', 0, -1, 1, 0.05),
@@ -4829,7 +4849,7 @@ local TABS = {
                 needs_dx(choice('Trust and avatar glow', 'graphics', 'glow', 'custom', { { 'off', 'Off' }, { '256', '256 (game)' }, { '512', '512' }, { '1024', '1024' }, { 'custom', 'Custom' } })),
                 needs_dx(slider('Glow strength', 'graphics', 'glow.strength', 1, 0, 3, 0.05, '%.2fx')),
                 needs_dx(slider('Glow size', 'graphics', 'glow.size', 1, 0.1, 2, 0.05, '%.2fx')),
-                needs_dx(choice('Glow quality', 'graphics', 'glow.quality', '1', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Ultra' } })),
+                needs_dx(choice('Glow quality', 'graphics', 'glow.quality', '1', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } })),
                 choice('Trust arrival effect', 'graphics', 'trusts.spawn', 'cast', { { 'never', 'Never' }, { 'cast', 'When summoned' }, { 'always', 'Always' } }),
                 -- zone lines are drawn by VanaCore's renderer
                 header('Zones'),
@@ -6963,13 +6983,14 @@ local layers = {
         { 'Colour grade', FX, 'grade' },
         { 'Shadows', FX, 'sun' },
         -- the Lighting sub-panels (Graphics > Shadows > Lighting): left on, the night light and the rest stayed with all off
-        { 'Ambient light', FX, 'ambient_force' },
-        { 'Sun strength', FX, 'day_bright' },
+        -- (a slider now, no switch: off is 0, the level it had kept for on)
+        { 'Ambient light', FX, 'ambient_force', value = { off = 0, on = 0.5 } },
+        { 'Sun strength', FX, 'day_bright', value = { off = 0, on = 1 } },
         { 'Dark night', FX, 'night' },
         { 'Bright night', FX, 'night_bright' },
-        { 'Indoor light', FX, 'indoor_bright' },
+        { 'Indoor light', FX, 'indoor_bright', value = { off = 0, on = 1 } },
         { 'Player light', FX, 'player_light' },
-        { 'Temperature', FX, 'day_night_warmth' },
+        { 'Temperature', FX, 'day_night_warmth', value = { off = 0, on = 1 } },
         -- a slider, not a switch: off is the game's 1x, the level it had kept ([vana] layers.value.<id>) for on
         { 'Character light', 'graphics', 'characters.brightness', value = { off = 1, on = 1.5 } },
         { 'Ambient occlusion', FX, 'ao' },

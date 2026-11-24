@@ -633,7 +633,7 @@ local QUALITY = {
         [FX .. '.sun_detail'] = { '1024', '2048', '', '8192' },
         [FX .. '.sun_distance'] = { '60', '80', '', '150' },
         [FX .. '.ao.enabled'] = { '0', '', '', '' },
-        [FX .. '.ao_quality'] = { '0', '0', '', '4' }, -- (the default is Ultra: Low and Medium keep the taps they had)
+        [FX .. '.ao_quality'] = { '0', '0', '', '4' }, -- (the default is Max, the 24 taps: Low and Medium keep the taps they had; 4 is 32, past Max: the box lights none)
         [FX .. '.ao_rings'] = { '', '', '', '0' },
         [FX .. '.sun_rings'] = { '', '', '', '0' },
         [FX .. '.fog.enabled'] = { '0', '', '', '' },
@@ -2955,7 +2955,9 @@ local function draw_row(page, sec, row, x, y, w, ctx)
                 after = true
             end
         end
-        for _, other in ipairs(M.ROW_RESETS and not M.hide_resets and sub_rows or {}) do
+        -- (the hybrid layout's green headings have no reset: the section's own resets them all; the red ones, a group's, keep theirs)
+        local no_reset = st.hybrid == true and not (row.danger or row.group)
+        for _, other in ipairs(M.ROW_RESETS and not M.hide_resets and not no_reset and sub_rows or {}) do
             if M.resettable(other) or other.reset ~= nil then
                 local reset_clicked, reset_hovered = M.icon_button(id .. '.reset', line_end - S(8), cy, 'reset', 9, P.text, P.faint)
                 if reset_clicked then
