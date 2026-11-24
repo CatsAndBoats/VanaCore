@@ -232,6 +232,7 @@ exit /b 0</Command>
     <ClCompile Include="dsound_follow.cpp" />
     <ClCompile Include="packetflow.cpp" />
     <ClCompile Include="sound.cpp" />
+    <ClCompile Include="soundslots.cpp" />
     <ClCompile Include="packetwatch.cpp" />
     <ClCompile Include="packets.cpp" />
     <ClCompile Include="pivot.cpp" />
@@ -498,6 +499,7 @@ exit /b 0</Command>
     <ClInclude Include="dsound_follow.hpp" />
     <ClInclude Include="packetflow.hpp" />
     <ClInclude Include="sound.hpp" />
+    <ClInclude Include="soundslots.hpp" />
     <ClInclude Include="packetwatch.hpp" />
     <ClInclude Include="packets.hpp" />
     <ClInclude Include="pivot.hpp" />
