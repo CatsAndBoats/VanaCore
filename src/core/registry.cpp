@@ -80,7 +80,7 @@ constexpr Named kNamed[] = {
     {L"gamma", "0028", Form::Float},
     {L"lcd_3d", "0030", Form::Number, nullptr, nullptr, 0, 1},
     {L"sound.enabled", "0007", Form::Number, nullptr, nullptr, 0, 1},
-    {L"sound.max_sounds", "0029", Form::Number, L"20", nullptr, 12, 100}, // above 20: soundslots.cpp
+    {L"sound.max_sounds", "0029", Form::Number, L"20", nullptr, 12, 100}, // soundslots.cpp: 100 slots, this the cap, live
     {L"sound.background", "0035", Form::Number, L"0", nullptr, 0, 1},
     {L"hardware_mouse", "0021", Form::Number, nullptr, nullptr, 0, 1},
     {L"opening_movie", "0022", Form::Number, nullptr, nullptr, 0, 1},

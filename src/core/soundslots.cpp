@@ -60,7 +60,10 @@ using CreateThreadFunction = HANDLE(WINAPI*)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTH
 using Position = void(__cdecl*)(int sound, const float* value, int time);
 using Stop = void(__thiscall*)(void* self, int sound, int time);
 
-int g_slots = 0; // asked for: 21 to 100, else 0
+int g_made = kGame; // the slots there are
+std::uintptr_t g_forced = 0; // the cap's forced 20 (its immediate), once the slots are made
+long g_live = 0;    // max sounds as last asked for (at the start, then by reload)
+std::uint32_t* g_cap = nullptr; // the game's max sounds, read before each sound starts
 bool g_done = false;
 HMODULE g_game = nullptr;
 CreateThreadFunction g_create_thread = nullptr;
@@ -148,7 +151,7 @@ bool rewrite(const Sites& s, std::uint32_t slots)
 {
     const std::uint32_t bytes = slots * kSlot;
     bool ok = write32(s.setup + kSetupSize, 4 + bytes) && write32(s.setup + kSetupCount, slots) &&
-              write32(s.setup + kSetupLoop, slots) && write32(s.clear + 1, bytes / 4) && write32(s.cap + kCapForced, slots);
+              write32(s.setup + kSetupLoop, slots) && write32(s.clear + 1, bytes / 4);
     for (const std::uintptr_t walk : s.walks)
         ok = ok && write32(walk, bytes);
     return ok;
@@ -172,6 +175,16 @@ bool swap(const Sites& s, std::uint32_t slots)
     return true;
 }
 
+// Max sounds as asked (0 or less: as the game has it), up to the slots there are; the cap's forced 20 (for a while,
+// whatever the setting) follows it, never under 20 as the game has it
+void apply_cap(long asked)
+{
+    if (asked > 0)
+        *g_cap = static_cast<std::uint32_t>(std::min<long>(asked, g_made));
+    if (g_forced != 0)
+        write32(g_forced, std::max<std::uint32_t>(*g_cap, kGame));
+}
+
 void make_slots()
 {
     Sites s;
@@ -179,7 +192,7 @@ void make_slots()
         log::write(L"Sound: %ls isn't as VanaCore knows it in FFXiMain.dll: the game keeps its 20 sound slots", missing);
         return;
     }
-    const auto slots = static_cast<std::uint32_t>(g_slots);
+    constexpr auto slots = static_cast<std::uint32_t>(kMost);
     if (!rewrite(s, slots)) {
         log::write(L"Sound: FFXiMain.dll's code couldn't be changed for %u sound slots", slots);
         return;
@@ -188,11 +201,12 @@ void make_slots()
         log::write(L"Sound: the game's 20 sound slots couldn't be swapped for %u", slots);
         return;
     }
-    // what the game was given for max sounds, made what there are slots for (more would ask for slots there aren't)
-    *reinterpret_cast<std::uint32_t*>(read32(s.cap + kCapSetting)) = slots;
+    g_made = kMost;
+    g_forced = s.cap + kCapForced;
+    apply_cap(g_live);
     const auto base = reinterpret_cast<std::uintptr_t>(g_game);
-    log::write(L"Sound: %u sound slots (the game's 20: setup +0x%X, %d walks)", slots, static_cast<unsigned>(s.setup - base),
-               kWalks);
+    log::write(L"Sound: %u sound slots (the game's 20: setup +0x%X, %d walks), max sounds %u", slots,
+               static_cast<unsigned>(s.setup - base), kWalks, *g_cap);
 }
 
 // A handle below 0 (a sound that never started) sent as 0, which the sound thread takes as no sound: the call's own
@@ -237,8 +251,13 @@ HANDLE WINAPI create_thread(LPSECURITY_ATTRIBUTES security, SIZE_T stack, LPTHRE
                        reinterpret_cast<std::uintptr_t>(start)) {
         g_done = true;
         guard_handles();
-        if (g_slots > 0)
+        if (const std::uintptr_t cap = scan::find(g_game, kCap); cap != 0) {
+            g_cap = reinterpret_cast<std::uint32_t*>(read32(cap + kCapSetting));
             make_slots();
+        } else {
+            log::write(L"Sound: the max sounds check isn't as VanaCore knows it in FFXiMain.dll: the game keeps its 20 sound "
+                       L"slots");
+        }
     }
     return g_create_thread(security, stack, start, parameter, flags, id);
 }
@@ -257,13 +276,29 @@ void install()
 {
     const std::wstring text = registry::setting("0029");
     const long asked = text.empty() ? 0 : std::wcstol(text.c_str(), nullptr, 10);
-    if (asked > kGame) {
-        g_slots = static_cast<int>(std::min<long>(asked, kMost));
-        if (asked > kMost)
-            log::write(L"Sound: sound.max_sounds=%ld is more than the %d sound slots VanaCore makes: %d", asked, kMost, kMost);
-    }
+    g_live = asked;
+    if (asked > kMost)
+        log::write(L"Sound: sound.max_sounds=%ld is more than the %d sound slots VanaCore makes: %d", asked, kMost, kMost);
     if (!imports::when_loaded(L"FFXiMain.dll", &on_game_loaded))
         log::write(L"Sound: FFXiMain.dll can't be watched for: the game keeps its 20 sound slots");
+}
+
+void reload(const wchar_t* ini)
+{
+    if (g_cap == nullptr || g_forced == 0) // the slots not made: the game's own max sounds, read at its start
+        return;
+    // [ffxi.registry] 0029 when it wins ([ffxi] registry.override=1) or [ffxi] doesn't set it
+    long asked = registry::registry_overrides("0029") ? -1 : GetPrivateProfileIntW(L"ffxi", L"sound.max_sounds", -1, ini);
+    if (asked < 0)
+        asked = GetPrivateProfileIntW(L"ffxi.registry", L"0029", -1, ini);
+    if (asked <= 0 || asked == g_live)
+        return;
+    g_live = asked;
+    apply_cap(asked);
+    if (asked > g_made)
+        log::write(L"Sound: max sounds %u (sound.max_sounds=%ld: there are %d sound slots)", *g_cap, asked, kMost);
+    else
+        log::write(L"Sound: max sounds %u", *g_cap);
 }
 
 } // namespace vanacore::soundslots

@@ -41,6 +41,7 @@
 #include "gamesettings.hpp"
 #include "singlemenu.hpp"
 #include "sliders.hpp"
+#include "soundslots.hpp"
 #include "equipfirst.hpp"
 #include "namechars.hpp"
 #include "menulog.hpp"
@@ -1240,6 +1241,7 @@ void check_settings()
     menuhover::reload(g_ini.c_str());
     configmenu::reload(g_ini.c_str());
     gamesettings::reload(g_ini.c_str());
+    soundslots::reload(g_ini.c_str());
     singlemenu::reload(g_ini.c_str());
     equipfirst::reload(g_ini.c_str());
     namechars::reload(g_ini.c_str());

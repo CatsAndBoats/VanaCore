@@ -285,7 +285,7 @@ under each.
 | [Frame pacing (`src/core/framepacing.cpp`)](#frame-pacing-srccoreframepacingcpp) | 10 |
 | [Frame timing log and recording (`src/core/frametime.cpp`)](#frame-timing-log-and-recording-srccoreframetimecpp) | none |
 | [World and interface sound volume (`src/core/soundmix.cpp`)](#world-and-interface-sound-volume-srccoresoundmixcpp) | 5 |
-| [Sound slots (`src/core/soundslots.cpp`)](#sound-slots-srccoresoundslotscpp) | 4 |
+| [Sound slots (`src/core/soundslots.cpp`)](#sound-slots-srccoresoundslotscpp) | 6 |
 | [Vana'diel clock hold (`src/core/vanaclock.cpp`)](#vanadiel-clock-hold-srccorevanaclockcpp) | 2 |
 | [Game data: entities, party, player, target, pet, missions, job levels (`src/core/game.cpp`)](#game-data-entities-party-player-target-pet-missions-job-levels-srccoregamecpp) | 9 |
 | [Game config watch and shadow setter (`src/core/game_config.cpp`)](#game-config-watch-and-shadow-setter-srccoregame_configcpp) | 2 |
@@ -890,15 +890,17 @@ Not scanned, only byte-compared to confirm a target: `kRequestStart` = `A0 ?? ??
 
 #### Sound slots (`src/core/soundslots.cpp`)
 
-**Setting:** `[ffxi] sound.max_sounds` above 20 (registry value `0029`, up to 100; `registry.cpp:83`). Nothing happens at 20 or less.
-**What it does:** When the game starts its sound thread (seen as a `CreateThread` call whose start matches `kThread`, via an IAT hook of FFXiMain.dll's `CreateThread`), rewrites the 20-slot sound setup to N slots: the allocation size, slot counts, the clear, the cap, and 26 loop ends `0x1310`. Then swaps the 20-slot block the game made for a bigger one from the game's own `new`, and sets the game's "max sounds" global to N. Not undone.
+**Setting:** always; `[ffxi] sound.max_sounds` (registry value `0029`, 12-100; `registry.cpp:83`) is the cap, applied live by `reload()`.
+**What it does:** When the game starts its sound thread (seen as a `CreateThread` call whose start matches `kThread`, via an IAT hook of FFXiMain.dll's `CreateThread`), rewrites the 20-slot sound setup to 100 slots: the allocation size, slot counts, the clear, and 26 loop ends `0x1310`. Then swaps the 20-slot block the game made for a bigger one from the game's own `new`. The game's "max sounds" global is set to `sound.max_sounds` (up to 100) and the cap's forced `14h` to that, never under 20, at the start and on each settings reload. Also detours a world sound's position (`kPosition`, FUN_10038250) and stop (`kStop`, FUN_100369F0) to send a handle below 0 (a sound that couldn't start, which the sound thread takes as every sound) as 0. Not undone.
 
 | Signature | Finds | Pattern | Then |
 |---|---|---|---|
 | `kSetup` (`soundslots.cpp:27`; `kSetupSize=1`, `kSetupNew=27`, `kSetupCount=44`, `kSetupLoop=49`, `kSetupSlots=77`) | the sound setup that makes the slots (FUN_10249F40 = `+0x249F40`) | `68 14 13 00 00 89 2D ?? ?? ?? ?? C7 05 ?? ?? ?? ?? FF FF FF FF 89 2D ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 04 3B C5 74 ?? 8D 78 04 C7 00 14 00 00 00 BE 14 00 00 00 8D 97 88 00 00 00 8B CA E8 ?? ?? ?? ?? 81 C2 F4 00 00 00 4E 75 F0 89 3D` | immediates written: `+1` (alloc `4+20*0xF4`), `+44` (count stored), `+49` (loop count); `+27` call read as the game's `new` and called; `+77` operand = the global holding the slots pointer, read and replaced by the new block |
 | `kClear` (`:32`) | the clear of the slots just after the setup (searched within `0x400` bytes of `kSetup`) | `B9 C4 04 00 00 33 C0 F3 AB 8B 3D` | dword at `+1` (`4C4h`) rewritten to `slots*0xF4/4` |
 | `kThread` (`:35`) | the sound thread function (FUN_102441D0 = `+0x2441D0`), tested at the start address passed to `CreateThread` | `56 8B 74 24 08 8B 46 08 85 C0 74 ?? 57 8B 3D ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 6A 01 E8 ?? ?? ?? ?? 6A 10 FF D7` | match must start exactly at the thread's start; triggers `make_slots` once |
-| `kCap` (`:38-39`; `kCapSetting=2`, `kCapForced=25`) | the "max sounds" check (FUN_10038140 = `+0x38140`) | `8B 3D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 ?? A0 ?? ?? ?? ?? 84 C0 74 05 BF 14 00 00 00 8B 0D ?? ?? ?? ?? 6A FF 6A FF 6A 05 E8` | `+25` (`mov edi,14h`) immediate rewritten to N; `operand(+2)` = the max-sounds global, written with N |
+| `kCap` (`:38-39`; `kCapSetting=2`, `kCapForced=25`) | the "max sounds" check (FUN_10038140 = `+0x38140`) | `8B 3D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 ?? A0 ?? ?? ?? ?? 84 C0 74 05 BF 14 00 00 00 8B 0D ?? ?? ?? ?? 6A FF 6A FF 6A 05 E8` | `+25` (`mov edi,14h`) immediate rewritten to max(cap, 20); `operand(+2)` = the max-sounds global, written with the cap |
+| `kPosition` | a world sound's position, command 3 (FUN_10038250 = `+0x38250`) | `56 8B 35 ?? ?? ?? ?? 85 F6 74 1D 8B 4C 24 0C 8B 44 24 10 50 D9 01 E8` | detoured (first 7 bytes); a handle below 0 sent as 0 |
+| `kStop` | a world sound's stop, command 5 (FUN_100369F0 = `+0x369F0`) | `A0 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 84 C0 74 0F 8B 0D ?? ?? ?? ?? 85 C9 74 05 E9 ?? ?? ?? ?? C2 08 00` | detoured (first 5 bytes); a handle below 0 sent as 0 |
 
 Not a pattern: `find_walks` scans every byte from `setup - 0x6000` to `setup + 0x1000` (`kWalksBefore/After`) for the dword `0x1310` (`kGameEnd = 20 * 0xF4`) in `lea r,[r+1310h]`, `add r,1310h` or `add eax,1310h` (`walk_end`, opcode and modrm checks). It needs exactly 26 walks (`kWalks`) plus exactly 1 debug list (`add ecx,1310h; add esi,74h`, left at 20), else the feature is skipped. Each is rewritten to `slots*0xF4`.
 **CatsEyeXI address:** setup `+0x249F40`, thread `+0x2441D0`, cap `+0x38140` (from FUN_ comments); setup also logged at run time.
