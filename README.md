@@ -70,6 +70,7 @@ Enix.
 
 - **Main developers:** [Vekien](https://github.com/vekien) and [Carver](https://github.com/CarverXI)
 - **GM icons:** Ramtough and Ark
+- **World and Interface Sounds Volume:** Settra
 - **Special thanks:** [RubyMatrix](https://github.com/rubymatrix), whose [xi-on-anything](https://github.com/rubymatrix/xi-on-anything)
   is where VanaCore's Direct3D 12 renderer and effects began
 - **Shaped and beta tested by:** the players of CatsEyeXI (see [Beta testers](#beta-testers))
