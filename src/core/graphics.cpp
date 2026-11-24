@@ -1186,6 +1186,8 @@ void apply_live(When when)
             log::write(L"Graphics: characters lit %.2f times as brightly (characters.brightness)", light);
         said = light;
         vanacore_gfx_set_character_light(light);
+        // [graphics] characters.ambient: the least ambient light on characters (0 off, 1 full)
+        vanacore_gfx_set_character_floor(number(L"characters.ambient", 0.0f, 0.0f, 2.0f));
     }
     // [graphics] untextured=0|1: the world's opaque surfaces drawn plain white, only the light and the vertex colours showing
     {

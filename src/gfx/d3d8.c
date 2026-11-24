@@ -232,6 +232,8 @@ static int g_glow_laid; /* VanaCore's glow is down for this set of tinted copies
                          * shrinking or solid copy, or the frame's end */
 /* [graphics] characters.brightness (d3d8_set_character_light): the light on the characters times this (character_light) */
 static float g_char_light = 1.0f;
+/* [graphics] characters.ambient (d3d8_set_character_floor): the least ambient light on a character, 0 off (character_light) */
+static float g_char_floor = 0.0f;
 /* the surface the frame's 3D scene was last drawn into and the depth surface with it (guest pointers) */
 static uint32_t g_scene_obj, g_scene_ds;
 /* the depth surface of the world's last counted 3D draw, for the grass drawn when the scene is finished */
@@ -5474,6 +5476,11 @@ void d3d8_set_character_light(float k)
     g_char_light = k >= 0.0f ? k : 1.0f;
 }
 
+void d3d8_set_character_floor(float least)
+{
+    g_char_floor = least > 0.0f ? fminf(least, 2.0f) : 0.0f;
+}
+
 void d3d8_set_grass(const GrassSettings* settings)
 {
     grass_configure(settings);
@@ -5519,18 +5526,26 @@ static int is_character(const GfxDraw* d, uint32_t up_data)
  * it - a running character's white sleeves bright and dim every 3-4 frames at 0.85 and not at 1. */
 static void character_light(GfxDraw* d, uint32_t up_data)
 {
-    if (g_char_light == 1.0f || !d->vs.lighting || !is_character(d, up_data))
+    if ((g_char_light == 1.0f && g_char_floor <= 0.0f) || !d->vs.lighting || !is_character(d, up_data))
         return;
     if (g_char_light < 1.0f)
-    {
         d->u.ambient[3] = 1.0f - g_char_light;
-        return;
-    }
-    for (int c = 0; c < 3; ++c)
-        d->u.ambient[c] *= g_char_light;
-    for (int i = 0; i < d->vs.nlights; ++i)
+    else if (g_char_light > 1.0f)
+    {
         for (int c = 0; c < 3; ++c)
-            d->u.light[i].ambient[c] *= g_char_light, d->u.light[i].diffuse[c] *= g_char_light;
+            d->u.ambient[c] *= g_char_light;
+        for (int i = 0; i < d->vs.nlights; ++i)
+            for (int c = 0; c < 3; ++c)
+                d->u.light[i].ambient[c] *= g_char_light, d->u.light[i].diffuse[c] *= g_char_light;
+    }
+    /* [graphics] characters.ambient: the least ambient on a character, last - the ambient raised, each channel by the same amount,
+     * until its brightest is at least that (its tint kept), as ambient_force does for everything lit (night_light) */
+    /* The scale is the game's, not 0 to 1: the lit colour (ambient + lights, saturated) goes through MODULATE2X with the texture, so
+     * 0.5 shows the texture as it is and 1 doubles it - a floor of 1 blew the characters out, washed. 1 here is 0.5 there, 2 is 1. */
+    const float want = 0.5f * g_char_floor, top = fmaxf(d->u.ambient[0], fmaxf(d->u.ambient[1], d->u.ambient[2]));
+    if (top < want)
+        for (int c = 0; c < 3; ++c)
+            d->u.ambient[c] += want - top;
 }
 
 #include "d3d8_night.h" /* night_light: the world's light through the Vana'diel night ([graphics.effects] night) */

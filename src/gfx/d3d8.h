@@ -65,6 +65,8 @@ int d3d8_camera(float* view, float* proj, uint32_t* viewport);
 void d3d8_set_label(uint32_t id);
 /* the light on the characters (players, NPCs, monsters) times k ([graphics] characters.brightness); 1 as the game has it */
 void d3d8_set_character_light(float k);
+/* the least ambient light on the characters, 0 to 1 ([graphics] characters.ambient); 0 off */
+void d3d8_set_character_floor(float least);
 /* 1 while the player is in their Mog House (vanacore_gfx_set_moghouse): the sun's shadows scaled by moghouse (GfxScene.indoors) */
 void d3d8_set_moghouse(int in);
 /* 1 in a zone its DAT says is lit by a fixed light alone (vanacore_gfx_set_fixed_light): the sun's shadows scaled by moghouse

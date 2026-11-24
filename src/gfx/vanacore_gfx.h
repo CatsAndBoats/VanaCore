@@ -125,6 +125,10 @@ void vanacore_gfx_set_glow(int mode);
  * show on white clothing). */
 void vanacore_gfx_set_character_light(float k);
 
+/* The least ambient light on the characters, 0 to 1 (0 to 2, [graphics] characters.ambient; 0 off, 1 the game's neutral, 2 doubled): their ambient raised, each channel by the
+ * same amount, until its brightest is at least this, so they are never darker than that wherever they stand; the zone is left. */
+void vanacore_gfx_set_character_floor(float least);
+
 /* 1 while the player is in their own Mog House (the zone-in packet 0x00A's byte 0x80: 1 there, 2 elsewhere), each frame: the
  * room's ceiling stands between the sun and everything in it, so the sun's shadows there are scaled by [graphics.effects]
  * moghouse, as in a zone lit by a fixed light. */

@@ -2744,7 +2744,7 @@ static const struct
     { "warmth", offsetof(FxSettings, warmth), 0.0f },
     { "hue", offsetof(FxSettings, hue), 0.0f },
     { "clarity", offsetof(FxSettings, clarity), 0.0f },
-    { "night_moon", offsetof(FxSettings, night_moon), 0.5f },
+    { "night_moon", offsetof(FxSettings, night_moon), 0.0f },
     { "day_night_warmth", offsetof(FxSettings, day_night_warmth), 0.0f },
     { "player_light", offsetof(FxSettings, player_light), 0.0f },
     { "player_light_radius", offsetof(FxSettings, player_light_radius), 8.0f },

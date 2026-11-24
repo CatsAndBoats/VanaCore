@@ -669,6 +669,7 @@ void vanacore_gfx_set_sparkles(const float* places, unsigned count, float size, 
 void vanacore_gfx_set_ground_marks(const float* marks, unsigned count) { d3d8_set_ground_marks(marks, count); }
 void vanacore_gfx_set_glow(int mode) { d3d8_set_glow(mode); }
 void vanacore_gfx_set_character_light(float k) { d3d8_set_character_light(k); }
+void vanacore_gfx_set_character_floor(float least) { d3d8_set_character_floor(least); }
 void vanacore_gfx_set_moghouse(int in) { d3d8_set_moghouse(in); }
 void vanacore_gfx_set_fixed_light(int on) { d3d8_set_fixed_light(on); }
 void vanacore_gfx_set_warping(int on) { d3d8_set_warping(on); }

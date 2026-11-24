@@ -2205,7 +2205,8 @@ TIPS.rows = {
     ['camera.offset.x'] = 'Moves your character left or right of the middle of the screen.',
     ['camera.offset.y'] = 'Moves your character up or down from the middle of the screen.',
     -- Characters, glow, zone lines
-    ['graphics.characters.brightness'] = 'Lights up players, NPCs and monsters so they do not sit in the dark.',
+    ['graphics.characters.ambient'] = 'The least light a player, NPC or monster gets. Higher lifts them out of the dark; the zone around them stays as it is.',
+    ['graphics.characters.brightness'] ='Lights up players, NPCs and monsters so they do not sit in the dark.',
     ['graphics.glow'] = 'The glow round Trusts and avatars.\n'
         .. 'Off: no glow. The character is drawn crisp.\n'
         .. '256 (game): the game\'s own glow. Blurry at high resolutions.\n'
@@ -4023,10 +4024,10 @@ local TABS = {
             -- (General lighting) only if asked. Both fade in from 17:00 and out by 07:00; lamps and effects left. Their effect
             -- switches stay rows of their own, never drawn: a preset keeps night.enabled and night_bright.enabled by them (before
             -- the sliders, so those keys are an effect's), and a reset keeps the night that's on, on
-            local night = { dark = effect_sub('Dark night', 'night', 0, 1), bright = effect_sub('Bright night', 'night_bright', 0, 1) }
+            local night = { dark = effect_sub('Dark night', 'night', 0, 0.5), bright = effect_sub('Bright night', 'night_bright', 0, 1) }
             night.dark.show_if = function () return false end
             night.bright.show_if = night.dark.show_if
-            night.sliders = { slider('Darkness', FX, 'night', 0, 0, 1, 0.05), slider('Moonlight colour', FX, 'night_moon', 0.5, 0, 1, 0.05),
+            night.sliders = { slider('Darkness', FX, 'night', 0, 0, 1, 0.05), slider('Moonlight colour', FX, 'night_moon', 0, 0, 1, 0.05),
                               slider('Moon strength', FX, 'night_bright', 0, 0, 3, 0.05),
                               slider('General lighting', FX, 'night_bright_ambient', 0, 0, 3, 0.05) }
             night.pick = function () -- 1 Off, 2 Dark, 3 Bright (both on, from a hand-edited ini: Dark)
@@ -4316,6 +4317,10 @@ local TABS = {
                 subheader('Moon'),
                 slider('Size', FX, 'moon_size', 1, 0.25, 4, 0.05),
                 slider('Brightness', FX, 'moon_brightness', 1, 0, 2, 0.05),
+                -- the light on players, NPCs and monsters (VanaCore's renderer): they come up out of the dark, the zone stays as it is
+                subheader('Characters'),
+                needs_dx(free(slider('Character brightness', 'graphics', 'characters.brightness', 1, 0.5, 3, 0.05, '%.2fx'), 0, 10)),
+                needs_dx(slider('Character ambient light', 'graphics', 'characters.ambient', 0, 0, 2, 0.1, '%.1f')),
                 effect('Ambient occlusion', 'ao', 1.0),
                 slider('Strength', FX, 'ao', 1.0, 0, 2, 0.05),
                 slider('Reach', FX, 'radius', 2.0, 0.2, 10, 0.1, '%.1f'),
@@ -4636,13 +4641,6 @@ local TABS = {
                 slider('Clarity', FX, 'clarity', 0, 0, 2, 0.05),
                 slider('Sharpening', FX, 'sharpen', 0.3, 0, 1, 0.05),
                 slider('Smoothing', FX, 'smooth', 0, 0, 1, 0.05),
-                -- the light on players, NPCs and monsters (VanaCore's renderer): they come up out of the dark, the zone stays as it is
-                header('Characters'),
-                needs_dx(free(slider('Character brightness', 'graphics', 'characters.brightness', 1, 0.5, 3, 0.05, '%.2fx'), 0, 10)),
-                (function (row) row.rebuild = true return row end)( -- Disable Weapon Blink locks and unlocks by it
-                    toggle('Disable Character Blink', 'client', 'blink.disable', false)),
-                (function (row) row.lock_if = function () return (tonumber(vana.config.get('client', 'blink.disable') or '') or 0) == 0 end return row end)(
-                    toggle('Disable Weapon Blink', 'client', 'blink.weapons', false)),
                 effect('Ink lines', 'outline', 0, 1),
                 slider('Darkness', FX, 'outline', 0, 0, 1, 0.05),
                 slider('Line width', FX, 'outline_width', 1, 0.5, 4, 0.25),
@@ -6200,6 +6198,11 @@ local TABS = {
                 hide_window('Hide gil', 'money@equip'),
                 subheader('Equipment List'),
                 slider('Equipment list rows', 'client', 'equip.rows', 10, 10, 50, 1, '%d'),
+                subheader('Gear Changes'),
+                (function (row) row.rebuild = true return row end)( -- Disable Weapon Blink locks and unlocks by it
+                    toggle('Disable Character Blink', 'client', 'blink.disable', false)),
+                (function (row) row.lock_if = function () return (tonumber(vana.config.get('client', 'blink.disable') or '') or 0) == 0 end return row end)(
+                    toggle('Disable Weapon Blink', 'client', 'blink.weapons', false)),
                 subheader('Extended Stats'),
                 (function (row) row.rebuild = true return row end)(toggle('Stats under Equipment', 'client', 'equip.stats', false)),
                 -- the rows under it, set in and locked while it's off: equipstats.cpp does none of them without it (g_on)
