@@ -2810,6 +2810,12 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     -- it: on True Font, an area switched off greyed the next area's switch (reported 2026-11-06)
     if row.kind == 'subheader' and row.nested ~= true then
         ctx.off = ctx.panel_off == true
+        if row.own_panel and row.switch ~= nil then
+            -- a headline that's a panel of its own (FSR, beside DLSS): its rows are greyed by its switch, not the section's
+            local ok, on = pcall(row.switch.get)
+            ctx.off = not (ok and on)
+            ctx.panel_off = ctx.off
+        end
     end
     local alpha, enabled = row_state(row, ctx)
 
@@ -3483,7 +3489,18 @@ local function draw_heading(page, sec, x, y, w, over_title)
         tx = tx + M.measure(over_title, fonts.text, SMALL) + S(6)
     end
     local hovered = M.over(tx, cy - S(12), title_w, S(24)) -- (the title: its tooltip)
-    M.text_mid(dl, tx, cy, sec.title, off and M.mix(title_color, P.dim, 0.5) or title_color, head_face, head_size, alpha)
+    if head.parts ~= nil then
+        -- a title in parts, each green while it's the one running (DLSS / FSR: one or the other), else white: no title is greyed
+        local px = tx
+        for _, part in ipairs(head.parts) do
+            local ok, active = pcall(part[2] or function () return false end)
+            local colour = (ok and active) and P.green or title_color
+            M.text_mid(dl, px, cy, part[1], colour, head_face, head_size, alpha)
+            px = px + M.measure(part[1], head_face, head_size)
+        end
+    else
+        M.text_mid(dl, tx, cy, sec.title, off and M.mix(title_color, P.dim, 0.5) or title_color, head_face, head_size, alpha)
+    end
     tx = tx + title_w + S(8)
     if head.icon ~= nil then
         M.icon_centred(dl, tx + S(6), cy, head.icon, P.dim, 10, alpha)
@@ -3564,7 +3581,9 @@ M.draw_headline = function (row, id, x, y, w, alpha, enabled)
     local tx = x + S(LEFT)
     local title_w = M.measure(row.text, head_face, head_size)
     local hovered = M.over(tx, cy - S(12), title_w, S(24))
-    M.text_mid(dl, tx, cy, row.text, off and M.mix(P.white, P.dim, 0.5) or P.white, head_face, head_size, alpha)
+    -- (green_on: its title green while its switch is on)
+    M.text_mid(dl, tx, cy, row.text, (row.green_on and not off) and P.green or P.white,
+               head_face, head_size) -- (full alpha: a panel's heading isn't greyed with its rows)
     tx = tx + title_w + S(8)
     if hovered and M.TIPS.panels[row.text] ~= nil then
         M.tooltip(M.TIPS.panels[row.text])

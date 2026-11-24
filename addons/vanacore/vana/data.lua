@@ -477,7 +477,9 @@ function M.dlss_enabled()
     return mode ~= 'off' and mode ~= '' and not M.stopped.is('dlss')
 end
 local function dlss_header()
-    return { kind = 'header', text = 'DLSS', section = 'graphics', key = 'dlss',
+    return { kind = 'header', text = 'DLSS / FSR', section = 'graphics', key = 'dlss',
+             -- the tab is DLSS / FSR but this heading says DLSS, green while it runs (vana.lua draw_heading's parts)
+             parts = { { 'DLSS', function () return M.dlss_enabled() end } },
              switch = { get = M.dlss_enabled,
                         set = function (on)
                             if on and vana.graphics.info().dlss_card == false then
@@ -526,8 +528,20 @@ function FSR.mode()
     return ((vana.config.get('graphics', 'fsr') or 'off'):lower():gsub('%s', ''))
 end
 function FSR.header()
-    return { kind = 'header', text = 'FSR', section = 'graphics', key = 'fsr',
-             switch = { get = function ()
+    -- a sub-panel of the DLSS / FSR tab, drawn as a section heading is (headline: vana.lua draw_headline)
+    local row = { kind = 'subheader', text = 'FSR', section = 'graphics', key = 'fsr' } -- (subheader() is defined below)
+    row.headline, row.green_on, row.own_panel = true, true, true
+    -- its Reset: every FSR setting on the page, its own switch left as it is
+    row.reset = function ()
+        local list = {}
+        for _, other in ipairs(M.st.rows and M.st.rows.graphics or {}) do
+            if other.section == 'graphics' and type(other.key) == 'string' and other.key:find('^fsr%.') then
+                list[#list + 1] = other
+            end
+        end
+        M.reset_rows(list)
+    end
+    row.switch = { get = function ()
                             local mode = FSR.mode()
                             return mode ~= 'off' and mode ~= '' and not M.stopped.is('fsr')
                         end,
@@ -541,7 +555,8 @@ function FSR.header()
                                 M.stopped.retry('fsr')
                             end
                             vana.config.set('graphics', 'fsr', on and 'on' or 'off')
-                        end } }
+                        end }
+    return row
 end
 function FSR.quality()
     local row = slider('Quality', 'graphics', 'fsr.quality', 35, 0, 100, 5, '%d%%')
@@ -1800,7 +1815,7 @@ TIPS.rows = {
     ['graphics.dlss.quality'] = 'Left: faster, drawn smaller then upscaled. Right: sharper, slower. 100% is native.',
     -- FSR
     ['graphics.fsr.quality'] = 'Left: faster, drawn smaller then upscaled. Right: sharper, slower. 100% is native.',
-    ['graphics.fsr.sharpness'] = 'FSR\'s own sharpening of the upscaled picture. 0 is off.',
+    ['graphics.fsr.sharpness'] = 'FSR\'s own sharpening of the upscaled picture, 1 to 10. Off is none.',
     ['graphics.fsr.framegen'] = 'Makes an extra frame between the real ones, for smoother motion. Needs FSR on.\n'
         .. 'Off: real frames only.\n'
         .. '2x: one extra frame for each real one. Any DirectX 12 card; AMD\'s AI version on Radeon RX 9000 with Windows 11.',
@@ -1899,17 +1914,18 @@ TIPS.rows = {
     ['graphics.effects.batch'] = 'Draws the zone\'s repeated pieces (the same tree again and again) together, many in one draw.\n'
         .. 'Far fewer draws a frame at long Scenery distances, where the game waits on them. Experimental.',
     ['graphics.lod'] = 'Which meshes buildings and trees use as they get farther away.\n'
-        .. 'Game\'s: swaps to simpler ones with distance.\n'
-        .. 'Farther: keeps the detailed ones farther out (set below).\n'
-        .. 'Always high: the detailed ones at any distance.',
+        .. 'Low: the game\'s, which swaps to simpler ones with distance.\n'
+        .. 'Medium: keeps the detailed ones 4 times farther out.\n'
+        .. 'High: keeps the detailed ones 8 times farther out.\n'
+        .. 'Max: the detailed ones at any distance.',
     ['graphics.lod.range'] = 'How many times farther than the game the detailed meshes are kept.',
     ['graphics.hide.players'] = 'Players outside your party and alliance are never loaded or drawn: faster in busy places.\n'
         .. 'Someone who asks you to trade shows up.',
     ['graphics.hide.pets'] = 'Pets of players outside your party and alliance are never loaded or drawn.',
     ['graphics.hide.trusts'] = 'Trusts of players outside your party are never loaded or drawn.',
     ['graphics.fog'] = 'Where the distance fog starts.\n'
-        .. 'With distance: moves farther out as you raise the draw distance.\n'
-        .. 'Game\'s: stays where the game puts it, even when you see farther.\n'
+        .. 'Match distance: moves farther out as you raise the draw distance.\n'
+        .. 'Vanilla: stays where the game puts it, even when you see farther.\n'
         .. 'Custom: starts and ends where you set below.',
     ['graphics.bump'] = 'The game\'s own Bump Mapping option. Turning it on shows from the next zone you enter; turning it off is at once.',
     ['graphics.untextured'] = 'Draws the world\'s solid surfaces plain white, so only the light and shadows show. Leaves, fences, effects and water keep their textures.',
@@ -2853,6 +2869,7 @@ TIPS.rows = {
     ['client.menus.hide'] = 'Hides the menus over the chat (an NPC\'s choices, the Magic and Abilities lists). Their keys still work.',
     ['client.menus.background'] = 'Off: no frame behind the menus over the chat; the choices stay.',
     ['client.singlemenu'] = "The main menu's second page (Missions to Log Out) under the first, one list with no flipping. Applies once the menu is closed.",
+    ['client.gamesettings.extended'] = "Config > Gameplay gets World Sounds Volume and Interface Sounds Volume under Music Volume. English menus only. Applies once the window is closed.",
     ['client.macrooptions.equipfirst'] = "An equip set's options (Edit, Copy ... Style Lock) with Equip at the top, the cursor starting on it. Applies the next time the box opens.",
     ['vana.hud.names'] = "Writes each window's name in its box's top left corner.",
     ['vana.hud.autosave'] = 'The HUD preset you loaded is kept up to date: every change to the HUD and Interface settings is saved back into it.',
@@ -2869,6 +2886,7 @@ end
 TIPS.panels = {
     ['Game'] = 'The game window: its mode, size and place.',
     ['Toggles'] = 'Every effect as one switch: green is on, red is off. Turn them on one at a time to show what each adds.',
+    ['DLSS / FSR'] = 'DLSS (NVIDIA, an RTX card) or FSR (AMD, any DirectX 12 card): draws smaller, then scales up for more FPS. One or the other.',
     ['DLSS'] = 'NVIDIA\'s upscaler: draws smaller, then scales up for more FPS. Needs an RTX card and DirectX 12.',
     ['DLSS 5'] = 'NVIDIA\'s AI look for the picture, on top of DLSS. Needs an RTX 40 or 50 and NVIDIA\'s DLSS 5 file in the dlss folder.',
     ['Advanced Settings'] = 'More DLSS 5 controls to try: extra passes, and blending its picture with the game\'s.',
@@ -3966,17 +3984,37 @@ local TABS = {
                     { 'Performance graph', function () vana.chat.run('/vana graph') end, 'show_chart', 'Performance graph: FPS and more, 1 minute (/vana graph)' } },
         rows = function ()
             local distance_fog = choice('Distance fog', 'graphics', 'fog', 'distance',
-                { { 'distance', 'With distance' }, { 'game', "Game's" }, { 'custom', 'Custom' } })
+                { { 'distance', 'Match distance' }, { 'game', 'Vanilla' }, { 'custom', 'Custom' } })
             distance_fog.rebuild = true -- the custom fog rows lock and unlock by it
             -- A custom fog row: greyed and locked while Distance fog isn't Custom
             local function custom_fog(row)
                 row.lock_if = function () return M.read(distance_fog) ~= 'custom' end
                 return row
             end
-            local scenery_detail = choice('Scenery detail', 'graphics', 'lod', 'game', { { 'game', "Game's" }, { 'range', 'Farther' }, { 'high', 'Always high' } })
-            scenery_detail.rebuild = true -- the Farther slider locks and unlocks by it
-            local detail_range = free(slider('Detail kept farther by', 'graphics', 'lod.range', 2, 1, 10, 0.5, '%.1fx'), 0.25, 10)
-            detail_range.lock_if = function () return (vana.config.get('graphics', 'lod') or 'game'):lower() ~= 'range' end
+            -- Low (the game's), Medium (lod=range at 4x), High (range at 8x), Max (always high). [graphics] lod and lod.range stay
+            -- the settings (a Medium or High writes both); lod.range itself has no row now, only the ini
+            local scenery_detail = choice('Level of Detail', 'graphics', 'lod', 'low',
+                { { 'low', 'Low' }, { 'medium', 'Medium' }, { 'high', 'High' }, { 'max', 'Max' } })
+            scenery_detail.get = function ()
+                local mode = (vana.config.get('graphics', 'lod') or 'game'):lower()
+                if mode == 'high' then
+                    return 'max'
+                elseif mode == 'range' then
+                    return (tonumber(vana.config.get('graphics', 'lod.range') or '') or 2) >= 6 and 'high' or 'medium'
+                end
+                return 'low'
+            end
+            scenery_detail.set = function (value)
+                if value == nil or value == 'low' then
+                    vana.config.set('graphics', 'lod', value == nil and nil or 'game')
+                elseif value == 'max' then
+                    vana.config.set('graphics', 'lod', 'high')
+                else
+                    vana.config.set('graphics', 'lod.range', value == 'high' and '8' or '4')
+                    vana.config.set('graphics', 'lod', 'range')
+                end
+                vana.graphics.reload()
+            end
             -- Lighting's Night (2026-11-07: Dark night and Bright night "kinda conflict"): Off (the game's own night), Dark
             -- or Bright picked on one heading (vana.lua: a sub-panel's modes), their sliders side by side under it, the one not
             -- picked at 60% (vana.lua: columns). Dark night (gfx/d3d8.c night_light, gfx_d3d12.c moon_grade): the world's ambient
@@ -4121,18 +4159,21 @@ local TABS = {
                 needs_dx(FSR.header()),
                 needs_dx(marks(0, 100, { { 0, 'Performance' }, { 35, 'Balanced' }, { 65, 'Quality' }, { 100, 'Native' } })),
                 needs_dx(FSR.quality()),
-                needs_dx(slider('Sharpening', 'graphics', 'fsr.sharpness', 0, 0, 1, 0.05, '%.2f')),
+                -- shown 1-10 (the setting 0.1-1.0, 10 = the old 1.00); 0 stays off
+                needs_dx((function (row)
+                    row.format = function (value)
+                        local n = math.floor(value * 10 + 0.5)
+                        return n < 1 and 'Off' or tostring(n)
+                    end
+                    return row
+                end)(slider('Sharpening', 'graphics', 'fsr.sharpness', 0, 0, 1, 0.1))),
                 needs_dx12(dropdown('Frame generation', 'graphics', 'fsr.framegen', '2x', { { 'off', 'Off' }, { '2x', '2x' } })),
+                -- (the Resolution and Frame generation lines are on the Debug window's DLSS / FSR tab: debug.lua)
+                -- Advanced Settings (as DLSS's): the version and DLSS's Extras rows, the same keys: set on one page, it's set on both
+                advanced_group('Fine-tuning for FSR: which FSR runs, how the picture is kept steady, and what gets its own motion. '
+                               .. 'Most players never need these.'),
                 needs_dx(dropdown('Version', 'graphics', 'fsr.version', 'auto', { { 'auto', 'Automatic' }, { '4', 'FSR 4 (Radeon RX 7000, 9000)' },
                                                                                   { '3', 'FSR 3.1' }, { '1', 'FSR 1 (any card)' } })),
-                -- (above Extras)
-                needs_dx(status('Resolution', function () return vana.graphics.info().fsr or 'Off' end)),
-                needs_dx12(status('Frame generation', function ()
-                    local info = vana.graphics.info()
-                    return info.upscaler == 'fsr' and info.framegen or 'Off'
-                end)),
-                -- DLSS's Extras rows, the same keys: set on one page, it's set on both
-                needs_dx12(subheader('Extras')),
                 needs_dx12(toggle('Compare (FSR off, same size)', FX, 'dlss_compare', false)),
                 needs_dx12(slider('Stability: effects', FX, 'dlss_reactive', 0.8, 0, 1, 0.05, '%.2f')),
                 needs_dx12(slider('Stability: moving things', FX, 'dlss_reactive_moving', 0.5, 0, 1, 0.05, '%.2f')),
@@ -4140,31 +4181,36 @@ local TABS = {
                 -- the characters' motion (and the moving things' mask) drawn together once the scene is drawn, on by default
                 needs_dx12(toggle('Batch character motion', FX, 'dlss_motion_batch', true)),
                 needs_dx12(slider('Frame gen effect motion', FX, 'fg_fx_motion', 0.03, 0, 0.3, 0.01, '%.2f')),
-                header('Draw distance'),
-                toggle('Extended draw distance', 'graphics', 'drawdistance.enabled', true),
+                -- the panel's own switch in its heading, as the others': off, the game's own distances
+                (function (row)
+                    row.section, row.key, row.default = 'graphics', 'drawdistance.enabled', true
+                    row.switch = { get = function () return (tonumber(vana.config.get('graphics', 'drawdistance.enabled') or '') or 1) ~= 0 end,
+                                   set = function (on) vana.config.set('graphics', 'drawdistance.enabled', on and '1' or '0') end }
+                    return row
+                end)(header('Draw distance')),
                 subheader('Distance'),
-                free(slider('Scenery', 'graphics', 'drawdistance', 5, 1, 10, 0.5, '%.1fx'), 0.1, 100),
-                free(slider('Characters', 'graphics', 'drawdistance.mobs', 5, 1, 10, 0.5, '%.1fx'), 0.1, 100),
-                free(slider('Boat rides', 'graphics', 'drawdistance.ship', 1, 1, 10, 0.5, '%.1fx'), 0.1, 100),
-                choice('Targeting', 'graphics', 'drawdistance.target', 'game', { { 'game', "Game's distance" }, { 'drawn', 'As far as drawn' } }),
-                toggle('Fill in far ground', 'graphics', 'drawdistance.fill', false),
+                free(slider('Scenery', 'graphics', 'drawdistance', 5, 1, 10, 1, '%.0fx'), 0.1, 100),
+                free(slider('Characters', 'graphics', 'drawdistance.mobs', 5, 1, 10, 1, '%.0fx'), 0.1, 100),
+                free(slider('Boat rides', 'graphics', 'drawdistance.ship', 1, 1, 10, 1, '%.0fx'), 0.1, 100),
+                scenery_detail,
+                advanced_group('Fine-tuning for the draw distance: filling in far ground that can be missing, the whole zone in view, '
+                               .. 'and how the far scenery is drawn. Most players never need these.'),
+                toggle('Fill in missing far ground', 'graphics', 'drawdistance.fill', false),
                 toggle('Draw the whole zone in view', 'graphics', 'drawdistance.full', false),
                 toggle('Off in large open zones', 'graphics', 'drawdistance.large_off', true),
                 -- the zone's draws of one mesh sent together (gfx_d3d12_batch.h): on by default (2026-11-12, Zi'Tah)
                 needs_dx12(toggle('Batch repeated scenery', FX, 'batch', true)),
                 -- far scenery hidden behind what's drawn left undrawn (occlusion.cpp, gfx_d3d12_occl.h); Count only logs it
                 needs_dx12(choice('Skip hidden scenery', 'graphics', 'occl', '1', { { '0', 'Off' }, { '1', 'On' }, { '2', 'Count only' } })),
-                subheader('Detail'),
-                scenery_detail,
-                detail_range,
                 subheader('Hiding'),
                 toggle('Hide other players', 'graphics', 'hide.players', false),
                 toggle('Hide other players\' pets', 'graphics', 'hide.pets', false),
                 toggle('Hide other players\' trusts', 'graphics', 'hide.trusts', false),
                 subheader('Fog'),
                 distance_fog,
-                custom_fog(free(slider('Custom fog starts at', 'graphics', 'fog.start', 100, 0, 1000, 10, '%d'), 0, 5000)),
-                custom_fog(free(slider('Custom fog ends at', 'graphics', 'fog.end', 400, 10, 1000, 10, '%d'), 0, 5000)),
+                -- shown in hundreds (7 is 700; fog.start keeps its own units)
+                custom_fog(shown_as(free(slider('Custom fog starts at', 'graphics', 'fog.start', 1, 1, 20, 1, '%d'), 0, 50), 0.01)),
+                custom_fog(shown_as(free(slider('Custom fog ends at', 'graphics', 'fog.end', 4, 1, 100, 1, '%d'), 0, 200), 0.01)),
                 effect('Shadows', 'sun', 0.6),
                 note("The game's own shadows are turned off while these are on, on purpose: they would draw twice. "
                      .. "Turning these off leaves the game's off: Config > Shadows puts them back."),
@@ -5379,6 +5425,7 @@ local TABS = {
                 anchor('macrooptions', true),
                 element('Main Menu: Config', 'Main Menu'),
                 toggle('Hide', 'client', 'configmenu.hide', false),
+                toggle('Enable extended game settings', 'client', 'gamesettings.extended', false),
                 subheader('Position'),
                 place('Position', 'configmenu', 'X: its right edge. Y: its top edge. The list Config opens (Gameplay, Chat Filters...). Off, it goes with the main menu.', 99.4, 3, 'configmenu'),
                 anchor('configmenu', true),
@@ -6321,6 +6368,8 @@ local TABS = {
                 -- the target's arrow and lock-on (the HUD Manager's Target Window had them until 2026-11-05)
                 header('Target'),
                 toggle('Show the arrow over the target', 'client', 'target.arrow', true),
+                -- how far away it can be targeted ([graphics] drawdistance.target; was on Graphics > Draw distance)
+                choice('Targeting distance', 'graphics', 'drawdistance.target', 'game', { { 'game', "Game's distance" }, { 'drawn', 'As far as drawn' } }),
                 subheader('Lock-on'),
                 choice('Lock-on style', 'client', 'target.lock', 'game', { { 'game', 'Game' }, { 'glow', 'Glowing border' }, { 'none', 'None' } }),
                 colour_pick('Lock-on colour', 'client', 'target.lock.color', '#FF2A2A'),
