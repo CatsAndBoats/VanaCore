@@ -620,7 +620,6 @@ function M.draw_debug(now)
         local cy = y + S(TITLE_H) / 2
         M.icon_centred(dl, lx + S(5), cy, 'bug', P.accent, 11)
         M.text_mid(dl, lx + S(18), cy, 'Debug', P.white, fonts.semi, BODY + 2)
-        M.text_right_mid(dl, x + pw - S(PAD) - S(22), cy + S(1), '/vana debug', P.faint, fonts.text, SMALL)
         if M.icon_button('##debug.close', x + pw - S(PAD), cy, 'close', 11, P.rose) then
             dbg.open = false
         end
