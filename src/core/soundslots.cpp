@@ -43,13 +43,29 @@ constexpr std::ptrdiff_t kCapSetting = 2, kCapForced = 25;
 constexpr std::ptrdiff_t kWalksBefore = 0x6000, kWalksAfter = 0x1000;
 constexpr int kWalks = 26;
 
+// A sound that couldn't start (the max sounds check full, or no sound) is handed the handle -1 (the cap's or eax,-1), and
+// the sound thread takes a handle below 0 as every sound playing: its commands 3 (position and volume) and 5 (fade out)
+// then change them all. The two calls that send a world sound's kept handle (+1E0h of its owner) check it only for 0.
+// A world sound's position (FUN_10038250, __cdecl: the sound, its value, the time): push esi; mov esi,[<sound>];
+// test esi,esi; jz; mov ecx,[esp+0Ch]; mov eax,[esp+10h]; push eax; fld dword ptr [ecx]; call ftol
+constexpr char kPosition[] = "56 8B 35 ?? ?? ?? ?? 85 F6 74 1D 8B 4C 24 0C 8B 44 24 10 50 D9 01 E8";
+constexpr std::size_t kPositionPrologue = 7; // push esi; mov esi,[<sound>]
+// A world sound's stop (FUN_100369F0, __thiscall, ret 8: the sound, the fade's time): mov al,[]; mov byte ptr [],1;
+// test al,al; jz; mov ecx,[<sound>]; test ecx,ecx; jz; jmp <command 5>; ret 8
+constexpr char kStop[] = "A0 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 84 C0 74 0F 8B 0D ?? ?? ?? ?? 85 C9 74 05 E9 ?? ?? ?? ?? C2 08 00";
+constexpr std::size_t kStopPrologue = 5; // mov al,[]
+
 using New = void*(__cdecl*)(std::size_t);
 using CreateThreadFunction = HANDLE(WINAPI*)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, LPVOID, DWORD, LPDWORD);
+using Position = void(__cdecl*)(int sound, const float* value, int time);
+using Stop = void(__thiscall*)(void* self, int sound, int time);
 
-int g_slots = 0; // asked for: 21 to 100
+int g_slots = 0; // asked for: 21 to 100, else 0
 bool g_done = false;
 HMODULE g_game = nullptr;
 CreateThreadFunction g_create_thread = nullptr;
+Position g_position = nullptr;
+Stop g_stop = nullptr;
 
 std::uint32_t read32(std::uintptr_t at)
 {
@@ -179,14 +195,50 @@ void make_slots()
                kWalks);
 }
 
+// A handle below 0 (a sound that never started) sent as 0, which the sound thread takes as no sound: the call's own
+// work is done as before
+void __cdecl position_hook(int sound, const float* value, int time)
+{
+    g_position(sound < 0 ? 0 : sound, value, time);
+}
+
+void __fastcall stop_hook(void* self, void*, int sound, int time)
+{
+    g_stop(self, sound < 0 ? 0 : sound, time);
+}
+
+void guard_handles()
+{
+    const std::uintptr_t position = scan::find(g_game, kPosition);
+    const std::uintptr_t stop = scan::find(g_game, kStop);
+    if (position == 0 || stop == 0) {
+        log::write(L"Sound: a world sound's %ls isn't as VanaCore knows it in FFXiMain.dll: a sound that couldn't start can "
+                   L"still move or stop every sound",
+                   position == 0 ? L"position" : L"stop");
+        return;
+    }
+    if (!imports::detour(reinterpret_cast<Position>(position), kPositionPrologue, &position_hook, g_position) ||
+        !imports::detour(reinterpret_cast<Stop>(stop), kStopPrologue, reinterpret_cast<Stop>(&stop_hook), g_stop)) {
+        log::write(L"Sound: a world sound's position and stop couldn't be hooked: a sound that couldn't start can still "
+                   L"move or stop every sound");
+        return;
+    }
+    const auto base = reinterpret_cast<std::uintptr_t>(g_game);
+    log::write(L"Sound: a sound that couldn't start no longer moves or stops every sound (position +0x%X, stop +0x%X)",
+               static_cast<unsigned>(position - base), static_cast<unsigned>(stop - base));
+}
+
 HANDLE WINAPI create_thread(LPSECURITY_ATTRIBUTES security, SIZE_T stack, LPTHREAD_START_ROUTINE start, LPVOID parameter,
                             DWORD flags, LPDWORD id)
 {
-    // The sound thread is started once the slots are made and before anything else uses them
+    // The sound thread is started once the slots are made and before anything else uses them; the game's code is
+    // decrypted by then
     if (!g_done && scan::find(reinterpret_cast<std::uintptr_t>(start), sizeof kThread / 3, kThread) ==
                        reinterpret_cast<std::uintptr_t>(start)) {
         g_done = true;
-        make_slots();
+        guard_handles();
+        if (g_slots > 0)
+            make_slots();
     }
     return g_create_thread(security, stack, start, parameter, flags, id);
 }
@@ -195,7 +247,8 @@ void on_game_loaded(HMODULE module)
 {
     g_game = module;
     if (!imports::hook(module, "KERNEL32.dll", "CreateThread", &create_thread, g_create_thread))
-        log::write(L"Sound: FFXiMain.dll's CreateThread can't be hooked: the game keeps its 20 sound slots");
+        log::write(L"Sound: FFXiMain.dll's CreateThread can't be hooked: the game keeps its 20 sound slots, and a sound that "
+                   L"couldn't start can still move or stop every sound");
 }
 
 } // namespace
@@ -204,11 +257,11 @@ void install()
 {
     const std::wstring text = registry::setting("0029");
     const long asked = text.empty() ? 0 : std::wcstol(text.c_str(), nullptr, 10);
-    if (asked <= kGame)
-        return;
-    g_slots = static_cast<int>(std::min<long>(asked, kMost));
-    if (asked > kMost)
-        log::write(L"Sound: sound.max_sounds=%ld is more than the %d sound slots VanaCore makes: %d", asked, kMost, kMost);
+    if (asked > kGame) {
+        g_slots = static_cast<int>(std::min<long>(asked, kMost));
+        if (asked > kMost)
+            log::write(L"Sound: sound.max_sounds=%ld is more than the %d sound slots VanaCore makes: %d", asked, kMost, kMost);
+    }
     if (!imports::when_loaded(L"FFXiMain.dll", &on_game_loaded))
         log::write(L"Sound: FFXiMain.dll can't be watched for: the game keeps its 20 sound slots");
 }

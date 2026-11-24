@@ -231,7 +231,7 @@ extern "C" DWORD WINAPI VanaCoreInstall(LPVOID param)
         vanacore::noblink::install(g_boot.settings_ini); // [client] blink.disable: your character doesn't blink on a gear change
         vanacore::fishing::install(g_boot.settings_ini); // [input] fishing.dpad: the D-pad fights a hooked fish
         vanacore::sound::install(g_boot.settings_ini); // [client] sound.follow: the game's sound moves with Windows' default output
-        vanacore::soundslots::install(); // [ffxi] sound.max_sounds above 20: that many sound slots
+        vanacore::soundslots::install(); // [ffxi] sound.max_sounds above 20: that many sound slots; failed sounds' -1
         vanacore::autologin::install(g_boot.settings_ini); // [client] autologin: the title screen goes by on its own
         vanacore::helpbar::install(g_boot.settings_ini); // [client] helpbar.*: the help bar's frame, title, text, caption
         vanacore::targetwin::install(g_boot.settings_ini); // [client] target.move: the Target window at the top middle
