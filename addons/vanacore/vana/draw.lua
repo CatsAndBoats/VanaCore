@@ -699,11 +699,13 @@ M.RESET_W = 20   -- a reset icon and the gap after it, before its control
 
 -- A setting's reset icon from x (M.RESET_W across, its control after it): lit when `can_reset` (the setting isn't its
 -- default), brighter under the mouse. Every setting's, a slider's and the rest (vana.lua M.row_reset). Returns clicked.
--- (2026-11-23: not drawn any more, a setting's nor a sub-panel's: only each panel heading's Reset button stays. The room
--- it took is kept so no control moves; set true to bring them back.)
-M.ROW_RESETS = false
+-- (2026-11-23: not drawn on the DLSS panel, a setting's nor a sub-panel's: only its heading's Reset button stays. M.hide_resets
+-- is set while that section is drawn (vana.lua draw_section). The room the icon took is kept so no control moves. M.ROW_RESETS
+-- false would hide them everywhere.)
+M.ROW_RESETS = true
+M.hide_resets = false
 function M.reset_icon(id, x, cy, can_reset, enabled, alpha)
-    if not M.ROW_RESETS then
+    if not M.ROW_RESETS or M.hide_resets then
         return false
     end
     local hov, clicked = hit(id, x - S(2), cy - S(10), S(18), S(20))

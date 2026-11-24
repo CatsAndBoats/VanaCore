@@ -2911,7 +2911,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
                 after = true
             end
         end
-        for _, other in ipairs(M.ROW_RESETS and sub_rows or {}) do
+        for _, other in ipairs(M.ROW_RESETS and not M.hide_resets and sub_rows or {}) do
             if M.resettable(other) or other.reset ~= nil then
                 local reset_clicked, reset_hovered = M.icon_button(id .. '.reset', line_end - S(8), cy, 'reset', 9, P.text, P.faint)
                 if reset_clicked then
@@ -3625,6 +3625,7 @@ end
 
 local function draw_section(page, sec, x, y, w, over_title, rows)
     local ry = y
+    M.hide_resets = sec.title == 'DLSS' -- (no reset icons beside the DLSS panel's settings: draw.lua reset_icon)
     local ctx = { off = false, panel_off = false } -- (panel_off: the heading's switch or effect, for each sub-panel's: draw_row)
     -- (a bare heading isn't drawn but in a search's results: Client > VanaCore's, the banner under it says it)
     if sec.head ~= nil and not (sec.head.bare and st.search[1] == '') then
@@ -3681,6 +3682,7 @@ local function draw_section(page, sec, x, y, w, over_title, rows)
             i = i + 1
         end
     end
+    M.hide_resets = false
     return ry - y + S(4)
 end
 
