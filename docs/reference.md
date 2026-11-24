@@ -172,6 +172,15 @@ The resolutions take `auto` (the display's resolution as Windows has it: the mai
 
 `mode` (`0034`, default `borderless fullscreen`) is in Window below, and `resolution.game` is also the window's size there.
 
+#### Sound slots
+The game plays each sound in one of its sound slots, 20 of them, and `sound.max_sounds` caps how many it starts at once. Above `20`, VanaCore gives the game that many slots (`src/core/soundslots.cpp`), just before its sound thread starts: the slots' allocation, the 26 places that walk over them (starting a sound, picking a slot, stealing one, stopping, volume and fades, and the check that a loaded sound isn't playing before its data is freed for another) and the max sounds check's forced 20 are rewritten, and the game's 20 slots are swapped for the new ones. The log says `Sound: 100 sound slots (the game's 20: setup +0x249F76, 26 walks)`; when the game's code isn't the one VanaCore knows, it says so and the game keeps its 20. `20` or less leaves the game as it is. Read at start.
+- One walk stays at 20 on purpose: the sound thread's status list (its command 13), which fills a list of 20 the caller hands it. Nothing in VanaCore reads it.
+- More slots don't mean more of every sound at once. Most sounds have a group in their header (bits `0x01`, `0x04`, `0x10`, ...): starting one stops the sounds of the same group playing at the same or a lower priority, as the game always has, so the menus' sounds (three groups) never overlap past three or four. A sound with the `0x20` bit plays once at a time (asked again, it starts over). Sounds of different groups, or none, fill the slots: 100 slots held 100 sounds of one menu sound with its group cleared (`0x10` to `0`) for the test.
+- The game keeps at most 22 sound files loaded (a table at `0x1063445C`, the least recently used freed for the next). That limits how many different sounds are ready at a time, not how many play: many voices can play the same file.
+- When every slot is busy, a new sound takes the slot of one with a lower priority, or isn't played. More slots make that rarer; they don't change which one is taken.
+
+The idea and the first look at it are thanks to Settra.
+
 `[ffxi.registry]` sets the same values by the names the game reads them by (`0001=1920`, `padmode000=...`), for the few `[ffxi]` doesn't name (`0020`, `0024`, `0031`–`0033`, whose meaning is unknown). Whole numbers are served as `REG_DWORD`, anything else as `REG_SZ`. For a value both set, `[ffxi]`'s wins, or `[ffxi.registry]`'s with `registry.override=1` (`Game settings: 0001=1920 from [ffxi.registry] is ignored: [ffxi] resolution.game sets it (registry.override=0)`); either wins over `[ffxi]`'s defaults.
 
 `[language] playonline=` sets the game's text language: `1` Japanese, `2` English, `0` (default) the game's own setting. PlayOnline keeps it as `Language` (0 Japanese, 1 English) in `HKLM\SOFTWARE\PlayOnline[US|EU]\SquareEnix\PlayOnlineViewer\Settings`, which the bootloader reads and hands to the game; VanaCore serves that value the same way as `[ffxi]`'s. The PlayOnline region (which registry keys and polcore the bootloader uses) is separate: xiloader's `--lang JP|US|EU` on the command line, US by default.
@@ -181,7 +190,7 @@ The resolutions take `auto` (the display's resolution as Windows has it: the mai
 
 | Key | Default | Row |
 |-----|---------|-----|
-| `sound.world` | `100` | World Sounds Volume: the world's and battle's sounds, `0`–`100`, as a share of Sound Effects Volume |
+| `sound.world` | `100` | World Sounds Volume: the world's and battle's sounds, the weather (rain, wind) and the zones' and events' ambient loops, `0`–`100`, as a share of Sound Effects Volume. Moving it changes weather already playing at once; the other loops at their next fade |
 | `sound.interface` | `100` | Interface Sounds Volume: the menus' sounds (the cursor, select, cancel, errors), `0`–`100`, as a share of Sound Effects Volume |
 
 Both are heard as they move and saved when the slider is let go. Which sound is which goes by where the game plays it from, as By-T0r's VanaSound does it (`src/core/soundmix.cpp`): sounds played from elsewhere, and music, keep Sound Effects Volume and Music Volume alone. The shares apply only while the setting is on. The window is rebuilt from the game's own (its panel's parts from the English menu DAT the game loaded, `ROM\119\51.DAT` or pivot's overlay of it), so with a game in Japanese, or a menu DAT whose Gameplay window isn't the one VanaCore knows, it's left as it is (`Game settings: the game's Gameplay window isn't the one VanaCore knows (...)` in the log). Applies while the game runs, once the window is closed. Default: `0`. The volume options are thanks to Settra.
