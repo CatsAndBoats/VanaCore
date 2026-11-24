@@ -138,6 +138,8 @@ exit /b 0</Command>
     <ClCompile Include="clipboard.cpp" />
     <ClCompile Include="commands.cpp" />
     <ClCompile Include="configmenu.cpp" />
+    <ClCompile Include="gamesettings.cpp" />
+    <ClCompile Include="soundmix.cpp" />
     <ClCompile Include="menuhover.cpp" />
     <ClCompile Include="singlemenu.cpp" />
     <ClCompile Include="sliders.cpp" />
@@ -418,6 +420,9 @@ exit /b 0</Command>
     <ClInclude Include="clipboard.hpp" />
     <ClInclude Include="commands.hpp" />
     <ClInclude Include="configmenu.hpp" />
+    <ClInclude Include="gamesettings.hpp" />
+    <ClInclude Include="menufont.hpp" />
+    <ClInclude Include="soundmix.hpp" />
     <ClInclude Include="menuhover.hpp" />
     <ClInclude Include="singlemenu.hpp" />
     <ClInclude Include="sliders.hpp" />

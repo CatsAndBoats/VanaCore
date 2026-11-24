@@ -31,6 +31,7 @@
 #include "chattabs.hpp"
 #include "client.hpp"
 #include "configmenu.hpp"
+#include "gamesettings.hpp"
 #include "singlemenu.hpp"
 #include "equipfirst.hpp"
 #include "sound.hpp"
@@ -240,6 +241,7 @@ extern "C" DWORD WINAPI VanaCoreInstall(LPVOID param)
         vanacore::macrobar::install(g_boot.settings_ini); // [client] macrobar.mode: how the macro bar keys show the bar
         vanacore::menuhover::install(g_boot.settings_ini); // [client] menu.hovermove: the mouse picks a menu row only when it moves
         vanacore::configmenu::install(g_boot.settings_ini); // [client] configmenu: VanaCore in the game's Config list
+        vanacore::gamesettings::install(g_boot.settings_ini); // [client] gamesettings.extended: Config > Gameplay's own rows
         vanacore::singlemenu::install(g_boot.settings_ini); // [client] singlemenu: the main menu's two pages as one list
         vanacore::equipfirst::install(g_boot.settings_ini); // [client] macrooptions.equipfirst: an equip set's options with Equip first
         vanacore::partymenu::install(g_boot.settings_ini); // [client] partyfinder.findmember: Party > Find Member opens Party Finder

@@ -38,6 +38,7 @@
 #include "commands.hpp"
 #include "clients.hpp"
 #include "configmenu.hpp"
+#include "gamesettings.hpp"
 #include "singlemenu.hpp"
 #include "sliders.hpp"
 #include "equipfirst.hpp"
@@ -1011,6 +1012,7 @@ HRESULT __stdcall present(void* device, const RECT* source, const RECT* dest, HW
         menuhover::on_frame(); // [client] menu.hovermove: the mouse picks a menu row only when it moves
         gamewin::on_frame();   // vana.gameui.watch: watched windows that closed told (before the addons' frame below)
         configmenu::on_frame(); // [client] configmenu: VanaCore's item in the game's Config list
+        gamesettings::on_frame(); // [client] gamesettings.extended: Config > Gameplay with VanaCore's rows
         singlemenu::on_frame(); // [client] singlemenu: the main menu's two pages as one list
         equipfirst::on_frame(); // [client] macrooptions.equipfirst: an equip set's options with Equip first
         namechars::on_frame(g_ini.c_str()); // [client] macronames.extended: book and equip set names take spaces and symbols
@@ -1235,6 +1237,7 @@ void check_settings()
     macrobar::reload(g_ini.c_str());
     menuhover::reload(g_ini.c_str());
     configmenu::reload(g_ini.c_str());
+    gamesettings::reload(g_ini.c_str());
     singlemenu::reload(g_ini.c_str());
     equipfirst::reload(g_ini.c_str());
     namechars::reload(g_ini.c_str());
