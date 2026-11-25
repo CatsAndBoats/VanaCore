@@ -1484,7 +1484,7 @@ end
 -- Rows
 -------------------------------------------------------------------------------
 
-local ROW_H = 27
+local ROW_H = 31
 local CONTROLS_H = 70 -- a controls row's panel (the HUD's Settings: what the mouse does to the boxes)
 local FILTER_GAP = 8 -- above the Addons and Plugins pages' search row
 local PAD = 18     -- the sidebar's margin, and the page's title line's
@@ -2911,7 +2911,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         if row.switch ~= nil then
             local ok, on = pcall(row.switch.get)
             sw_on = ok and on or false
-            local new, flipped = M.switch(id, right - S(M.SW_W), cy, sw_on, enabled, alpha)
+            local new, flipped = M.switch(id, right - S(M.SW_W), cy, sw_on, enabled, alpha, nil, M.SW_GREEN)
             if flipped then
                 M.flush()
                 pcall(row.switch.set, new)
@@ -3447,7 +3447,7 @@ local function draw_heading(page, sec, x, y, w, over_title)
     if head.effect then
         -- an effect's switch: on while it isn't switched off and its strength is above 0
         local on = M.effect_on(head)
-        local new, flipped = M.switch(switch_id, line_end - S(M.SW_W), cy, on, enabled and M.effects_available(), alpha)
+        local new, flipped = M.switch(switch_id, line_end - S(M.SW_W), cy, on, enabled and M.effects_available(), alpha, nil, M.SW_GREEN)
         if flipped then
             M.flush()
             M.set_effect(head, new)
@@ -3459,7 +3459,7 @@ local function draw_heading(page, sec, x, y, w, over_title)
     elseif head.switch ~= nil then
         local ok, on = pcall(head.switch.get)
         on = ok and on or false
-        local new, flipped = M.switch(switch_id, line_end - S(M.SW_W), cy, on, enabled, alpha)
+        local new, flipped = M.switch(switch_id, line_end - S(M.SW_W), cy, on, enabled, alpha, nil, M.SW_GREEN)
         if flipped then
             M.flush()
             pcall(head.switch.set, new)
@@ -3603,7 +3603,7 @@ M.draw_headline = function (row, id, x, y, w, alpha, enabled, carded)
     if row.switch ~= nil then
         local ok, on = pcall(row.switch.get)
         on = ok and on or false
-        local new, flipped = M.switch(id .. '.switch', line_end - S(M.SW_W), cy, on, enabled, alpha)
+        local new, flipped = M.switch(id .. '.switch', line_end - S(M.SW_W), cy, on, enabled, alpha, nil, M.SW_GREEN)
         if flipped then
             M.flush()
             pcall(row.switch.set, new)
@@ -4554,7 +4554,7 @@ local function draw_sidebar(x, y, w, h)
     end
 
     if st.hybrid then -- (the tools are icons in the header, the pages its tabs: only this page's sub-tabs are listed)
-        M.hy.nav(x, sy + S(SEARCH_H) + S(8), w, y + h - S(6), searching)
+        M.hy.nav(x, sy + S(SEARCH_H) + S(8), w, y + h - S(36), searching) -- (a strip under it for the hide button: a child takes the mouse over it)
         return
     end
 
@@ -4954,6 +4954,9 @@ local function draw_page(x, y, w, h, hy)
     -- the sections, scrolling: with sub-tabs, the one picked (and any rows before the first heading), each its own scroll.
     -- They stop above the resize corner (a child over it would take its mouse)
     local bottom = y + h - S(RESIZE.GRIP) - S(2)
+    if hy and not st.sidebar then
+        bottom = y + h - S(36) -- (the hide button's strip at the bottom left, which a child would take the mouse from)
+    end
     imgui.SetCursorScreenPos({ x, y + title_h + 1 })
     st.view_top, st.view_bottom = y + title_h + 1, bottom
     local child = searching and 'search' or page.id .. (shown ~= nil and '.' .. shown.title or '')
@@ -5287,7 +5290,7 @@ local function draw_window()
     local pw, ph = S(math.max(WIN_W, size[1])), S(math.max(RESIZE.MIN_H, size[2]))
     local m = S(MARGIN)
     -- the list of pages slides shut (and open) and the window narrows by it; its contents draw once it's fully open
-    local side = S(SIDE_W) * M.ease('sidebar', (st.sidebar or st.hybrid) and 1 or 0, 14)
+    local side = S(SIDE_W) * M.ease('sidebar', st.sidebar and 1 or 0, 14)
     pw = pw - S(SIDE_W) + side
     local ww, wh = math.min(pw + m * 2, screen_w), math.min(ph + m * 2, screen_h)
     pw, ph = ww - m * 2, wh - m * 2
@@ -5358,6 +5361,9 @@ local function draw_window()
             M.vline(dl, x + side, y + top, y + ph, P.border)
             px = x + side + 1
         end
+        if hy and not st.sidebar then -- the list hidden: the strip at the bottom in the header's colour
+            M.fill(dl, x, y + ph - S(36), pw, S(36), P.side, radius, M.CORNERS.bottom)
+        end
         M.outline(dl, x, y, pw, ph, P.border, radius)
 
         if side >= S(SIDE_W) then
@@ -5365,6 +5371,22 @@ local function draw_window()
         end
         draw_page(px, y + top, x + pw - px, ph - top, hy)
         RESIZE.corner(dl, x, y, pw, ph, side, screen_w, screen_h)
+        if hy then -- the list at the left hidden or shown again, in the window's bottom-left corner (a search is cleared with it)
+            if not st.sidebar then -- (the list hidden: a line across above the strip, between the page and the button)
+                M.hline(dl, x + S(1), x + pw - S(1), y + ph - S(36), P.border)
+            end
+            local switched, over_switch = M.icon_button('##sidebar', x + S(PAD), y + ph - S(PAD), 'bars', 10.5, P.text, P.dim)
+            if switched then
+                st.sidebar = not st.sidebar
+                if not st.sidebar then
+                    st.search[1] = ''
+                end
+                save_settings()
+            end
+            if over_switch then
+                M.tooltip(st.sidebar and 'Hide the list at the left' or 'Show the list at the left')
+            end
+        end
         if not st.hover_seen then
             st.hover_key = nil
         end

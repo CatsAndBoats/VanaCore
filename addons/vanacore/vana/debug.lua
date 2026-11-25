@@ -583,7 +583,12 @@ function M.draw_debug(now)
             tab, index = t, i
         end
     end
-    local pw = S(WIN_W)
+    -- wide enough for the tabs' bar (each name and 12 either side, the bar's 3 round them, the window's margins)
+    local bar_w = S(6 + PAD * 2)
+    for _, label in ipairs(TAB_LABELS) do
+        bar_w = bar_w + M.measure(label, fonts.semi, BODY) + S(24)
+    end
+    local pw = math.max(S(WIN_W), bar_w)
     local ph = S(TITLE_H) + S(TABS_H) + tab.height() + S(PAD)
 
     local dw, _, k = M.display(screen_w, screen_h) -- ImGui's pixels, where it's drawn k times its size
@@ -611,10 +616,9 @@ function M.draw_debug(now)
         M.hline(dl, x, x + pw, y + S(TITLE_H), P.line)
 
         -- the tabs, each one's full name its tooltip; the one picked shows from the next frame, the window sized for it
-        local picked, moved, over = M.segments('##debug.tabs', lx, y + S(TITLE_H) + S(TABS_H) / 2, TAB_LABELS, index, true)
-        if over ~= nil and TABS[over].title ~= TABS[over].tab then
-            M.tooltip(TABS[over].title)
-        end
+        -- (the bar of Game Options > Buttons': M.tabs, its bar standing at lx, centred in the tabs' strip)
+        local picked, moved = M.tabs('##debug.tabs', lx - S(M.TAB_PAD) + S(4), y + S(TITLE_H) + (S(TABS_H) - S(M.TABS_H)) / 2,
+                                     x + pw, TAB_LABELS, index)
         if moved then
             dbg.tab = TABS[picked].id
         end

@@ -672,7 +672,42 @@ end
 M.SW_W, M.SW_H = 32, 17
 
 -- `colour`: the track's when on (row.colour: the Buttons tabs' Enable, light green), the accent's if none
-function M.switch(id, x, cy, on, enabled, alpha_scale, colour)
+-- a round-ended pill shaded left to right, `from` to `to` (colours), one rectangle for each pixel row of the corners and one
+-- for the rest, so there's no seam. `scale` its alpha.
+local function pill_gradient(dl, x, y, w, h, from, to, scale)
+    local r, top, rows = math.max(1, math.floor(h / 2 + 0.5)), math.floor(y + 0.5), math.floor(h + 0.5)
+    local function strip(a, b, inset)
+        local l, rr = u32(mix(from, to, inset / w), scale), u32(mix(from, to, (w - inset) / w), scale)
+        dl:AddRectFilledMultiColor({ x + inset, a }, { x + w - inset, b }, l, rr, rr, l)
+    end
+    for k = 0, r - 1 do
+        local inset = r - math.sqrt(r * r - (r - k - 0.5) ^ 2)
+        strip(top + k, top + k + 1, inset)
+        strip(top + rows - k - 1, top + rows - k, inset)
+    end
+    strip(top + r, top + rows - r, 0)
+end
+
+-- an inset on a pill: a shadow along its top fading down (and a little down its sides' curve), a faint light on its bottom edge, so
+-- it looks pressed into the page. `alpha` scales both.
+local function pill_inset(dl, x, y, w, h, alpha)
+    local r, top, rows = math.max(1, math.floor(h / 2 + 0.5)), math.floor(y + 0.5), math.floor(h + 0.5)
+    local depth = math.max(3, math.floor(h * 0.4 + 0.5))
+    local function row(k, colour, a) -- the pill's k-th pixel row from its top
+        local inset = k < r and r - math.sqrt(r * r - (r - k - 0.5) ^ 2) or 0
+        dl:AddRectFilled({ x + inset, top + k }, { x + w - inset, top + k + 1 }, u32(colour, a))
+    end
+    for k = 0, depth - 1 do
+        row(k, '#000000', 0.42 * (1 - k / depth) * alpha)
+    end
+    row(rows - 1, '#FFFFFF', 0.12 * alpha)
+end
+
+M.SW_GREEN = { '#1B6B3A', '#62D68F' } -- a category's switch on: dark green to light green, left to right
+
+-- `colour`: the track's when on (row.colour: the Buttons tabs' Enable, light green), the accent's if none. `gradient`: { dark, light }
+-- shades the track instead (M.SW_GREEN: the headings' switches)
+function M.switch(id, x, cy, on, enabled, alpha_scale, colour, gradient)
     local w, h = S(M.SW_W), S(M.SW_H)
     local y = cy - h / 2
     local hovered, clicked = hit(id, x, y, w, h)
@@ -684,12 +719,23 @@ function M.switch(id, x, cy, on, enabled, alpha_scale, colour)
     local t = ease(id, on and 1 or 0)
     local dl = imgui.GetWindowDrawList()
     local alpha = (enabled and 1 or 0.4) * (alpha_scale or 1)
-    fill(dl, x, y, w, h, mix(P.off, colour or P.accent, t), h / 2, 0, alpha)
+    if gradient ~= nil then
+        fill(dl, x, y, w, h, P.off, h / 2, 0, alpha)
+        if t > 0.01 then
+            pill_gradient(dl, x, y, w, h, gradient[1], gradient[2], t * alpha)
+        end
+        pill_inset(dl, x, y, w, h, alpha)
+    else
+        fill(dl, x, y, w, h, mix(P.off, colour or P.accent, t), h / 2, 0, alpha)
+    end
     if hovered and enabled then
         fill(dl, x, y, w, h, '#FFFFFF', h / 2, 0, 0.08)
     end
     local r = (h - S(4)) / 2
     local kx = x + S(2) + r + (w - S(4) - r * 2) * t
+    if gradient ~= nil then -- (a small shadow under the knob, sunk in its track)
+        circle(dl, kx, y + h / 2 + S(1), r, '#000000', 0.35 * alpha)
+    end
     circle(dl, kx, y + h / 2, r, P.knob, alpha)
     return on, changed
 end
