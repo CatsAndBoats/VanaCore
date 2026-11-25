@@ -22,8 +22,9 @@ public:
 
     // Starts its thread and returns once it's on the screen (or couldn't be: no Direct2D, then there's no splash)
     void show();
-    // Its line and progress (0-1; below 0, a sweep that doesn't end), from any thread
-    void status(const std::wstring& text, float progress);
+    // Its line and progress (0-1; below 0, a sweep that doesn't end), from any thread; a `note` (something that didn't
+    // work out, not stopping anything) in amber
+    void status(const std::wstring& text, float progress, bool note = false);
     // Closed, from any thread (nothing once it is)
     void close();
     // The player closed it with its X
@@ -50,6 +51,7 @@ private:
     std::mutex mutex_; // what status() set, read by render()
     std::wstring text_ = L"Starting\x2026";
     float progress_ = -1;
+    bool note_ = false;
 };
 
 } // namespace vcapp

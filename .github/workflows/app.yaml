@@ -161,7 +161,9 @@ jobs:
           $bad | ForEach-Object { "::error::No valid signature: $($_.FullName)" }
           if ($bad) { exit 1 }
 
-      # The zip: the two files and app.json (the versions and API, for the next release's exe check)
+      # app.json: the versions, the API and the DLL's SHA-256 (the next release's exe check reads it from the zip; the
+      # splash's update check from the release, beside VanaCoreApp.dll, before it downloads the DLL). The zip: the two
+      # files and app.json.
       - name: Zip
         shell: pwsh
         env:
@@ -169,8 +171,9 @@ jobs:
           EXE: ${{ steps.version.outputs.exe }}
           API: ${{ steps.version.outputs.api }}
         run: |
-          @{ version = $env:VERSION; exe_version = $env:EXE; api = [int]$env:API } | ConvertTo-Json |
-            Set-Content build/app/VanaCoreApp/app.json -Encoding utf8
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath build/app/VanaCoreApp/VanaCoreApp.dll).Hash.ToLower()
+          $json = [ordered]@{ version = $env:VERSION; exe_version = $env:EXE; api = [int]$env:API; dll_sha256 = $sha } | ConvertTo-Json
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path build/app/VanaCoreApp) app.json), $json, [Text.UTF8Encoding]::new($false))
           Compress-Archive -Path build/app/VanaCoreApp/* -DestinationPath "build/app/VanaCoreApp-$env:VERSION.zip"
 
       # ---- Push to vcdev (the two files alone)
@@ -214,7 +217,9 @@ jobs:
           gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
             Where-Object { $_.draft -and $_.name -eq "VanaCoreApp $env:VERSION" } |
             ForEach-Object { gh api -X DELETE "repos/${{ github.repository }}/releases/$($_.id)"; "Replaced the earlier draft of VanaCoreApp $env:VERSION" }
-          gh release create "app-v$env:VERSION" "build/app/VanaCoreApp-$env:VERSION.zip" --draft --latest=false `
+          # the zip (VanaCore's bundling), and the DLL and app.json on their own (VanaCoreApp.exe's update check)
+          gh release create "app-v$env:VERSION" "build/app/VanaCoreApp-$env:VERSION.zip" build/app/VanaCoreApp/VanaCoreApp.dll `
+            build/app/VanaCoreApp/app.json --draft --latest=false `
             --target (git rev-parse HEAD) --title "VanaCoreApp $env:VERSION" --notes-file build/app/notes.md
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "Draft release VanaCoreApp $env:VERSION made, and its files are on vcdev: prod publishes it." >> $env:GITHUB_STEP_SUMMARY

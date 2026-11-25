@@ -19,6 +19,16 @@ msbuild app\VanaCoreApp.sln -p:Configuration=Release -p:Platform=x86
 
 Both land in `app\build\Release\` (Debug in `app\build\Debug\`), each with its `.pdb`.
 
+## Updating
+
+At the splash, VanaCoreApp.exe asks GitHub for the newest published App release (`app-v<version>`, not a draft) and
+compares it with VanaCoreApp.dll's own version. A newer one is downloaded (the release's `VanaCoreApp.dll`), checked
+against `app.json`'s SHA-256, its signature and signer (the exe's), and its version, then swapped in; the old DLL stays
+beside it as `VanaCoreApp.dll.old` and comes back if the new one won't load. Only the DLL: a release whose API needs a newer
+exe is left for the player to download. Anything that fails (no network, GitHub down, a folder that can't be written)
+leaves the DLL as it was, says so on the splash in amber, and the app starts. `--no-update` skips the check;
+`VANACOREAPP_RELEASES` points it at another releases list (a fork's, for testing).
+
 ## Releasing
 
 `.github/workflows/app.yaml`, run by hand, releases the App on its own: its own version (`VCAPP_DLL_VERSION` in

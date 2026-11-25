@@ -1,4 +1,4 @@
-// VanaCoreApp.exe: the splash, the update check (to come), then VanaCoreApp.dll, which has the app itself. Kept small and
+// VanaCoreApp.exe: the splash, VanaCoreApp.dll's update check (update.cpp), then the DLL, which has the app itself. Kept small and
 // changed rarely: a new signed exe starts its certificate's reputation over, a new DLL doesn't (the way the CatsEyeXI
 // launcher's bootstrap and CatsEyeXI-Launcher.App.dll split).
 
@@ -10,6 +10,7 @@
 
 #include "app_api.h"
 #include "splash.h"
+#include "update.h"
 #include "version.h"
 
 namespace {
@@ -48,40 +49,87 @@ int __cdecl host_cancelled()
     return g_splash != nullptr && g_splash->cancelled() ? 1 : 0;
 }
 
-// To come: VanaCoreApp.dll checked against the published one, and a newer one downloaded (checked, then put in its place)
-// before it's loaded. False: the start was cancelled.
-bool check_for_update(vcapp::Splash& splash)
+bool has_argument(const wchar_t* name)
 {
-    splash.status(L"Checking for updates\x2026", -1);
-    // (nothing to check yet: the splash kept up a moment, not a flash)
-    for (int i = 0; i < 12 && !splash.cancelled(); ++i)
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    bool found = false;
+    for (int i = 1; i < argc && !found; ++i)
+        found = _wcsicmp(argv[i], name) == 0;
+    LocalFree(argv);
+    return found;
+}
+
+// A note on the splash, in amber, long enough to read; the start goes on after it
+void show_note(vcapp::Splash& splash, const std::wstring& note)
+{
+    splash.status(note, -1, true);
+    for (int i = 0; i < 40 && !splash.cancelled(); ++i)
         Sleep(50);
+}
+
+// VanaCoreApp.dll brought up to date from GitHub (update.cpp), unless --no-update. Never stops the start: anything that
+// doesn't work out is a note. False: the player closed the splash.
+bool check_for_update(vcapp::Splash& splash, const std::wstring& dir)
+{
+    if (has_argument(L"--no-update"))
+        return true;
+    vcapp::UpdateUi ui;
+    ui.status = [&](const std::wstring& text, float progress) { splash.status(text, progress); };
+    ui.cancelled = [&] { return splash.cancelled(); };
+    const std::wstring note = vcapp::update_dll(dir, ui);
+    if (!note.empty() && !splash.cancelled())
+        show_note(splash, note);
     return !splash.cancelled();
 }
 
-// VanaCoreApp.dll from this folder, its API checked, then the app: its exit code
+struct Loaded {
+    HMODULE dll = nullptr;
+    VanaCoreAppRunFn run = nullptr;
+};
+
+// VanaCoreApp.dll from this folder (its full path: never one found elsewhere), its API this exe's; why not, when it isn't
+Loaded load_app(const std::wstring& path, std::wstring& why)
+{
+    Loaded loaded;
+    loaded.dll = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (loaded.dll == nullptr) {
+        why = L"VanaCoreApp.dll couldn't be loaded (error " + std::to_wstring(GetLastError()) + L").";
+        return loaded;
+    }
+    const auto api = reinterpret_cast<VanaCoreAppApiFn>(GetProcAddress(loaded.dll, "VanaCoreAppApi"));
+    loaded.run = reinterpret_cast<VanaCoreAppRunFn>(GetProcAddress(loaded.dll, "VanaCoreAppRun"));
+    if (api == nullptr || loaded.run == nullptr || api() != VANACOREAPP_API) {
+        why = L"VanaCoreApp.dll is for another version of VanaCoreApp.exe (API " + std::to_wstring(api != nullptr ? api() : 0) +
+              L", this one takes " + std::to_wstring(VANACOREAPP_API) + L").";
+        FreeLibrary(loaded.dll);
+        loaded = Loaded{};
+    }
+    return loaded;
+}
+
+// VanaCoreApp.dll from this folder, its API checked, then the app: its exit code. An updated DLL that won't load gives way
+// to the one it replaced.
 int run_app(const std::wstring& dir, HINSTANCE instance)
 {
     const std::wstring path = dir + L"\\VanaCoreApp.dll";
-    if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+    if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES && !vcapp::restore_dll(dir)) {
         fail(L"VanaCoreApp.dll isn't in " + dir + L".\n\nReinstall VanaCore App to put it back.");
         return 1;
     }
     g_splash->status(L"Loading\x2026", -1);
-    // its full path, its own folder for anything it needs: never a VanaCoreApp.dll found elsewhere
-    const HMODULE dll = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (dll == nullptr) {
-        fail(L"VanaCoreApp.dll couldn't be loaded (error " + std::to_wstring(GetLastError()) + L").");
+    std::wstring why;
+    Loaded loaded = load_app(path, why);
+    if (loaded.dll == nullptr && vcapp::restore_dll(dir)) {
+        show_note(*g_splash, L"The update didn't load: back to the version before");
+        g_splash->status(L"Loading\x2026", -1);
+        loaded = load_app(path, why);
+    }
+    if (loaded.dll == nullptr) {
+        fail(why + L"\n\nReinstall VanaCore App.");
         return 1;
     }
-    const auto api = reinterpret_cast<VanaCoreAppApiFn>(GetProcAddress(dll, "VanaCoreAppApi"));
-    const auto run = reinterpret_cast<VanaCoreAppRunFn>(GetProcAddress(dll, "VanaCoreAppRun"));
-    if (api == nullptr || run == nullptr || api() != VANACOREAPP_API) {
-        fail(L"VanaCoreApp.dll is for another version of VanaCoreApp.exe (API " + std::to_wstring(api != nullptr ? api() : 0) +
-             L", this one takes " + std::to_wstring(VANACOREAPP_API) + L").\n\nReinstall VanaCore App.");
-        FreeLibrary(dll);
-        return 1;
-    }
+    const VanaCoreAppRunFn run = loaded.run;
     const HICON big = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON),
                                                     GetSystemMetrics(SM_CYICON), 0));
     const HICON little = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
@@ -119,8 +167,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
         vcapp::Splash splash(instance);
         g_splash = &splash;
         splash.show();
-        if (check_for_update(splash))
-            code = run_app(exe_dir(), instance);
+        const std::wstring dir = exe_dir();
+        if (check_for_update(splash, dir))
+            code = run_app(dir, instance);
         splash.close();
         g_splash = nullptr;
     }

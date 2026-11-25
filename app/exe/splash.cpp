@@ -33,12 +33,13 @@ void Splash::show()
     WaitForSingleObject(ready_, 5000);
 }
 
-void Splash::status(const std::wstring& text, float progress)
+void Splash::status(const std::wstring& text, float progress, bool note)
 {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         text_ = text;
         progress_ = progress;
+        note_ = note;
     }
     if (const HWND window = window_)
         PostMessageW(window, kStatus, 0, 0);
@@ -91,16 +92,19 @@ void Splash::render()
         return;
     std::wstring text;
     float progress = 0;
+    bool note = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         text = text_;
         progress = progress_;
+        note = note_;
     }
     hits_.clear();
     canvas_.card(0);
     canvas_.logo((kW - kLogo) / 2, 26, kLogo);
     canvas_.text_centred(L"VanaCore", ui::Font::Big, kW / 2, 136, ui::rgb(ui::pal::white));
-    canvas_.text_centred(canvas_.fit(text, ui::Font::Small, kW - kTrackX * 2, false), ui::Font::Small, kW / 2, 172, ui::rgb(ui::pal::dim));
+    canvas_.text_centred(canvas_.fit(text, ui::Font::Small, kW - kTrackX * 2 + 24, false), ui::Font::Small, kW / 2, 172,
+                         ui::rgb(note ? ui::pal::amber : ui::pal::dim));
     // the bar: filled to the progress, or a sweep across it while there's none to show
     const float tw = kW - kTrackX * 2;
     canvas_.fill(kTrackX, kTrackY, tw, kTrackH, kTrackH / 2, ui::rgb(ui::pal::well_edge));

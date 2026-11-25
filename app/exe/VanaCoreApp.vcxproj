@@ -34,12 +34,16 @@
     <TargetName>VanaCoreApp</TargetName>
   </PropertyGroup>
   <ItemGroup>
+    <ClCompile Include="json.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="splash.cpp" />
+    <ClCompile Include="update.cpp" />
     <ClCompile Include="..\shared\ui.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="json.h" />
     <ClInclude Include="splash.h" />
+    <ClInclude Include="update.h" />
     <ClInclude Include="..\shared\app_api.h" />
     <ClInclude Include="..\shared\ui.h" />
     <ClInclude Include="..\shared\version.h" />
