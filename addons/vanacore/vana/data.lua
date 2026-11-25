@@ -2727,9 +2727,8 @@ TIPS.rows = {
     ['graphics.nameplates.size'] = 'How big names over heads are.',
     ['graphics.nameplates.distance'] = 'How much names shrink with distance. 0% keeps them all one size.',
     ['graphics.nameplates.order'] = 'Draws nearer names over farther ones.',
-    ['client.target.name.oneline'] = 'Keeps the Target window\'s name on one line with the game\'s letters: a door\'s "Door:Chamber of\n'
-        .. 'Commerce", which the game splits at the colon, and a name too long for the window, which runs past its edge.\n'
-        .. 'With the name\'s True Font on, it\'s always one line, every letter in that font.',
+    ['client.target.name.oneline'] = 'Keeps the Target window\'s name on one line, even when it\'s too long for the window: it runs past\n'
+        .. 'the edge. Off, a name too long for the window goes onto two lines, as the game has it.',
     ['graphics.nameplates.blink'] ='The name of what you target fades in and out, as the game has it. Off keeps it steady.',
     ['graphics.nameplates.framegen'] = 'With frame generation on, draws names in the frames it makes where they are at that moment,\n'
         .. 'so they keep up with the camera. Off: names step at the game\'s own frame rate.',

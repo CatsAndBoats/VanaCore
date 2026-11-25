@@ -548,8 +548,8 @@ int name_width(const char* text, int room)
 int __cdecl name_hook(int width, int x, int y, const char* text, std::uint32_t colour, int drop, int wrap)
 {
     width = static_cast<short>(width) - 2 * g_pad_x, x = static_cast<short>(x) + g_pad_x, y = static_cast<short>(y) + name_down();
-    // its True Font: the whole name VanaCore's text, on one line (6 lower with `drop`, as the game's one-line draw puts one)
-    if (name_whole(x, y + g_name_y + (drop != 0 ? kLineDrop : 0), width, text, colour))
+    // its True Font: the whole name VanaCore's text, wrapped as the game's when it doesn't fit (targetwin_name.h)
+    if (name_whole(x, y + g_name_y, width, drop != 0, text, colour))
         return x;
     int at_x = x;
     if (g_name_align != 0 && text != nullptr && g_text_fit != nullptr) {
