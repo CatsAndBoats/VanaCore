@@ -14,7 +14,9 @@
 #include <cstring>
 #include <initializer_list>
 #include <string>
+#include <vector>
 
+#include "gui.hpp"
 #include "inject.hpp"
 #include "login.hpp"
 #include "playonline.hpp"
@@ -557,7 +559,7 @@ int run(int argc, wchar_t** argv, const std::wstring& settings_ini)
 
 } // namespace
 
-int wmain(int argc, wchar_t** argv)
+int start(int argc, wchar_t** argv)
 {
     const std::wstring first = argc > 1 ? argv[1] : L"";
     // The game process of VanaCore's own login: VanaCore.Core has set up already (its crash
@@ -608,4 +610,53 @@ int wmain(int argc, wchar_t** argv)
         _getwch();
     }
     return result;
+}
+
+// --gui: the start screen first. What it picks becomes the arguments (--retail, --server, --ini) the rest of VanaCore.exe
+// reads as if they'd been typed; the other arguments stay as given.
+int wmain(int argc, wchar_t** argv)
+{
+    bool gui = false;
+    for (int i = 1; i < argc; ++i)
+        gui = gui || _wcsicmp(argv[i], L"--gui") == 0;
+    if (!gui)
+        return start(argc, argv);
+
+    std::vector<std::wstring> kept{argv[0]};
+    for (int i = 1; i < argc; ++i) {
+        if (_wcsicmp(argv[i], L"--gui") == 0)
+            continue;
+        // the screen decides these three
+        if ((_wcsicmp(argv[i], L"--ini") == 0 || _wcsicmp(argv[i], L"--server") == 0) && i + 1 < argc) {
+            ++i;
+            continue;
+        }
+        if (_wcsicmp(argv[i], L"--retail") == 0)
+            continue;
+        kept.push_back(argv[i]);
+    }
+    const std::wstring given = ini_argument(argc, argv, exe_dir());
+    const std::wstring settings_ini = given.empty() ? exe_dir() + L"\vanacore.ini" : given;
+    const vanacore::Settings settings = vanacore::load_settings(exe_dir(), settings_ini);
+    vanacore::GuiChoice choice;
+    choice.retail = settings.retail || has_retail_argument(argc, argv);
+    choice.server = settings.server;
+    choice.ini = given;
+    if (!vanacore::show_start_screen(choice))
+        return 0;
+    if (choice.retail)
+        kept.push_back(L"--retail");
+    else if (!choice.server.empty()) {
+        kept.push_back(L"--server");
+        kept.push_back(choice.server);
+    }
+    if (!choice.ini.empty()) {
+        kept.push_back(L"--ini");
+        kept.push_back(choice.ini);
+    }
+    std::vector<wchar_t*> pointers;
+    for (std::wstring& text : kept)
+        pointers.push_back(text.data());
+    pointers.push_back(nullptr);
+    return start(static_cast<int>(kept.size()), pointers.data());
 }
