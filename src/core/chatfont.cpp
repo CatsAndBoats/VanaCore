@@ -586,8 +586,8 @@ struct Want {
     bool shadow = false;          // a soft shadow under the letters (<prefix>.shadow), in the outline's place: no outline then
     float shadow_blur = 2.0f;     // ... blurred this much (a Gaussian's sigma), the interface's pixels
     float shadow_thick = 0.0f;    // ... of letters this much fatter (a stroke's width), the interface's pixels
-    float shadow_x = 1.0f;        // ... moved this far across and down, the interface's pixels
-    float shadow_y = 1.0f;
+    float shadow_x = 0.0f;        // ... moved this far across and down, the interface's pixels
+    float shadow_y = 0.0f;
     float shadow_opacity = 0.7f;  // ... this dark (0-1)
     float line = 1.0f;           // the rows' spacing to the game's: the tooltips' (tips.font.lineheight / 16)
     float pad = 0.0f;             // the rows moved down this far, the interface's pixels: the tooltips' (tips.font.padding.top)
@@ -995,9 +995,9 @@ void read_outline(const wchar_t* ini, int which, Want& want)
     // .shadow 1: a soft shadow in the outline's place (.shadow.blur 0-8, .shadow.x and .y -8 to 8 px, .shadow.opacity percent)
     want.shadow = read_set(ini, key_for(ini, which, L".shadow"), 0.0f) >= 0.5f;
     const auto clamp = [](float v, float lo, float hi) { return !(v >= lo) ? lo : v > hi ? hi : v; };
-    want.shadow_blur = clamp(read_set(ini, key_for(ini, which, L".shadow.blur"), 2.0f), 0.0f, 8.0f);
-    want.shadow_thick = clamp(read_set(ini, key_for(ini, which, L".shadow.thickness"), 0.0f), 0.0f, 4.0f);
-    want.shadow_x = clamp(read_set(ini, key_for(ini, which, L".shadow.x"), 1.0f), -8.0f, 8.0f);
+    want.shadow_blur = clamp(read_set(ini, key_for(ini, which, L".shadow.blur"), 2.0f), 0.0f, 10.0f);
+    want.shadow_thick = clamp(read_set(ini, key_for(ini, which, L".shadow.thickness"), 0.0f), 0.0f, 5.0f);
+    want.shadow_x = clamp(read_set(ini, key_for(ini, which, L".shadow.x"), 0.0f), -8.0f, 8.0f);
     want.shadow_y = clamp(read_set(ini, key_for(ini, which, L".shadow.y"), want.shadow_x), -8.0f, 8.0f);
     want.shadow_opacity = clamp(read_set(ini, key_for(ini, which, L".shadow.opacity"), 70.0f), 0.0f, 100.0f) / 100.0f;
 }

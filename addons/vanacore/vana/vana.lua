@@ -1508,7 +1508,7 @@ end
 -- `text` broken at word ends into lines that fit `room` pixels, kept on the row until the room changes
 local NOTE_LINE = 20
 local function note_lines(row, room)
-    if row.wrap_room == room and row.wrap_lines ~= nil then
+    if row.wrap_room == room and row.wrap_lines ~= nil and row.wrap_text == row.text then
         return row.wrap_lines
     end
     local lines, line = {}, ''
@@ -1522,7 +1522,7 @@ local function note_lines(row, room)
         end
     end
     lines[#lines + 1] = line
-    row.wrap_room, row.wrap_lines = room, lines
+    row.wrap_room, row.wrap_lines, row.wrap_text = room, lines, row.text
     return lines
 end
 
@@ -1544,7 +1544,19 @@ local function banner_tone(row)
     return (row.kind == 'warning' or row.kind == 'alert') and 'danger' or row.kind == 'hint' and 'basic'
         or row.kind == 'notice' and 'notice' or 'warning'
 end
+-- A banner that has a switch (row.switch: get, set) and a state (row.state() -> tone, text: Buttons' Enable): its tone and text
+-- from the state, now, and its text's room less the switch's
+local function banner_state(row, room)
+    if row.state ~= nil then
+        local ok, tone, text = pcall(row.state)
+        if ok then
+            row.tone, row.text = tone, text
+        end
+    end
+    return row.switch ~= nil and room - S(M.SW_W) - S(20) or room
+end
 local function banner_height(row, room)
+    room = banner_state(row, room)
     return math.max(1, #note_lines(row, room)) * S(NOTE_LINE) + (row.title and S(NOTE_LINE - 5) or 0) + S(18)
 end
 
@@ -2907,6 +2919,12 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         local line_end = right
         local title, spacing = row.text:upper(), S(1.2)
         local sub_font = fonts.semi_italic or fonts.semi
+        if row.lock_if ~= nil then -- (a heading whose rows are locked: greyed with them, Chat's Game font while True Font is on)
+            local ok, locked = pcall(row.lock_if)
+            if ok and locked then
+                color, alpha = P.dim, math.min(alpha, 0.7) -- (grey, not the heading's green)
+            end
+        end
         local sw_on = nil
         if row.switch ~= nil then
             local ok, on = pcall(row.switch.get)
@@ -2998,9 +3016,10 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     elseif BANNER_KINDS[row.kind] then
         -- the one banner (banner_tone, banner_height): the rows' own width (lx to right, as the Layers cards), its tone fading
         -- left to right, a faint edge, the title in capitals over the wrapped text
+        local room = banner_state(row, note_width(w)) -- (also sets its tone and text from its state)
         local tone = banner_tone(row)
         local color = P[BANNER_TONES[tone]]
-        local lines = note_lines(row, note_width(w))
+        local lines = note_lines(row, room)
         local bx, by, bw, bh, r = lx, y + S(4), right - lx, h - S(8), S(4)
         local steps = 24
         M.fill(dl, bx, by, r * 2, bh, color, r, M.CORNERS.left, 0.18 * alpha)
@@ -3020,6 +3039,19 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         for _, line in ipairs(lines) do
             M.text_mid(dl, tx, ly, line, P.text, fonts.text, BODY - 1, alpha)
             ly = ly + S(NOTE_LINE)
+        end
+        if row.switch ~= nil then
+            -- its switch at the banner's right end, in the middle of its height
+            local ok, on = pcall(row.switch.get)
+            local new, flipped = M.switch(id, right - S(M.SW_W) - S(10), by + bh / 2, ok and on or false, true, alpha, nil, M.SW_GREEN)
+            if flipped then
+                M.flush()
+                pcall(row.switch.set, new)
+                M.rebuild()
+            end
+            if hovered and tip_of(row) ~= nil then
+                M.tooltip(tip_of(row))
+            end
         end
         return h
     elseif row.kind == 'note' then
@@ -3163,6 +3195,30 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         M.text_mid(dl, lx, cy, name, (row.tag == 'Not shown' or not on) and P.dim or P.text, fonts.text, BODY, alpha)
         if (row.tag ~= nil or row.tip ~= nil or name ~= row.label) and M.over(lx, y, title_w, h) then
             M.tooltip(row.tag ~= nil and (row.label .. ' (' .. row.tag:lower() .. ')') or row.tip or row.label)
+        end
+        if row.drops then
+            -- (row.drops: its parts are number drop-downs, each its name in its box, from the row's end back: the Buttons' Shadow)
+            local dx, bar, bar_on = right, nil, false
+            for k = #row.sliders, 1, -1 do
+                local sub = row.sliders[k]
+                local sub_on = enabled and on
+                if sub.lock_if ~= nil then
+                    local ok, locked = pcall(sub.lock_if)
+                    sub_on = sub_on and not (ok and locked)
+                end
+                if sub.bar then -- (a slider among them: it takes the room left, after the row's name)
+                    bar, bar_on = sub, sub_on
+                else
+                    dx = M.number_drop(sub, id .. '.' .. tostring(sub.key), dx, cy, sub_on, alpha) - S(6)
+                end
+            end
+            if bar ~= nil then
+                local bx = lx + title_w
+                M.text_mid(dl, bx, cy, bar.label, P.dim, fonts.text, SMALL, alpha)
+                local label_w = M.measure(bar.label, fonts.text, SMALL) + S(5)
+                draw_slider(bar, id .. '.' .. tostring(bar.key), bx + label_w, cy, bar_on, alpha, dx - S(6) - bx - label_w, S(34))
+            end
+            return h
         end
         -- the labels and the values take their widths, the tracks share what's left
         local sx, fixed = lx + title_w, 0
@@ -3690,7 +3746,7 @@ local function draw_section(page, sec, x, y, w, over_title, rows, hy)
     local ctx = { off = false, panel_off = false } -- (panel_off: the heading's switch or effect, for each sub-panel's: draw_row)
     -- status rows (what the panel reports, not a setting: DLSS's Resolution and Frame generation, the gamepads) sit in
     -- a sunken box, a run of them in one
-    local list = rows or sec.rows
+    local list = M.with_shadows(rows or sec.rows)
     ctx.list = list -- (a sub-panel's reset: the rows under it, as drawn)
     M.hy.mode = nil
     local cards = hy and M.hy.begin(ctx, page, sec, list, x, w, rows) or nil
@@ -4728,6 +4784,29 @@ end
 -- heading) is on the page. A card's height is what it was drawn at last (the rows set it as they go: M.hy.card_h); the first
 -- time, its rows' heights added up. draw_section keeps its state in ctx.cards.
 M.hy.card_h = {}
+
+-- A section's rows with each True Font line's Text Shadow (row.shadow: data.lua area_font) put after it, the two in one box
+-- (row.box_span, draw_section); the same list each time (the rows are fixed, the list is made once)
+M.shadowed = setmetatable({}, { __mode = 'k' }) -- (a field of M: the main chunk is near LuaJIT's 200 locals)
+function M.with_shadows(list)
+    local done = M.shadowed[list]
+    if done ~= nil then
+        return done
+    end
+    local out, any = {}, false
+    for _, row in ipairs(list) do
+        out[#out + 1] = row
+        if row.kind == 'font' and row.shadow ~= nil then
+            row.box_span = 2
+            row.shadow.tab_of = row.tab_of -- (on its tab with its font line)
+            out[#out + 1] = row.shadow
+            any = true
+        end
+    end
+    done = any and out or list
+    M.shadowed[list] = done
+    return done
+end
 
 -- the section drawn in the panels' way; returns its height with the gap under it. Inside it the names stand 16 from a card's
 -- left edge and the controls 16 from its right (the card is 4 out on the left of draw_section's x, 7 wider than its w)

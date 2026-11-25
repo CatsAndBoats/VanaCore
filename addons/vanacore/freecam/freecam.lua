@@ -2781,7 +2781,8 @@ local function draw_contents(dl, x, y, pw, ctx)
             index = i
         end
     end
-    local picked, moved = kit.segments('##fc.tabs', lx, sy + S(TABS_H) / 2, TAB_LABELS, index, true)
+    -- (the panel's own tab bar, as the Buttons page's: a lit pill with an accent edge for the one picked; its bar starts at lx)
+    local picked, moved = kit.tabs('##fc.tabs', lx - S(kit.TAB_PAD) + S(4), sy + (S(TABS_H) - S(kit.TABS_H)) / 2, lx + w, TAB_LABELS, index)
     if moved and picked ~= index then
         state.tab = TAB_IDS[picked]
     end

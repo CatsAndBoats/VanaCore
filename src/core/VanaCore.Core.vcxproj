@@ -391,6 +391,7 @@ exit /b 0</Command>
     <ClInclude Include="jplabels_data.h" />
     <ClInclude Include="chatfont_wide.h" />
     <ClInclude Include="chatfont_shadow.h" />
+    <ClInclude Include="chat_lineheight.h" />
     <ClInclude Include="text_fit.h" />
     <ClInclude Include="text_replay.h" />
     <ClInclude Include="lua_api_gradient.h" />

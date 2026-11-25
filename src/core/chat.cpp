@@ -330,56 +330,7 @@ std::string g_chatlog_name;
 std::wstring g_chatlog_path;
 FILE* g_chatlog_file = nullptr;
 
-// [client] chat.lineheight: the chat window's row spacing, 16 pixels in the game (FFXiMain's chat draw, 0x10160da0,
-// steps each row by an immediate 0x10: `add edi,-10h`, `sub edi,10h`, `add eax,-10h`, `sub edx,10h`). The four
-// immediates are patched in place, so the rows spread out (the window's own height stays: fewer rows show).
-constexpr int kLineHeightDefault = 16;
-constexpr int kLineHeightMax = 64;
-struct LineSite {
-    const char* pattern;
-    bool negative; // the immediate is the negated height (an `add`)
-    std::uintptr_t at = 0;
-};
-LineSite g_line_sites[4] = {
-    {"83 C7 F0 8B 4C 24 10 8D 54 24 14 8D 44 24 34 52 8B 49 18 50 E8", true},
-    {"83 EF 10 3B EB 7C ?? EB 08 8B 44 24 28 89 44 24 34 E8", false},
-    {"83 C0 F0 89 44 24 2C 8B 44 24 10 8D 4C 24 30 8D 54 24 34 51 8B 48 18 52", true},
-    {"83 EA 10 3B C1 89 44 24 14 89 54 24 2C 0F 8C ?? ?? ?? ?? E8", false},
-};
-bool g_line_found = false;
-int g_line_height = kLineHeightDefault;
-
-// The chat window's own sizing (0x10161490): its height is lines * 16 less 128 (8 rows' worth) over the base the window has
-// (`sub edi,8 ... shl edi,4` is (lines - 8) * 16). With another row spacing L the part per line is L: `imul edi,edi,L` and
-// `add edi,-128` take their places (the same bytes), so a full window is as tall as the lines in it.
-std::uintptr_t g_height_site = 0;
-void write_code(std::uintptr_t at, const void* bytes, size_t size);
-
-void apply_line_height(int height)
-{
-    if (!g_line_found || height == g_line_height)
-        return;
-    for (const LineSite& site : g_line_sites) {
-        auto* immediate = reinterpret_cast<std::uint8_t*>(site.at + 2);
-        DWORD old = 0;
-        if (!VirtualProtect(immediate, 1, PAGE_EXECUTE_READWRITE, &old))
-            continue;
-        *immediate = static_cast<std::uint8_t>(site.negative ? -height : height);
-        VirtualProtect(immediate, 1, old, &old);
-        FlushInstructionCache(GetCurrentProcess(), immediate, 1);
-    }
-    g_line_height = height;
-    if (g_height_site != 0) {
-        const bool game = height == kLineHeightDefault;
-        const std::uint8_t first[3] = {0x6B, 0xFF, static_cast<std::uint8_t>(height)}; // imul edi,edi,height
-        const std::uint8_t first_game[3] = {0x83, 0xEF, 0x08};                         // sub edi,8
-        const std::uint8_t second[3] = {0x83, 0xC7, 0x80};                             // add edi,-128
-        const std::uint8_t second_game[3] = {0xC1, 0xE7, 0x04};                        // shl edi,4
-        write_code(g_height_site, game ? first_game : first, 3);
-        write_code(g_height_site + 7, game ? second_game : second, 3);
-    }
-    log::write(L"Chat: row spacing %d px ([client] chat.lineheight)", height);
-}
+#include "chat_lineheight.h" // kLineHeightDefault, g_line_sites, g_height_site, g_expand_site, apply_line_height: row spacing
 
 using ColourLookup = std::uint32_t(__cdecl*)(int id);
 ColourLookup g_colour_lookup = nullptr; // the game's own: the colour (four bytes) of text colour code `id`
@@ -2558,6 +2509,12 @@ void install()
     g_height_site = scan::find(game, "83 EF 08 8D 4C 24 28 C1 E7 04 66 2B 7E 26");
     if (g_height_site == 0)
         log::write(L"Chat: FFXI's chat window height wasn't found in FFXiMain.dll: it won't follow [client] chat.lineheight");
+    // the expanded log's rows: cdq; and edx,0Fh; mov [esi+5Ch],ecx; add eax,edx; mov dx,cx; [sar eax,4; add eax,17h]; push edx;
+    // mov edx,[esp+..]; mov [esi+58h],eax
+    const std::uintptr_t expand = scan::find(game, "99 83 E2 0F 89 4E 5C 03 C2 66 8B D1 C1 F8 04 83 C0 17 52 8B 54 24 ?? 89 46 58");
+    g_expand_site = expand != 0 ? expand + 12 : 0;
+    if (g_expand_site == 0)
+        log::write(L"Chat: FFXI's expanded log rows weren't found in FFXiMain.dll: expanded, its top rows go above it with [client] chat.lineheight");
 
     // the chat's layout (mov eax,[UI right/bottom]; push esi; push edi; mov edi,[UI left/top] ... its width at +0x32; the
     // resize call at +0x5a), and Config log settings' calls of it, after `mov ecx,[log 1]` and `mov ecx,[log 2]`

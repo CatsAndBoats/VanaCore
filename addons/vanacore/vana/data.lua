@@ -356,7 +356,7 @@ end
 local function outline_row(prefix, from)
     local key = prefix .. '.outline'
     local row = free(slider('Outline', 'client', key, 0, 0, 3, 0.5, '%.2f px'), 0, 4)
-    row.tip = 'A black outline round these letters, this many pixels wide. 0 is none. Until it\'s moved, the Default Font\'s Outline (True Font page).'
+    row.tip = 'Outline'
     row.get = function ()
         local value = tonumber(vana.config.get('client', key) or '')
         if value == nil and from ~= nil then
@@ -366,6 +366,61 @@ local function outline_row(prefix, from)
         return within(row, value or tonumber(vana.config.get('client', 'truefont.outline') or '') or 0)
     end
     row.follows = true
+    return row
+end
+
+local function pair(label, tip, sliders)
+    local row = { kind = 'layout', label = label, tip = tip, sliders = sliders, title_w = 84, slots = #sliders, label_gap = 7, parts = sliders }
+    row.reset = function ()
+        for _, sub in ipairs(sliders) do
+            vana.config.set(sub.section, sub.key, nil)
+        end
+    end
+    return row
+end
+
+-- An area's Text Shadow on one line, drawn in a box under its font line (vana.lua with_shadows: row.shadow): its switch at the
+-- end, Opacity a bar, Blur and Thickness drop-downs; chatfont.cpp read_outline's <prefix>.shadow, .shadow.opacity, .blur and
+-- .thickness. Each shows what VanaCore draws unset: its own key, else the area it follows (`follows`, and that one's follows)
+local function shadow_row(prefix, follows)
+    local function from(suffix)
+        local keys = { prefix }
+        if type(follows) == 'string' then
+            keys[#keys + 1] = follows
+            if FOLLOWS[follows] then
+                keys[#keys + 1] = FOLLOWS[follows]
+            end
+        end
+        for _, k in ipairs(keys) do
+            local value = vana.config.get('client', k .. suffix)
+            if value ~= nil and value ~= '' then
+                return value
+            end
+        end
+    end
+    local function part(label, suffix, default, max, step, fmt)
+        local sub = slider(label, 'client', prefix .. suffix, default, 0, max, step, fmt)
+        sub.get = function () return tonumber(from(suffix) or '') or default end
+        sub.follows = true
+        return sub
+    end
+    local opacity, blur, thick = part('Opacity', '.shadow.opacity', 70, 100, 5, '%d%%'), part('Blur', '.shadow.blur', 2, 10, 1, '%d px'),
+        part('Thickness', '.shadow.thickness', 0, 5, 1, '%d px')
+    local row = pair('Shadow', nil, { opacity, blur, thick })
+    opacity.bar, opacity.no_reset = true, true
+    blur.short = 'Blur'
+    thick.short, thick.icon = 'Thickness', 'thickness'
+    row.drops, row.no_reset = true, true
+    row.toggle = {
+        get = function () return from('.shadow') == '1' end,
+        set = function (on) vana.config.set('client', prefix .. '.shadow', on and '1' or '0') end,
+    }
+    local sliders_reset = row.reset
+    row.reset = function ()
+        sliders_reset()
+        vana.config.set('client', prefix .. '.shadow', nil)
+    end
+    row.lock_if = function () return not area_sharp(prefix, follows) end
     return row
 end
 
@@ -394,6 +449,7 @@ local function area_font(prefix, size, follows, pinned)
     end
     local row = font_line(parts[1], parts[2], parts[3], parts[4], parts[5], outline_row(prefix, type(follows) == 'string' and follows or nil))
     row.switch = area_switch(prefix, follows, pinned)
+    row.shadow, row.no_reset = shadow_row(prefix, type(follows) == 'string' and follows or nil), true -- (a box with it: vana.lua with_shadows)
     return row
 end
 -- A list's numbers' own True Font size (<list>.font.numbers.size: chatfont.cpp read_numbers), under its font line: unset,
@@ -577,6 +633,74 @@ function FSR.quality()
         vana.graphics.reload()
     end
     return row
+end
+
+-- Shadows' Time of day (under Custom sun position): freecam's Time on /vana, an hour of the Vana'diel day held on this screen
+-- alone (freecam\daytime.lua, loaded here for its own: the game's timer off and its clock set, as a cutscene does). A switch
+-- and a slider in hours (hh:mm); dragging the slider holds the time too. Not a setting: nothing in vanacore.ini, no reset,
+-- no preset; the switch off or a zone change gives the zone's own hour back. One table
+-- (M.daytime): the main chunk is near Lua's 200 locals.
+M.daytime = { at = 12 }
+function M.daytime.lib()
+    if M.daytime.mod == nil then
+        M.daytime.mod = false
+        local chunk, err = loadfile(vana.paths.addons .. '\\vanacore\\freecam\\daytime.lua')
+        local ok, got = false, err
+        if chunk ~= nil then
+            ok, got = pcall(chunk)
+        end
+        if ok and type(got) == 'table' then
+            M.daytime.mod = got
+        else
+            print('vana: freecam\\daytime.lua: ' .. tostring(got))
+        end
+    end
+    return M.daytime.mod or nil
+end
+function M.daytime.locked()
+    local lib = M.daytime.lib()
+    return lib == nil or (lib.held() == nil and not lib.ready())
+end
+function M.daytime.switch()
+    local switch = kept(toggle('Time of day', 'vana', 'daytime', false))
+    switch.get = function ()
+        local lib = M.daytime.lib()
+        return lib ~= nil and lib.held() ~= nil
+    end
+    switch.set = function (on)
+        local lib = M.daytime.lib()
+        if lib == nil then
+            return
+        elseif on then
+            lib.set(math.floor(M.daytime.at * 60 + 0.5) % 1440)
+        else
+            lib.off()
+        end
+    end
+    switch.lock_if = M.daytime.locked
+    return switch
+end
+function M.daytime.hour()
+    local hour = kept(slider('Time', 'vana', 'daytime.at', 12, 0, 24, 0.25))
+    hour.format = function (value)
+        local lib = M.daytime.lib()
+        local minute = math.floor(value * 60 + 0.5) % 1440
+        return lib ~= nil and lib.name(minute) or string.format('%02d:%02d', math.floor(minute / 60), minute % 60)
+    end
+    hour.get = function ()
+        local lib = M.daytime.lib()
+        local held = lib ~= nil and lib.held() or nil
+        return held ~= nil and held / 60 or M.daytime.at
+    end
+    hour.set = function (value)
+        M.daytime.at = math.max(0, math.min(24, tonumber(value) or 12))
+        local lib = M.daytime.lib()
+        if lib ~= nil then
+            lib.set(math.floor(M.daytime.at * 60 + 0.5) % 1440)
+        end
+    end
+    hour.lock_if = M.daytime.locked
+    return hour
 end
 
 -- A sub-panel inside a panel: its heading, a line across the panel with its title (and a tag after it) on it, and an
@@ -1383,15 +1507,6 @@ local function mover(label, key, tip, sliders, outline)
 end
 
 -- Sliders on one row (a nudge's X and Y), drawn as a mover is but with no switch; each keeps its own reset
-local function pair(label, tip, sliders)
-    local row = { kind = 'layout', label = label, tip = tip, sliders = sliders, title_w = 84, slots = #sliders, label_gap = 7, parts = sliders }
-    row.reset = function ()
-        for _, sub in ipairs(sliders) do
-            vana.config.set(sub.section, sub.key, nil)
-        end
-    end
-    return row
-end
 
 -- Game Options > Buttons: tabs across it (vana.lua's kind 'tabs'), each the menus' buttons' rows of one set of [client] keys
 -- (buttons.cpp): Global, buttons.*; Main Menu, mainmenu.buttons.* (the main menu and the menus it opens in its place);
@@ -1435,9 +1550,19 @@ local function button_tabs()
         local function button(row) return mirror(row, prefix, 'buttons') end
         -- locked while off (Global's in use), and by its own lock as well
         local function lock(row)
-            local before = row.lock_if
             if own then
-                row.lock_if = function () return not enabled() or (before ~= nil and before()) end
+                -- (the row's own lock, and each of its sliders' that has one: a slider's own lock_if stood in for the row's, so
+                -- the flat style's sliders stayed bright while the tab was off)
+                local function wrap(item)
+                    local before = item.lock_if
+                    item.lock_if = function () return not enabled() or (before ~= nil and (before == true or (before ~= false and before()))) end
+                end
+                wrap(row)
+                for _, sub in ipairs(row.sliders or {}) do
+                    if sub.lock_if ~= nil then
+                        wrap(sub)
+                    end
+                end
             end
             return row
         end
@@ -1473,17 +1598,51 @@ local function button_tabs()
                 end
                 vana.config.set('client', prefix, on and '1' or '0')
             end
-            enable.rebuild = true -- the rows below lock and unlock by it
-            enable.colour = M.P.green -- (light green, name and switch: plain to see, asked for 2026-11-07)
-            group[#group + 1] = enable
+            -- Enable is the banner's own switch (vana.lua's banner: row.switch): orange while off, green on (row.state)
+            local banner = callout('Enable', '', 'warning')
+            banner.switch = { get = enable.get, set = enable.set }
+            banner.state = function ()
+                if enabled() then
+                    return 'success', "On: these settings apply instead of Global's."
+                end
+                return 'warning', "Off: Global's settings apply. Turn on to set these."
+            end
+            banner.tip = "On: this tab's settings are used alone, whatever Global's are. Off: they look as Global says."
+            group[#group + 1] = banner
         end
         local style = lock(button(choice('Style', 'client', key('style'), 'game', { { 'game', 'Game' }, { 'flat', 'Flat' } })))
         style.rebuild = true -- the flat style's rows lock and unlock by it
         group[#group + 1] = style
+        -- the area's font line with its Text Shadow rows (chatfont.cpp read_outline) in one box: Global's, and an own tab's
+        local function shadow_box(line)
+            line.shadow = nil -- (this box's own below)
+            -- the font line and its Text Shadow (chatfont.cpp read_outline) in one box (vana.lua draw_section: box_span): the
+            -- shadow one row, its switch at the end (a layout row's toggle: its sliders grey with it off), offset 0 (.shadow.x, .y)
+            local function shade(row) return mirror(row, font, 'buttons.font') end
+            local shadow = pair('Shadow', nil, { shade(slider('Opacity', 'client', font .. '.shadow.opacity', 70, 0, 100, 5, '%d%%')),
+                                                       shade(slider('Blur', 'client', font .. '.shadow.blur', 2, 0, 10, 1, '%d px')),
+                                                       shade(slider('Thickness', 'client', font .. '.shadow.thickness', 0, 0, 5, 1, '%d px')) })
+            shadow.sliders[1].bar, shadow.sliders[1].no_reset = true, true -- (Opacity a bar before the drop-downs)
+            shadow.drops, shadow.no_reset, line.no_reset = true, true, true -- (drop-downs, and no reset icon: no room)
+            shadow.sliders[2].short = 'Blur'
+            shadow.sliders[3].short, shadow.sliders[3].icon = 'Thickness', 'thickness' -- (an icon in place of its name, draw.lua DRAWN)
+            shadow.toggle = {
+                get = function () return (vana.config.get('client', (enabled() and font or 'buttons.font') .. '.shadow') or '') == '1' end,
+                set = function (on) vana.config.set('client', font .. '.shadow', on and '1' or '0') end,
+            }
+            local sliders_reset = shadow.reset
+            shadow.reset = function ()
+                sliders_reset()
+                vana.config.set('client', font .. '.shadow', nil)
+            end
+            line.box_span = 2
+            group[#group + 1] = line
+            group[#group + 1] = lock(shadow)
+        end
         -- its labels' letters and True Font: Global's buttons.font (the titles pinned to it); an own tab's area its own keys
         -- while on, buttons.font's shown while off
         if not own then
-            group[#group + 1] = area_font(font, 11, true, 'titles.font')
+            shadow_box(area_font(font, 11, true, 'titles.font'))
         else
             local function area() return enabled() and font or 'buttons.font' end
             local line = area_font(font, 11, 'buttons.font')
@@ -1503,20 +1662,7 @@ local function button_tabs()
                 return within(outline, value or tonumber(vana.config.get('client', 'truefont.outline') or '') or 0)
             end
             outline.follows = nil
-            -- the font line and its soft shadow (chatfont.cpp read_outline) in one box (vana.lua draw_section: box_span); the
-            -- shadow's down follows its across (Distance) until .shadow.y is set
-            local function shade(row) return mirror(row, font, 'buttons.font') end
-            line.box_span = 4
-            group[#group + 1] = line
-            for _, row in ipairs({
-                lock(shade(toggle('Soft shadow', 'client', font .. '.shadow', false))),
-                lock(pair('Shadow', nil, { shade(slider('Blur', 'client', font .. '.shadow.blur', 2, 0, 8, 0.5, '%.1f px')),
-                                           shade(slider('Thickness', 'client', font .. '.shadow.thickness', 0, 0, 4, 0.5, '%.1f px')) })),
-                lock(pair('Shadow', nil, { shade(slider('Opacity', 'client', font .. '.shadow.opacity', 70, 0, 100, 1, '%d%%')),
-                                           shade(slider('Distance', 'client', font .. '.shadow.x', 1, -8, 8, 1, '%d px')) })),
-            }) do
-                group[#group + 1] = row
-            end
+            shadow_box(line)
         end
         for _, row in ipairs({
             lock(pair('Colour', nil, { button(colour_pick('Buttons', 'client', key('color'), '#4B65A0')),
@@ -1548,6 +1694,47 @@ local function button_tabs()
         end
     end
     return rows
+end
+-- Game Options > Chat: tabs across its top (Chat, Tabs, Input, Auto Translate), each tab's rows (row.tab_of; vana.lua's kind
+-- 'tabs', as Buttons'). `list` is the page's rows; those from header('Chat') to header('Menus') are sorted into the tabs by the
+-- sub-heading they are under; "Typing and logs" is split: the typing rows go to Input, the logs' to Chat
+local function chat_tabs(list)
+    local names = { 'Chat', 'Tabs', 'Input', 'Auto Translate' }
+    local heads = { 'Chat', 'Chat Tabs', 'Chat Input', 'Auto Translate' }
+    local of = {}
+    for index, name in ipairs(names) do
+        of[index] = { id = 'chat', index = index, head = subheader(heads[index]) }
+    end
+    local by = { ['Text'] = 1, ['Game font'] = 1, ['Chat windows'] = 1, ['Prefixes'] = 1, ['Timestamps'] = 1, ['Chat tabs'] = 2,
+                 ['Chat input'] = 3, ['Auto-translate list'] = 4, ['Typing and logs'] = 3 }
+    local out, active, tab = {}, false, 1
+    for _, row in ipairs(list) do
+        if row.kind == 'header' and row.text == 'Chat' then
+            active = true
+            out[#out + 1] = row
+            out[#out + 1] = { kind = 'tabs', id = 'chat', source = 'tabs', labels = names }
+        elseif row.kind == 'header' then
+            active = false
+            out[#out + 1] = row
+        elseif not active then
+            out[#out + 1] = row
+        else
+            if row.kind == 'subheader' and by[row.text] ~= nil then
+                tab = by[row.text]
+                if row.text == 'Typing and logs' then
+                    row.text = 'Typing'
+                end
+            elseif row.key == 'chat.scrollback' then
+                tab = 1
+                local logs = subheader('Logs')
+                logs.tab_of = of[1]
+                out[#out + 1] = logs
+            end
+            row.tab_of = of[tab]
+            out[#out + 1] = row
+        end
+    end
+    return out
 end
 -- Game Options > Sliders: the Config windows' sliders ([client] sliders.*, sliders.cpp); the flat style's rows locked with the game's
 local function slider_rows()
@@ -2002,6 +2189,8 @@ TIPS.rows = {
     ['graphics.effects.sun_free'] = 'Puts the shadows\' light where the two sliders below say, whatever the game\'s sun, the hour or the cloud do. Shadows show at night too. For testing.',
     ['graphics.effects.sun_free_az'] = 'Which way round the horizon the light comes from, in degrees.',
     ['graphics.effects.sun_free_el'] = 'How high over the horizon the light is, in degrees. 90 is straight down.',
+    ['vana.daytime'] = 'Holds the Vana\'diel day at the hour below, on your screen only: the sky, the sun and the light follow. Nothing goes to the server. Off, or a zone change, brings the zone\'s own hour back.',
+    ['vana.daytime.at'] = 'The hour of the day to hold. Dragging it turns Time of day on.',
     -- Ambient occlusion
     ['graphics.effects.ao'] = 'How dark corners and creases get, 1 to 10. Adds depth.',
     ['graphics.effects.radius'] = 'How thick the shading is: how far round each point it looks for things to shade it.',
@@ -4302,6 +4491,9 @@ local TABS = {
                 toggle('Custom sun position', FX, 'sun_free', false),
                 slider('Sun direction', FX, 'sun_free_az', 170, 0, 360, 1, '%d'),
                 slider('Sun height', FX, 'sun_free_el', 41, -20, 90, 1, '%d'),
+                -- the hour of the day held on this screen alone (M.daytime: freecam's Time)
+                M.daytime.switch(),
+                M.daytime.hour(),
                 -- the shadows' redraw speed, moved here from Client > Developer, in red: the far map's still casters drawn every
                 -- hold+1 frames (gfx_d3d12.c sun_map, g_still), the sharp map's kept while the camera stays in their layer
                 -- (g_still_near), each layer drawn over 4 frames, a slice each (gfx_sun_layers.h; it strobed on a player's card,
@@ -5854,6 +6046,7 @@ local TABS = {
             -- italic, bold, outline (no capitals: digits); locked while Single Inventory Number is off
             local function count_font()
                 local row = area_font('items.count.font', 24)
+                row.shadow = nil -- (its numbers are drawn by itemcount.cpp: no shadow)
                 row.switch = nil
                 for i = #row.parts, 1, -1 do
                     if row.parts[i] == row.upper then
@@ -5924,7 +6117,7 @@ local TABS = {
             for _, row in ipairs(slider_rows()) do
                 rows[#rows + 1] = row
             end
-            for _, row in ipairs({
+            for _, row in ipairs(chat_tabs({
                 header('Chat'),
                 subheader('Text'),
                 -- (its switch is the chat's renderer, chat.font: the game font's and True Font's rows lock and unlock by it;
@@ -5934,7 +6127,7 @@ local TABS = {
                     free(slider('Letter spacing', 'client', 'chat.font.spacing', 0, -2, 4, 0.1, '%.1f px'), -4, 8)),
                 slider('Line height', 'client', 'chat.lineheight', 16, 12, 32, 1, '%d px'),
                 toggle('No indent on wrapped lines', 'client', 'chat.noindent', false),
-                subheader('Game font', 'Disabled when True Font is enabled'),
+                (function (row) row.lock_if = true_font return row end)(subheader('Game font', 'Disabled when True Font is enabled')),
                 (function (row) row.rebuild = true row.lock_if = true_font return row end)( -- the shadow's opacity locks and unlocks by it
                     choice('Text shadow', 'client', 'chat.shadow', '0', { { '0', 'Off' }, { '1', 'Shadow' }, { '2', 'Outline' } })),
                 (function (row) row.lock_if = function () return true_font() or off('chat.shadow') end return row end)(
@@ -6487,7 +6680,7 @@ local TABS = {
                 toggle('Show R (received)', 'client', 'network.received', true),
                 toggle('Simple: Connected / Failing / Disconnected', 'client', 'network.simple', false),
                 toggle('Connected in green', 'client', 'network.simple.green', false),
-            }) do
+            })) do
                 rows[#rows + 1] = row
             end
             return rows
@@ -7751,7 +7944,7 @@ M.DEBUG_VIEW = needs_dx(choice('Debug view', FX, 'debug', '0', {
     { '3', 'Bloom' }, { '8', 'Bounce light' }, { '7', 'Depth of field' }, { '2', 'Fog' }, { '9', 'Glow effects' }, { '4', 'God rays' },
     { '6', 'Ink lines' }, { '1', 'Occlusion' },
     { header = 'Rain & Water' },
-    { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '17', 'Reflections' }, { '11', 'Water' },
+    { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '17', 'Reflections' }, { '33', 'Ray-traced reflections' }, { '11', 'Water' },
     { header = 'Rings' },
     { '32', 'Rain rings' }, { '15', 'Shadow rings' },
     { header = 'Shadows' },

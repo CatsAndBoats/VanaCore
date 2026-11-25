@@ -495,6 +495,20 @@ function DRAWN.outline(dl, cx, cy, size, c)
     pop()
 end
 
+-- Thickness (the Buttons' Shadow, before its value): a fat A, as Outline's is a hollow one: the letter in `c` with its edge
+-- grown a pixel all round
+function DRAWN.thickness(dl, cx, cy, size, c)
+    local face = fonts.bold or fonts.semi or fonts.text
+    local w, h = measure('A', face, size)
+    local x, y = cx - w / 2, cy - h / 2 - lift(h)
+    local o = math.max(1, math.floor(M.scale + 0.5))
+    push(face, size)
+    for _, d in ipairs({ { -o, 0 }, { o, 0 }, { 0, -o }, { 0, o }, { -o, -o }, { o, -o }, { -o, o }, { o, o }, { 0, 0 } }) do
+        dl:AddText({ x + d[1], y + d[2] }, c, 'A')
+    end
+    pop()
+end
+
 -- a space bar's key symbol: a bracket open at the top
 function DRAWN.space(dl, cx, cy, size, c)
     local w = size * M.scale * 0.6
