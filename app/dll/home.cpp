@@ -3,14 +3,20 @@
 #include <shellapi.h>
 #include <windowsx.h>
 
+#include <cwchar>
+#include <vector>
+
+#pragma comment(lib, "version.lib") // (VanaCore.Core.dll's version: GetFileVersionInfoW)
+
 #include "version.h"
 
 namespace vcapp {
 
 namespace {
 
-constexpr float kW = 520, kPad = 26, kHead = 76, kLogo = 56, kFactH = 22, kLabelW = 78, kButtonH = 30;
-constexpr float kH = kPad + kHead + 16 + kFactH * 3 + 26 + kButtonH + kPad;
+// the background picture's shape (16:9): the head at the top, the glass bar (kBar tall) the card's width at the bottom
+constexpr float kW = 640, kH = 360, kPad = 26, kLogo = 56, kBar = 86, kPlayW = 140, kPlayH = 42;
+constexpr std::uint32_t kVersionColour = 0xF3DE9C; // the head's version: a light yellow
 constexpr wchar_t kClass[] = L"VanaCoreApp.Home";
 
 HMODULE self()
@@ -21,13 +27,39 @@ HMODULE self()
     return module;
 }
 
+// `path`'s ProductVersion (its version resource's string), "" when it has none
+std::wstring product_version(const std::wstring& path)
+{
+    DWORD ignored = 0;
+    const DWORD size = GetFileVersionInfoSizeW(path.c_str(), &ignored);
+    if (size == 0)
+        return {};
+    std::vector<BYTE> info(size);
+    if (!GetFileVersionInfoW(path.c_str(), 0, size, info.data()))
+        return {};
+    struct Translation {
+        WORD language, codepage;
+    }* translations = nullptr;
+    UINT length = 0;
+    if (!VerQueryValueW(info.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&translations), &length) ||
+        length < sizeof(Translation))
+        return {};
+    wchar_t key[64];
+    swprintf_s(key, L"\\StringFileInfo\\%04x%04x\\ProductVersion", translations[0].language, translations[0].codepage);
+    wchar_t* text = nullptr;
+    if (!VerQueryValueW(info.data(), key, reinterpret_cast<void**>(&text), &length) || length == 0)
+        return {};
+    return text;
+}
+
 } // namespace
 
 Home::Home(const VanaCoreAppHost& host) : host_(host)
 {
-    const std::wstring exe = std::wstring(host.dir) + L"\\VanaCore.exe";
-    if (GetFileAttributesW(exe.c_str()) != INVALID_FILE_ATTRIBUTES)
-        game_ = exe;
+    const std::wstring dir(host.dir);
+    if (GetFileAttributesW((dir + L"\\VanaCore.exe").c_str()) != INVALID_FILE_ATTRIBUTES)
+        game_ = dir + L"\\VanaCore.exe";
+    vanacore_ = product_version(dir + L"\\VanaCore.Core.dll");
 }
 
 // VanaCore.exe --retail (PlayOnline as installed); Windows asks for administrator rights as its manifest says
@@ -47,53 +79,70 @@ bool Home::play()
     return false;
 }
 
+Home::Status Home::status() const
+{
+    if (game_.empty())
+        return {ui::icon::error, ui::pal::rose, L"VanaCore.exe not found", L"Put VanaCoreApp in VanaCore's folder"};
+    if (!error_.empty())
+        return {ui::icon::error, ui::pal::rose, L"Couldn't start VanaCore", error_};
+    return {ui::icon::check, ui::pal::teal, L"Ready to play", game_};
+}
+
+// The status panel: its icon, from `x`, its middle at `cy`, `room` wide
+void Home::draw_status(const Status& s, float x, float cy, float room)
+{
+    canvas_.glyph(s.icon, ui::Font::IconBig, x + 12, cy, ui::rgb(s.colour));
+    const float tx = x + 36, w = room - 36;
+    const bool bar = s.progress >= 0;
+    // the two lines' middles 20 apart, 2 above the bar's middle: the title's line has room above its capitals the detail's
+    // hasn't below it (seen 2026-11-25: centred on their middles, the space above looked bigger)
+    const float top = cy - (bar ? 17.0f : 12.0f);
+    canvas_.text(canvas_.fit(s.title, ui::Font::Body, w, false), ui::Font::Body, tx, top, ui::rgb(ui::pal::text));
+    canvas_.text(canvas_.fit(s.detail, ui::Font::Small, w, true), ui::Font::Small, tx, top + 20, ui::rgb(ui::pal::dim));
+    if (bar)
+        canvas_.bar(tx, top + 34, w, s.progress);
+}
+
 void Home::render()
 {
     if (!canvas_.begin())
         return;
     hits_.clear();
-    canvas_.card(kPad + kHead - 4);
+    canvas_.card(0);
+    const D2D1_RECT_F glass = D2D1::RectF(0, kH - kBar, kW, kH);
+    canvas_.backdrop(&glass);
     const float x = kPad, right = kW - kPad;
-    // the head: the logo, the name, what it is
+    // the head: the logo, the name, and under it the installed VanaCore's version (light yellow) and who made it
     canvas_.logo(x - 4, kPad + 25 - kLogo / 2, kLogo);
-    const float tx = x - 4 + kLogo + 14;
+    const float tx = x - 4 + kLogo + 14, sy = kPad + 37;
     canvas_.text(L"VanaCore", ui::Font::Title, tx, kPad + 13, ui::rgb(ui::pal::white));
-    canvas_.text(L"Retail", ui::Font::Small, tx, kPad + 37, ui::rgb(ui::pal::dim));
+    float bx = tx;
+    if (!vanacore_.empty()) {
+        const std::wstring version = L"v" + vanacore_, dash = L"  -  ";
+        canvas_.text(version, ui::Font::Small, bx, sy, ui::rgb(kVersionColour));
+        bx += canvas_.text_width(version, ui::Font::Small);
+        canvas_.text(dash, ui::Font::Small, bx, sy, ui::rgb(ui::pal::dim));
+        bx += canvas_.text_width(dash, ui::Font::Small);
+    }
+    canvas_.text(L"by: Vekien & Carver", ui::Font::Small, bx, sy, ui::rgb(ui::pal::text2));
     const float cx = right - 4, cy = kPad + 12;
     canvas_.close_x(cx, cy, hover_ == kClose);
     hits_.add(kClose, D2D1::RectF(cx - 13, cy - 13, cx + 13, cy + 13));
-    float y = kPad + kHead;
-    canvas_.line(1, y - 4, kW - 1, y - 4, ui::rgb(ui::pal::line));
-    // the facts: the game it starts, the two files' versions, and what went wrong if anything did
-    y += 16;
-    auto fact = [&](const wchar_t* label, const std::wstring& value, std::uint32_t colour, bool path) {
-        const float my = y + kFactH / 2;
-        canvas_.text(label, ui::Font::Label, x, my, ui::rgb(ui::pal::faint));
-        canvas_.text(canvas_.fit(value, ui::Font::Small, right - x - kLabelW, path), ui::Font::Small, x + kLabelW, my, ui::rgb(colour));
-        y += kFactH;
-    };
-    fact(L"GAME", game_.empty() ? L"VanaCore.exe isn't in this app's folder" : game_, game_.empty() ? ui::pal::rose : ui::pal::text2, true);
-    fact(L"VERSION", std::wstring(L"App ") + L"" VCAPP_DLL_VERSION_STR + L"  \x00B7  Starter " + host_.exe_version, ui::pal::text2, false);
-    if (!error_.empty())
-        fact(L"", error_, ui::pal::rose, false);
-    // the buttons, right to left
-    const float by = kH - kPad - kButtonH;
-    auto button = [&](Hit hit, const wchar_t* label, ui::Button style, float end, bool on) {
-        const float w = canvas_.button_width(label);
-        const D2D1_RECT_F r = D2D1::RectF(end - w, by, end, by + kButtonH);
-        const float t = !on || hover_ != hit ? 0.0f : pressed_ == hit ? 1.0f : 0.6f;
-        canvas_.button(r, label, style, t, on);
-        if (on)
-            hits_.add(hit, r);
-        return r.left - 8;
-    };
-    button(kQuit, L"Close", ui::Button::Ghost, button(kPlay, L"Play", ui::Button::Accent, right, !game_.empty()), true);
+    // the glass bar: the status on the left, Play on the right
+    const float mid = kH - kBar / 2;
+    const D2D1_RECT_F play = D2D1::RectF(right - kPlayW, mid - kPlayH / 2, right, mid + kPlayH / 2);
+    draw_status(status(), x, mid, play.left - 24 - x);
+    const bool on = !game_.empty();
+    const float t = !on || hover_ != kPlay ? 0.0f : pressed_ == kPlay ? 1.0f : 0.6f;
+    canvas_.button(play, L"START",ui::Button::Play, t, on, 0, ui::Font::Play);
+    if (on)
+        hits_.add(kPlay, play);
     canvas_.end();
 }
 
 void Home::press(Hit hit)
 {
-    if (hit == kClose || hit == kQuit) {
+    if (hit == kClose) {
         DestroyWindow(window_);
     } else if (hit == kPlay && !game_.empty()) {
         if (play())

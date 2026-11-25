@@ -1,4 +1,6 @@
 #include "resource.hpp"
+#include <winver.h>
+#include "..\\shared\\vanacore\\version.hpp"
 
 IDR_LUA_VANA RCDATA "lua\\vana.lua"
 IDR_LUA_ASHITA RCDATA "lua\\compat\\ashita.lua"
@@ -14,3 +16,33 @@ GM_DEV RCDATA "..\\..\\assets\\gm\\dev.png"
 GM_ADMIN RCDATA "..\\..\\assets\\gm\\admin.png"
 GM_SGM RCDATA "..\\..\\assets\\gm\\sgm.png"
 GM_GM RCDATA "..\\..\\assets\\gm\\gm.png"
+
+// VanaCore's version as the DLL's ProductVersion (Explorer's Details; VanaCoreApp shows the installed VanaCore's from it).
+// Only the text: the numbers stay 0, the release sets version.hpp's text alone.
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0,0,0,0
+PRODUCTVERSION 0,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_DLL
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "VanaCore"
+            VALUE "FileDescription", "VanaCore"
+            VALUE "FileVersion", VANACORE_VERSION_TEXT
+            VALUE "InternalName", "VanaCore.Core"
+            VALUE "OriginalFilename", "VanaCore.Core.dll"
+            VALUE "ProductName", "VanaCore"
+            VALUE "ProductVersion", VANACORE_VERSION_TEXT
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

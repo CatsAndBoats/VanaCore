@@ -137,6 +137,7 @@ jobs:
           $path = 'src/shared/vanacore/version.hpp'
           $source = Get-Content $path -Raw
           $source = $source -replace '(kVersion\[\] = L")[^"]+(")', "`${1}$env:VERSION`${2}"
+          $source = $source -replace '(VANACORE_VERSION_TEXT ")[^"]+(")', "`${1}$env:VERSION`${2}" # (the DLL's ProductVersion)
           [IO.File]::WriteAllText((Resolve-Path $path), $source)
           $notes = (@(& .github/scripts/release_notes.ps1 -NoHashes) -join "`n").TrimEnd()
           $changelog = Get-Content CHANGELOG.md -Raw -Encoding utf8

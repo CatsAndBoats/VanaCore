@@ -1,8 +1,14 @@
-// VanaCoreApp.dll's resources: the logo its views draw, and its version (what signing and Explorer's Details show).
+// VanaCoreApp.dll's resources: the logo and the background its views draw, and its version (what signing and Explorer's
+// Details show). background.jpg is assets\appbg.png at 1280x720 (two pixels a DIP of the 640x360 Home), JPEG 90.
 #include <windows.h>
 #include "version.h"
 
 LOGO RCDATA "..\\res\\logo.png"
+BACKDROP RCDATA "..\\res\\background.jpg"
+// the icons: Material Symbols Outlined (Apache 2.0) cut to the ones the app draws (res\make_symbols.py)
+SYMBOLS RCDATA "..\\res\\symbols.ttf"
+// the Play button's: PT Serif Bold (OFL, res\ptserif_OFL.txt) cut to Latin-1 and punctuation (fontTools' pyftsubset)
+SERIF RCDATA "..\\res\\ptserif_bold.ttf"
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION VCAPP_DLL_VERSION_NUM

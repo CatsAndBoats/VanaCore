@@ -1,6 +1,7 @@
 #pragma once
-// The app's first view: VanaCore's card with Play (VanaCore.exe --retail, from the app's own folder) and Close. A start to
-// build the real views on.
+// The app's first view: VanaCore's card over the background picture, its head (the installed VanaCore's version, who made it),
+// and a glass bar at the bottom: the status on the left (with a progress bar for downloads to come), Play on the right
+// (VanaCore.exe --retail, from the app's own folder). A start to build the real views on.
 
 #include <windows.h>
 
@@ -21,7 +22,16 @@ public:
     int run();
 
 private:
-    enum Hit { kNone, kClose, kPlay, kQuit };
+    enum Hit { kNone, kClose, kPlay };
+    // What the status panel says: an icon in its colour, a line, a smaller one under it, and a progress bar (0..1; < 0: none)
+    struct Status {
+        wchar_t icon = 0;
+        std::uint32_t colour = 0;
+        std::wstring title, detail;
+        float progress = -1;
+    };
+    Status status() const;
+    void draw_status(const Status& s, float x, float cy, float room);
     void render();
     void press(Hit hit);
     bool play();
@@ -30,7 +40,8 @@ private:
     void mouse(UINT message, LPARAM lparam);
 
     const VanaCoreAppHost& host_;
-    std::wstring game_;  // VanaCore.exe beside the app, "" when it isn't there
+    std::wstring game_;     // VanaCore.exe beside the app, "" when it isn't there
+    std::wstring vanacore_; // its version (VanaCore.Core.dll's ProductVersion), "" when it has none
     std::wstring error_; // what went wrong starting it, shown under the facts
     HWND window_ = nullptr;
     ui::Canvas canvas_;

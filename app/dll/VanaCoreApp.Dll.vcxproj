@@ -54,6 +54,11 @@
   <ItemGroup>
     <None Include="exports.def" />
     <None Include="..\res\logo.png" />
+    <None Include="..\res\background.jpg" />
+    <None Include="..\res\symbols.ttf" />
+    <None Include="..\res\ptserif_bold.ttf" />
+    <None Include="..\res\ptserif_OFL.txt" />
+    <None Include="..\res\make_symbols.py" />
     <ResourceCompile Include="VanaCoreApp.Dll.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
