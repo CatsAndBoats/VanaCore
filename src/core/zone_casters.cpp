@@ -24,6 +24,7 @@ namespace {
 
 struct Job {
     int zone = 0;
+    bool shade = false; // the ray-traced reflections want the meshes' textures and colours too (refl_rt 2)
     zonemesh::Mesh mesh;
     bool ok = false;
     std::string why;
@@ -67,7 +68,7 @@ void read(std::shared_ptr<Job> job)
     try {
         std::vector<std::uint8_t> dat;
         if (dats::read(model_file(job->zone), dat))
-            job->ok = zonemesh::read(dat, zonefloor::game_key_table(), game_key_table2(), job->mesh, job->why);
+            job->ok = zonemesh::read(dat, zonefloor::game_key_table(), game_key_table2(), job->mesh, job->why, job->shade);
         else
             job->why = "its model DAT couldn't be read";
     } catch (const std::bad_alloc&) {
@@ -93,6 +94,9 @@ void hand(int zone, const zonemesh::Mesh* m)
         v.nrm = m->nrm.size() == m->pos.size() / 3 * 4 ? m->nrm.data() : nullptr;
         v.cut = m->cut.data(), v.ncut = static_cast<unsigned>(m->cut.size() / 5);
         v.ranges = ranges.data(), v.nranges = static_cast<unsigned>(ranges.size());
+        if (m->uv.size() == m->pos.size() / 3 * 2 && m->col.size() == m->pos.size() / 3 && m->tex.size() == m->pos.size() / 9 &&
+            m->cut_col.size() == m->cut.size() / 5)
+            v.uv = m->uv.data(), v.col = m->col.data(), v.tex = m->tex.data(), v.cut_col = m->cut_col.data();
         v.textures = textures.data(), v.ntextures = static_cast<unsigned>(textures.size());
     }
     vanacore_gfx_set_zone_mesh(&v);
@@ -112,6 +116,7 @@ void update(int zone, bool wanted)
             return;
         auto job = std::make_shared<Job>();
         job->zone = zone;
+        job->shade = (vanacore_gfx_floors_wanted() & 4) != 0;
         g_job = job;
         std::thread(read, std::move(job)).detach();
         return;

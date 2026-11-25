@@ -31,6 +31,7 @@
 #define gfx_scene_mirror GFX_CAT(GFX_PREFIX, _scene_mirror)
 #define gfx_scene_floors GFX_CAT(GFX_PREFIX, _scene_floors)
 #define gfx_scene_floors_wanted GFX_CAT(GFX_PREFIX, _scene_floors_wanted)
+#define gfx_scene_rt_geometry GFX_CAT(GFX_PREFIX, _scene_rt_geometry)
 #define gfx_scene_rain_mask GFX_CAT(GFX_PREFIX, _scene_rain_mask)
 #define gfx_scene_rain_mask_wanted GFX_CAT(GFX_PREFIX, _scene_rain_mask_wanted)
 #define gfx_seek_reach GFX_CAT(GFX_PREFIX, _seek_reach)

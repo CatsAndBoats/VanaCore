@@ -362,6 +362,10 @@ void gfx_scene_floors(GfxTex* id, GfxTex* depth, int state)
     g_backend->scene_floors(id, depth, state);
 }
 int gfx_scene_floors_wanted(void) { return g_backend->scene_floors_wanted(); }
+void gfx_scene_rt_geometry(const void* data, uint32_t bytes, uint32_t node_bytes, int scene, uint32_t attr_at, GfxTex* const* tex, uint32_t ntex)
+{
+    g_backend->scene_rt_geometry(data, bytes, node_bytes, scene, attr_at, tex, ntex);
+}
 void gfx_scene_rain_mask(GfxTex* mask, float wet, float reflect, float puddles)
 {
     g_backend->scene_rain_mask(mask, wet, reflect, puddles);

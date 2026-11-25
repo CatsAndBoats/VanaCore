@@ -50,6 +50,7 @@
         (color, s, level, scale, reach))                                                                               \
     X(void, scene_floors, (GfxTex * id, GfxTex * depth, int state), (id, depth, state))                                \
     X(int, scene_floors_wanted, (void), ())                                                                            \
+    X(void, scene_rt_geometry, (const void* data, uint32_t bytes, uint32_t node_bytes, int scene, uint32_t attr_at, GfxTex* const* tex, uint32_t ntex), (data, bytes, node_bytes, scene, attr_at, tex, ntex))      \
     X(void, scene_rain_mask, (GfxTex * mask, float wet, float reflect, float puddles), (mask, wet, reflect, puddles))  \
     X(int, scene_rain_mask_wanted, (void), ())                                                                         \
     X(float, seek_reach, (float* stretch), (stretch))                                                                  \

@@ -106,6 +106,9 @@ enum
     ROOT_SUN,     /* 20 constants b2: the sun's shadow map's matrix (its draws, gfx_hlsl_vs_return), then a fading caster's share and
                    * the map's texel offset (sun_f: cache_let_go) */
     ROOT_SAMPCMP, /* the sampler heap again, as comparison samplers (s0, space1): the shadow lookups */
+    ROOT_RT,      /* the ray-traced reflections' tree of the zone's collision (a root view, t0 space3), and the frame's words for it
+                   * (t1 space3): gfx_d3d12_rt.h */
+    ROOT_RTV,
     ROOT_COUNT,
 };
 
@@ -555,6 +558,9 @@ typedef struct FxSettings
      * camera the mirror's rays skim the ground and find only the walls' dark feet far off, and the reflection stopped
      * part way down the floor (fx_ssr) */
     float refl_lift;
+    /* ... and ray-traced reflections where the screen has none (Direct3D 12): 0 off, 1 on. The ray goes on through a tree of the
+     * zone's collision the shader walks (gfx_d3d12_rt.h, rtbvh.c) */
+    float refl_rt;
     /* the colour grade's zones: midtones and whites (-1..1), soft highlights (0..1: a shoulder in place of the hard clip) and a
      * tint on the lights (-1 cool .. 1 warm); and clarity (local contrast, 0 off). The grade is laid last (grade_last), after
      * every effect; clarity, sharpen and smooth go off with it (grade 0) */
@@ -5315,7 +5321,7 @@ static const char FX_HLSL_1[] =
     /* (a polygon itself turned well toward the light, 23 degrees and more, keeps its light whatever its normals say: within a
      * curved shape they lie no farther than half the turn between two polygons from it, and where they do - a skirt's, averaged
      * with the ground's - a lit polygon was shaded whole) */
-    "  if (cv > 0.0) s = lerp(s, min(s, max(smoothstep(-0.20, 0.05, nfs), smoothstep(0.35, 0.55, nlg))), cv);\n"
+    "  if (cv > 0.0) s = lerp(s, min(s, max(smoothstep(-0.20, 0.05, nfs), smoothstep(0.35, 0.55, nlg))), cv * (1.0 - smoothstep(0.8, 0.95, dot(u.sunsh.xyz, u.up.xyz))));\n"
     /* The maps go by the polygons (vn_replay): a face turned from the light by its own plane (Ng) is shaded by its neighbours
      * in front of it from the edge they share on - a hard line down a low-polygon rock under a low sun - where the smooth normal
      * (Ns, the game's own) has it lit yet. What stands within 3 units of it along the light is its own rock, left to the smooth
@@ -5679,7 +5685,7 @@ static const char FX_HLSL_1[] =
     "      float l2 = dot(nn, nn);\n"
     "      if (l2 > 1e-12) lvl = smoothstep(0.85, 0.97, abs(dot(nn * rsqrt(l2), u.up.xyz)));\n"
     "    }\n"
-    "    lvl = max(lvl, smoothstep(30.0, 45.0, c.y));\n"
+    "    lvl = max(lvl, max(smoothstep(30.0, 45.0, c.y), smoothstep(0.8, 0.95, dot(u.sunsh.xyz, u.up.xyz))));\n"
     "    if (lvl < 0.99) {\n"
     "      float st = max(u.aoc.z * u.proj.y * 0.5 * u.size.w / c.y / 6.0, 0.5);\n"
     "      float2 zs = 0.0;\n"
@@ -6603,6 +6609,82 @@ static const char FX_HLSL_2[] =
     /* A ray from P along R, stepped through the depth buffer, the steps growing with the distance: it hits where it passes behind
      * a surface by less than a thickness that grows with the depth, refined by halving. xy the hit's pixel (or, for the sky, the
      * last sky pixel the ray was over), z 1, w 1 for a surface and 2 for the sky; w 0 for a miss. tt: how far along it was. */
+    /* the zone's collision as a tree (rtbvh.h; Direct3D 12 only): its nodes, 32 bytes each, then its triangles, 36; the frame's
+     * words beside it. Any hit along the ray in the world, nearest-child-first not kept: the reflection is flat shaded */
+    "#ifdef ZL_LATE\n"
+    "ByteAddressBuffer g_bvh : register(t0, space3);\n"
+    "ByteAddressBuffer g_rtv : register(t1, space3);\n"
+    /* the meshes' tree's own words for a triangle (ab: where they start, zonemesh.c: 10 words each): the three corners' uv (6), the
+     * three vertex colours (3: 0xAARRGGBB), and the texture (bits 0 to 15: its index + 1 in the frame words' list from byte 80, 0
+     * none; bit 16: cut out by its alpha). The colour of the surface a ray found: vc the vertex colour there */
+    "float4 tri_tex(uint ab, uint ti, float2 b, float lod, out float3 vc) {\n"
+    "  uint p = ab + ti * 40u;\n"
+    "  uint4 r0 = g_bvh.Load4(p), r1 = g_bvh.Load4(p + 16u);\n"
+    "  uint2 r2 = g_bvh.Load2(p + 32u);\n"
+    "  float w0 = 1.0 - b.x - b.y;\n"
+    "  float2 uv = asfloat(r0.xy) * w0 + asfloat(r0.zw) * b.x + asfloat(r1.xy) * b.y;\n"
+    "  float3 k0 = float3(float((r1.z >> 16) & 255u), float((r1.z >> 8) & 255u), float(r1.z & 255u));\n"
+    "  float3 k1 = float3(float((r1.w >> 16) & 255u), float((r1.w >> 8) & 255u), float(r1.w & 255u));\n"
+    "  float3 k2 = float3(float((r2.x >> 16) & 255u), float((r2.x >> 8) & 255u), float(r2.x & 255u));\n"
+    "  vc = (k0 * w0 + k1 * b.x + k2 * b.y) * (1.0 / 255.0);\n"
+    "  uint tx = r2.y & 0xFFFFu;\n"
+    "  if (tx == 0u) return float4(0.5, 0.5, 0.5, 1.0);\n"
+    "  uint sl = g_rtv.Load(80u + (tx - 1u) * 4u);\n"
+    "  if (sl == 0u) return float4(0.5, 0.5, 0.5, 1.0);\n"
+    "  return tx2[NonUniformResourceIndex(sl)].SampleLevel(smp[fsi[0].x], uv - floor(uv), lod);\n"
+    "}\n"
+    "float bvh_trace(float3 o, float3 d, float tmin, float tmax, uint tb, uint ab, out uint ht, out float2 hb) {\n"
+    "  ht = 0u; hb = float2(0.0, 0.0);\n"
+    "  float3 inv = 1.0 / (d + float3(d.x == 0.0 ? 1e-8 : 0.0, d.y == 0.0 ? 1e-8 : 0.0, d.z == 0.0 ? 1e-8 : 0.0));\n"
+    "  uint stack[24];\n"
+    "  uint sp = 0u, node = 0u;\n"
+    "  [loop] for (int it = 0; it < 160; ++it) {\n"
+    "    uint nb = node * 32u;\n"
+    "    float4 n0 = asfloat(g_bvh.Load4(nb)), n1 = asfloat(g_bvh.Load4(nb + 16u));\n"
+    "    float3 ta = (n0.xyz - o) * inv, tc = (n1.xyz - o) * inv;\n"
+    "    float3 tn = min(ta, tc), tf = max(ta, tc);\n"
+    "    float te = max(max(tn.x, tn.y), max(tn.z, tmin)), tl = min(min(tf.x, tf.y), min(tf.z, tmax));\n"
+    "    bool pop = true;\n"
+    "    if (te <= tl) {\n"
+    "      uint a = asuint(n0.w), cnt = asuint(n1.w);\n"
+    "      if (cnt > 0u) {\n"
+    "        for (uint k = 0u; k < cnt; ++k) {\n"
+    "          uint tp = tb + (a + k) * 36u;\n"
+    "          float3 v0 = asfloat(g_bvh.Load3(tp)), e1 = asfloat(g_bvh.Load3(tp + 12u)), e2 = asfloat(g_bvh.Load3(tp + 24u));\n"
+    "          float3 pv = cross(d, e2);\n"
+    "          float det = dot(e1, pv);\n"
+    "          if (abs(det) > 1e-9) {\n"
+    "            float idt = 1.0 / det;\n"
+    "            float3 tv = o - v0;\n"
+    "            float uu = dot(tv, pv) * idt;\n"
+    "            float3 qv = cross(tv, e1);\n"
+    "            float vv = dot(d, qv) * idt;\n"
+    "            float t = dot(e2, qv) * idt;\n"
+    "            if (uu >= 0.0 && vv >= 0.0 && uu + vv <= 1.0 && t > tmin && t < tmax) {\n"
+    /* (a cut-out's clear texel is no surface: the ray goes on) */
+    "              if (ab != 0u && (g_bvh.Load(ab + (a + k) * 40u + 36u) & 0x10000u) != 0u) {\n"
+    "                float3 vcx;\n"
+    "                if (tri_tex(ab, a + k, float2(uu, vv), 0.0, vcx).a < 0.185) continue;\n"
+    "              }\n"
+    "              ht = a + k; hb = float2(uu, vv);\n"
+    "              return t;\n"
+    "            }\n"
+    "          }\n"
+    "        }\n"
+    "      } else if (sp < 23u) {\n"
+    "        stack[sp++] = a + 1u;\n"
+    "        node = a;\n"
+    "        pop = false;\n"
+    "      }\n"
+    "    }\n"
+    "    if (pop) {\n"
+    "      if (sp == 0u) break;\n"
+    "      node = stack[--sp];\n"
+    "    }\n"
+    "  }\n"
+    "  return -1.0;\n"
+    "}\n"
+    "#endif\n"
     "float4 refl_trace(float3 P, float3 R, float dist, float k, float tmax, int NS, out float tt) {\n"
     "  float t0 = 0.03 * dist + 0.05;\n"
     "  float t_lo = t0, last_sky = 0.0;\n"
@@ -6839,7 +6921,52 @@ static const char FX_HLSL_2[] =
     "  float conf = h.w > 0.5 && h.w < 2.5 ? 1.0 : (h.w > 2.5 ? 0.45 : 0.0);\n"
     "  if (h.w > 1.5) conf *= smoothstep(0.0, 0.3, dot(R, u.up.xyz));\n"
     "  conf *= smoothstep(0.0, 0.25, R.z * u.hand.x);\n"
-    "  if (conf > 0.0) {\n"
+    /* ray-traced reflections (refl_rt; Direct3D 12 only, ZL_LATE): where the screen has no hit, the ray goes on through the tree of
+     * the zone's collision (rtbvh.h), in the world: g_rtv has the view's inverse to take the ray there, and says whether a tree is
+     * bound (word 16; word 17 where its triangles start) */
+    "  bool rthit = false;\n"
+    "  float3 rtc = float3(0.0, 0.0, 0.0);\n"
+    "  float rtw = 0.0;\n"
+    "#ifdef ZL_LATE\n"
+    /* (word 16 is 2 with the zone's meshes bound, refl_rt 2: they take every ray, not only the misses, so what the floor shows
+     * doesn't move with the camera) */
+    "  uint4 rti = g_rtv.Load4(64u);\n"
+    "  if (amt > 0.003 && (h.w < 0.5 || h.w > 2.5 || rti.x == 2u) && dot(R, u.up.xyz) > 0.02) {\n"
+    "    if (rti.x != 0u) {\n"
+    "      float4 m0 = asfloat(g_rtv.Load4(0u)), m1 = asfloat(g_rtv.Load4(16u)), m2 = asfloat(g_rtv.Load4(32u)), m3 = asfloat(g_rtv.Load4(48u));\n"
+    "      float3 ow = P.x * m0.xyz + P.y * m1.xyz + P.z * m2.xyz + m3.xyz;\n"
+    "      float3 dw = R.x * m0.xyz + R.y * m1.xyz + R.z * m2.xyz;\n"
+    "      float rtmax = max(u.refl.w, 100.0);\n"
+    "      uint ht; float2 hb;\n"
+    /* (the meshes' tree starts the ray off the floor it leaves: ground laid over ground, a path or a drain's rim a hand above the
+     * pavement, is a surface the ray meets at once from beneath, a dark band that isn't there) */
+    "      float th = bvh_trace(ow, dw, rti.x == 2u ? max(0.03 * dist + 0.05, 0.4) : 0.03 * dist + 0.05, rtmax, rti.y, rti.x == 2u ? rti.z : 0u, ht, hb);\n"
+    "      if (th > 0.0) {\n"
+    "        float lm = luma_at(px).x;\n"
+    "        rthit = true;\n"
+    "        rtw = 1.0 - smoothstep(0.5 * rtmax, rtmax, th);\n"
+    "        rtc = lerp(c.rgb, float3(lm, lm, lm), 0.5) * 0.8;\n"
+    /* the meshes' tree: the surface's own texture, by its vertices' colours (the zone's baked light) and the light the floor has here */
+    "        if (rti.x == 2u) {\n"
+    "          float3 vc;\n"
+    "          float3 tc = tri_tex(rti.z, ht, hb, min(log2(1.0 + th * 0.05) * 1.5, 6.0), vc).rgb;\n"
+    "          rtc = tc * saturate(vc * 2.0) * (0.35 + 1.1 * saturate(lm));\n"
+    /* the zone's fog over what is far, as the world has it */
+    "          rtc = lerp(rtc, u.fogc.rgb, u.fogc.a > 0.0 ? min(1.0 - exp(-u.fogc.a * th), u.fogp.y) : 0.0);\n"
+    "        }\n"
+    "      } else if (rti.x == 2u && u.fogc.a > 0.0 && conf <= 0.0) {\n"
+    /* a ray that leaves the zone with the screen having nothing for it: the sky, which the tree hasn't, as its fog colour */
+    "        rthit = true;\n"
+    "        rtw = smoothstep(0.0, 0.3, dot(R, u.up.xyz));\n"
+    "        rtc = u.fogc.rgb;\n"
+    "      }\n"
+    "    }\n"
+    "  }\n"
+    "#endif\n"
+    "  if (rthit) {\n"
+    "    w = saturate(amt * rtw);\n"
+    "    lay = rtc * w;\n"
+    "  } else if (conf > 0.0) {\n"
     "    float2 e = (h.xy - u.vp.xy) / u.vp.zw;\n"
     /* a hit near the picture's edges fades out, so a reflection that runs out of the picture eases away and doesn't stop at a
      * line; the sky (its last pixel, at the top as often as not) only toward the sides */
@@ -6876,6 +7003,11 @@ static const char FX_HLSL_2[] =
     "    }\n"
     "    w = saturate(amt * conf);\n"
     "    lay = rc * w;\n"
+    "  }\n"
+    /* Render visual 33 (Ray-traced reflections): red where the tree's ray is what shows, green where the screen's is */
+    "  if (int(u.grade.w) == 33) {\n"
+    "    w = amt > 0.003 ? 0.6 : 0.0;\n"
+    "    lay = rthit ? float3(1.0, 0.0, 0.0) * w : (conf > 0.0 ? float3(0.0, 1.0, 0.0) * w : float3(0.0, 0.0, 0.0));\n"
     "  }\n"
     /* the sun's glint on the wet floor, where it is lit: from the light the shadows fall from (sunsh, held over the horizon at
      * dusk, so the glint and the shadows that block it agree), and faded as the shadows are (sunsh.w: the game's direct light,
@@ -7093,7 +7225,7 @@ static const char FX_HLSL_2[] =
     /* Render visual 17 and 18 (/vana debug's Reflections and Reflection ground): over the picture in grey, dimmed */
     "  int dview = int(u.grade.w);\n"
     "  float grey = 0.35 * dot(c.rgb, LUMA);\n"
-    "  if (z == 0.0) return dview == 17 || dview == 18 ? float4(grey.xxx, c.a) : dview == 30 ? float4(dot(c.rgb, LUMA).xxx, c.a) : c;\n"
+    "  if (z == 0.0) return dview == 17 || dview == 18 || dview == 33 ? float4(grey.xxx, c.a) : dview == 30 ? float4(dot(c.rgb, LUMA).xxx, c.a) : c;\n"
     /* Render visual 1-6 (the occlusion, fog, bloom, god rays, the sun's shadows, the ink lines: one layer alone, from fx_comp):
      * as it came, not with its own reflection laid over it - a wet floor mirrored the shadows' mask as a grey smear under the
      * walls (the reflections trace the composite, which is that layer then) */
@@ -7139,10 +7271,10 @@ static const char FX_HLSL_2[] =
     "    }\n"
     /* Render visual 17: the reflections as laid over, at twice their weight, in their own colour over the grey: where they land
      * and what they show */
-    "    if (dv == 17) return float4(grey * (1.0 - saturate(2.0 * L.a)) + saturate(2.0 * L.rgb), c.a);\n"
+    "    if (dv == 17 || dv == 33) return float4(grey * (1.0 - saturate(2.0 * L.a)) + saturate(2.0 * L.rgb), c.a);\n"
     "    o = o * (1.0 - saturate(L.a)) + L.rgb;\n"
     "  }\n"
-    "  if (dview == 17) return float4(grey.xxx, c.a);\n"
+    "  if (dview == 17 || dview == 33) return float4(grey.xxx, c.a);\n"
     "  if (dview == 30) return float4(dot(c.rgb, LUMA).xxx, c.a);\n"
     "  if (u.refl2.z > 0.0) {\n"
     "    float4 G = gi_at(3, i.uv, dist);\n"
@@ -8267,6 +8399,7 @@ static const struct
     { "refl_floors", offsetof(FxSettings, refl_floors), 1.0f },
     { "refl_bump", offsetof(FxSettings, refl_bump), 1.3f },
     { "refl_lift", offsetof(FxSettings, refl_lift), 0.15f },
+    { "refl_rt", offsetof(FxSettings, refl_rt), 0.0f },
     { "gi", offsetof(FxSettings, gi), 0.0f },
     { "gi_radius", offsetof(FxSettings, gi_radius), 5.0f },
     { "gi_quality", offsetof(FxSettings, gi_quality), 1.09f },
@@ -15587,6 +15720,7 @@ int gfx_wait_step(unsigned bit, char* words, int size)
 #include "gfx_d3d12_copies.h" /* gfx_scene_world_depth, gfx_scene_snapshot: the scene copied for the grass, lines and water */
 
 #include "gfx_d3d12_mirror.h" /* gfx_scene_mirror: the world mirrored in the water ([graphics] water.mirror) */
+#include "gfx_d3d12_rt.h"     /* the ray-traced reflections: an acceleration structure of the zone's collision (gfx_scene_rt_geometry) */
 #include "gfx_d3d12_floors.h" /* the glow over the grass, the floors and the rain's mask for the reflections (gfx_scene_floors) */
 
 void gfx_scene_done(GfxTex* color, const GfxScene* s)
@@ -16331,6 +16465,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
                         ssr_in[10] = g_fx.cmask.srv, ssr_n = 11;
                     }
 #endif
+                    rt_bind(l, s->view); /* ... and the ray-traced reflections' tree and the frame's words (refl_rt) */
                     fx_pass(&g_fx.rl, FX_SSR, &u, ssr_in, ssr_n, 0, 0);
                 }
                 if (gi)
@@ -16596,6 +16731,12 @@ static ID3D12RootSignature* make_root(void)
     p[ROOT_SAMPCMP].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     p[ROOT_SAMPCMP].DescriptorTable.NumDescriptorRanges = 1, p[ROOT_SAMPCMP].DescriptorTable.pDescriptorRanges = &sampcmp;
     p[ROOT_SAMPCMP].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    p[ROOT_RT].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    p[ROOT_RT].Descriptor.ShaderRegister = 0, p[ROOT_RT].Descriptor.RegisterSpace = 3;
+    p[ROOT_RT].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    p[ROOT_RTV].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    p[ROOT_RTV].Descriptor.ShaderRegister = 1, p[ROOT_RTV].Descriptor.RegisterSpace = 3;
+    p[ROOT_RTV].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     D3D12_ROOT_SIGNATURE_DESC rd = { ROOT_COUNT, p, 0, NULL,
         D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
             D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS };

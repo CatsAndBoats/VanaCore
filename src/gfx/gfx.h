@@ -530,6 +530,9 @@ void gfx_scene_floors(GfxTex* id, GfxTex* depth, int state);
 void gfx_scene_rain_mask(GfxTex* mask, float wet, float reflect, float puddles);
 int gfx_scene_rain_mask_wanted(void);
 int gfx_scene_floors_wanted(void);
+/* The zone's collision as a bounding-volume tree (rtbvh.h; `bytes` of it, the triangles from `node_bytes`) for the ray-traced
+ * reflections (Direct3D 12, [graphics.effects] refl_rt): kept in a buffer the reflection shader walks. NULL or 0: let the last go */
+void gfx_scene_rt_geometry(const void* data, uint32_t bytes, uint32_t node_bytes, int scene, uint32_t attr_at, GfxTex* const* tex, uint32_t ntex);
 /* How far round the player VanaCore's caster pass (casters.cpp) has the game draw the zone's pieces for the sun's maps alone
  * (GfxDraw.sought), whatever the camera sees: the maps' reach; and in *stretch (when wanted) how far a piece's shadow reaches along
  * the ground for each unit of its height (the light's cosine over its sine, 3 at most), which the pass takes a tall piece from

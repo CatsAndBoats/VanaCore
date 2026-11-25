@@ -259,6 +259,12 @@ typedef struct VanaZoneMesh
     const float* nrm; /* 4 floats for each of pos's vertices, or NULL: its normal in the world, 1 + the bulge's height there long
                        * (world units), and how far the surface there is curved and smoothly shaded, 0 to 1 (core/zonemesh.cpp
                        * curve_of): the sun's shading of curved rock */
+    /* for the ray-traced reflections ([graphics.effects] refl_rt 2), or NULL: pos's vertices' uv (2 floats) and colour (0xAARRGGBB),
+     * each solid triangle's texture (an index in textures, -1 none), and cut's vertices' colour */
+    const float* uv;
+    const unsigned* col;
+    const int* tex;
+    const unsigned* cut_col;
 } VanaZoneMesh;
 void vanacore_gfx_set_zone_mesh(const VanaZoneMesh* mesh);
 /* Bit 1 while the reflections want the zone's floors too (Direct3D 12, [graphics.effects] refl and refl_floors on): they keep to

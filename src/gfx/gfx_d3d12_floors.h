@@ -56,5 +56,6 @@ int gfx_scene_floors_wanted(void)
 {
     if (!g_dev || g_fxs.fx == 0.0f || !(g_fxs.refl > 0.0f))
         return 0;
-    return g_fxs.refl_floors >= 1.0f ? 1 : 0;
+    /* bit 1: the floors' layer (refl_floors); bit 2: the zone's collision for the ray-traced reflections (refl_rt); bit 4: the zone's meshes for them (refl_rt 2: zonemesh.c) */
+    return (g_fxs.refl_floors >= 1.0f ? 1 : 0) | (g_fxs.refl_rt > 0.0f ? 2 : 0) | (g_fxs.refl_rt >= 2.0f ? 4 : 0);
 }

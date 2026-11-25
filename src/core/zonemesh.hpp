@@ -37,6 +37,12 @@ struct Mesh {
     // how far the surface there is curved and smoothly shaded (0 to 1; curve_of): for the sun's shading of curved rock
     std::vector<float> nrm;
     std::vector<float> cut; // 5 a vertex: x, y, z, u, v (cut out)
+    // for the ray-traced reflections (read's `shade`): what colours a surface they find. The solid vertices' uv (2 a vertex) and
+    // vertex colour (0xAARRGGBB, the zone's baked light), and each solid triangle's texture (an index in `textures`, -1 none); the
+    // cut-out vertices' colour. Left empty without `shade`
+    std::vector<float> uv;
+    std::vector<std::uint32_t> col, cut_col;
+    std::vector<std::int32_t> tex;
     std::vector<Range> ranges;
     std::vector<Texture> textures;
     // what was read and left out, for the log
@@ -47,7 +53,8 @@ struct Mesh {
 
 // The DAT's meshes where its ZoneDef places them. `table1` and `table2`: FFXiMain.dll's key tables (null: read as they are,
 // for a zone that isn't encrypted). False, and `why` said, when it has no ZoneDef or nothing placed.
-bool read(const std::vector<std::uint8_t>& dat, const std::uint8_t* table1, const std::uint8_t* table2, Mesh& out, std::string& why);
+bool read(const std::vector<std::uint8_t>& dat, const std::uint8_t* table1, const std::uint8_t* table2, Mesh& out, std::string& why,
+          bool shade = false);
 
 // The second key table from the bytes of FFXiMain.dll's file (zonefloor::key_table has the first). False if it isn't there.
 bool key_table2(const std::vector<std::uint8_t>& dll, std::uint8_t out[256]);

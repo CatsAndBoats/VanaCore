@@ -123,6 +123,7 @@ struct Part {
     bool blended = false;
     std::vector<float> tris;
     std::vector<float> nrm; // 4 floats a corner beside tris': the vertex's normal (the mesh's space), and its curve (curve_of)
+    std::vector<std::uint32_t> col; // the corner's vertex colour, 0xAARRGGBB, beside tris'
 };
 struct MeshDef {
     bool cutout = false; // its name starts with '_': the game alpha-tests it
@@ -273,12 +274,13 @@ bool parse_mesh(const std::vector<std::uint8_t>& s, std::string& name, MeshDef& 
             const std::size_t v = verts + i * stride, n = v + stride - 24; // (position [, a second], normal, colour, uv)
             part.tris.insert(part.tris.end(), {b.f32(v), b.f32(v + 4), b.f32(v + 8), b.f32(v + stride - 8), b.f32(v + stride - 4)});
             part.nrm.insert(part.nrm.end(), {b.f32(n), b.f32(n + 4), b.f32(n + 8), 0.0f});
+            part.col.push_back(b.u32(v + stride - 12)); // (position [, a second], normal, colour, uv)
             return true;
         };
         auto triangle = [&](unsigned a, unsigned c, unsigned d) {
-            const std::size_t was = part.tris.size(), was_n = part.nrm.size();
+            const std::size_t was = part.tris.size(), was_n = part.nrm.size(), was_c = part.col.size();
             if (!(corner(a) && corner(c) && corner(d)))
-                part.tris.resize(was), part.nrm.resize(was_n);
+                part.tris.resize(was), part.nrm.resize(was_n), part.col.resize(was_c);
         };
         if (strip) {
             // degenerate triangles restart the strip; the winding doesn't matter to a shadow (drawn both sides)
@@ -362,6 +364,8 @@ const MeshDef* resolve(const std::unordered_map<std::string, MeshDef>& meshes, c
 struct Bucket {
     std::vector<float> v; // 5 floats a corner: x, y, z, u, v
     std::vector<float> n; // 4 floats a corner, solid buckets: its normal in the world and its curve
+    std::vector<std::uint32_t> c; // a corner's vertex colour (shade)
+    std::vector<std::int32_t> t;  // a corner's texture, solid buckets (shade): the triangle's, in Mesh::textures
     float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
 };
 
@@ -420,7 +424,7 @@ int left_out(const Buf& b, std::size_t r)
 }
 
 void lay(const MeshDef& m, const Place& pl, const std::vector<std::uint8_t>& dat, Mesh& out,
-         std::unordered_map<std::uint64_t, Bucket>& buckets, std::unordered_map<std::string, std::int32_t>& textures)
+         std::unordered_map<std::uint64_t, Bucket>& buckets, std::unordered_map<std::string, std::int32_t>& textures, bool shade)
 {
     for (const Part& part : m.parts) {
         if (part.blended) {
@@ -428,6 +432,7 @@ void lay(const MeshDef& m, const Place& pl, const std::vector<std::uint8_t>& dat
             continue;
         }
         const std::int32_t texture = m.cutout ? texture_of(dat, part.texture, out, textures) : -1;
+        const std::int32_t own = shade && texture < 0 ? texture_of(dat, part.texture, out, textures) : -1;
         Bucket& bk = buckets[bucket_key(pl.o, texture)];
         for (std::size_t i = 0; i + 5 <= part.tris.size(); i += 5) {
             float w[3];
@@ -435,6 +440,11 @@ void lay(const MeshDef& m, const Place& pl, const std::vector<std::uint8_t>& dat
             for (int k = 0; k < 3; ++k)
                 bk.lo[k] = std::min(bk.lo[k], w[k]), bk.hi[k] = std::max(bk.hi[k], w[k]);
             bk.v.insert(bk.v.end(), {w[0], w[1], w[2], part.tris[i + 3], part.tris[i + 4]});
+            if (shade) {
+                bk.c.push_back(i / 5 < part.col.size() ? part.col[i / 5] : 0xFF808080u);
+                if (texture < 0)
+                    bk.t.push_back(own);
+            }
             if (texture < 0) { // (the solid ones': Mesh::nrm goes beside Mesh::pos)
                 const std::size_t c = i / 5 * 4;
                 float n[3] = {0, 0, 0};
@@ -470,20 +480,31 @@ void flatten(std::unordered_map<std::uint64_t, Bucket>& buckets, Mesh& out)
             r.first = static_cast<std::uint32_t>(out.pos.size() / 3);
             for (std::size_t i = 0; i < bk->v.size(); i += 5)
                 out.pos.insert(out.pos.end(), {bk->v[i], bk->v[i + 1], bk->v[i + 2]});
+            if (bk->c.size() == corners && bk->t.size() == corners) { // (shade: the solid corners' uv, colour and texture)
+                for (std::size_t i = 0; i < bk->v.size(); i += 5)
+                    out.uv.insert(out.uv.end(), {bk->v[i + 3], bk->v[i + 4]});
+                out.col.insert(out.col.end(), bk->c.begin(), bk->c.end());
+                for (std::size_t i = 0; i < corners; i += 3)
+                    out.tex.push_back(bk->t[i]);
+            }
             bk->n.resize(bk->v.size() / 5 * 4, 0.0f);
             out.nrm.insert(out.nrm.end(), bk->n.begin(), bk->n.end());
         } else {
             r.first = static_cast<std::uint32_t>(out.cut.size() / 5);
             out.cut.insert(out.cut.end(), bk->v.begin(), bk->v.end());
+            if (bk->c.size() == corners)
+                out.cut_col.insert(out.cut_col.end(), bk->c.begin(), bk->c.end());
         }
         out.ranges.push_back(r);
         std::vector<float>().swap(bk->v), std::vector<float>().swap(bk->n);
+        std::vector<std::uint32_t>().swap(bk->c), std::vector<std::int32_t>().swap(bk->t);
     }
 }
 
 } // namespace
 
-bool read(const std::vector<std::uint8_t>& dat, const std::uint8_t* table1, const std::uint8_t* table2, Mesh& out, std::string& why)
+bool read(const std::vector<std::uint8_t>& dat, const std::uint8_t* table1, const std::uint8_t* table2, Mesh& out, std::string& why,
+          bool shade)
 {
     out = Mesh{};
     const std::vector<Section> all = sections(dat);
@@ -520,7 +541,7 @@ bool read(const std::vector<std::uint8_t>& dat, const std::uint8_t* table1, cons
             continue;
         }
         out.placed++;
-        lay(*m, place_of(b, r), dat, out, buckets, textures);
+        lay(*m, place_of(b, r), dat, out, buckets, textures, shade);
     }
     flatten(buckets, out);
     if (out.ranges.empty()) {

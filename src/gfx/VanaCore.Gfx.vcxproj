@@ -77,6 +77,7 @@
     <ClCompile Include="gfx_hlsl.c" />
     <ClCompile Include="gfx_hlsl_shaders.c" />
     <ClCompile Include="floors.c" />
+    <ClCompile Include="rtbvh.c" />
     <ClCompile Include="zonemesh.c" />
     <ClCompile Include="gfx_shared.c" />
     <ClCompile Include="gfx_watch_values.c" />
@@ -112,6 +113,7 @@
     <ClInclude Include="d3d8_winimage.h" />
     <ClInclude Include="d3d8_corners.h" />
     <ClInclude Include="floors.h" />
+    <ClInclude Include="rtbvh.h" />
     <ClInclude Include="zonemesh.h" />
     <ClInclude Include="snow.h" />
     <ClInclude Include="sky.h" />
@@ -126,6 +128,7 @@
     <ClInclude Include="gfx_d3d12_batch.h" />
     <ClInclude Include="gfx_d3d12_cmask.h" />
     <ClInclude Include="gfx_d3d12_floors.h" />
+    <ClInclude Include="gfx_d3d12_rt.h" />
     <ClInclude Include="gfx_d3d12_copies.h" />
     <ClInclude Include="gfx_d3d12_measure.h" />
     <ClInclude Include="gfx_d3d12_mirror.h" />

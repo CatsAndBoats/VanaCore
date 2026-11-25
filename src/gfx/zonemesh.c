@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rtbvh.h"
 #include "runtime.h"
 
 #define FMT_A8R8G8B8 21u  /* D3DFMT (as grass.c and snow.c) */
@@ -51,6 +52,7 @@ static struct
 
 static void zm_free(void)
 {
+    gfx_scene_rt_geometry(NULL, 0, 0, 1, 0, NULL, 0); /* (the ray-traced reflections' tree was built from them: let go of it and its textures first) */
     gfx_buf_destroy(zm.pos);
     gfx_buf_destroy(zm.cut);
     gfx_buf_destroy(zm.cpos);
@@ -175,6 +177,96 @@ static void zm_curved(const VanaZoneMesh* m)
     }
 }
 
+/* The ray-traced reflections' second tree ([graphics.effects] refl_rt 2, gfx_scene_floors_wanted bit 4): every triangle of the zone's
+ * meshes, solid and cut-out, as a tree (rtbvh.c) for the back end's trace, so what the floor reflects doesn't depend on what the
+ * camera sees. Each triangle carries 10 words beside it for the hit's colour: its corners' uv (6), their vertex colours (3), and its
+ * texture (the index + 1 in zm.tex, which the back end keeps a list of, bits 0 to 15; bit 16 for a cut-out). Built here, once a
+ * zone, with the meshes; turned on later, it's built at the next zone. */
+#define ZM_RT_MAX 700000u /* triangles: a zone with more (Sanctuary of Zi'Tah's 2 million) would want hundreds of MB in a 32-bit game */
+#define ZM_RT_WORDS 10u
+
+static void zm_rt_tree(const VanaZoneMesh* m)
+{
+    if (!(gfx_scene_floors_wanted() & 4))
+        return;
+    const uint32_t ns = m->pos ? m->npos / 3u : 0, nc = m->cut ? m->ncut / 3u : 0, nt = ns + nc;
+    if (nt > ZM_RT_MAX)
+    {
+        rt_log("[recomp] gfx: ray tracing: the zone's meshes have %u triangles, over the %u a tree is built for: not built\n", nt, ZM_RT_MAX);
+        return;
+    }
+    float* v = nt ? (float*)malloc((size_t)nt * 36u) : NULL;
+    uint32_t* pay = nt ? (uint32_t*)calloc((size_t)nt, ZM_RT_WORDS * 4u) : NULL;
+    if (!v || !pay)
+    {
+        free(v), free(pay);
+        return;
+    }
+    if (ns)
+        memcpy(v, m->pos, (size_t)ns * 36u);
+    for (size_t i = 0; i < (size_t)nc * 3u; ++i)
+        memcpy(v + (size_t)ns * 9u + i * 3u, &m->cut[i * 5u], 12u);
+    /* the words of each: from what the core handed over (uv, col, tex, cut_col), else a grey no texture's */
+    const int have = m->uv && m->col && m->tex && m->cut_col;
+    float* uvw = (float*)pay;
+    double csum[3] = { 0, 0, 0 };
+    uint32_t cn = 0;
+    for (uint32_t t = 0; t < nt; ++t)
+    {
+        uint32_t* w = pay + (size_t)t * ZM_RT_WORDS;
+        float* f = uvw + (size_t)t * ZM_RT_WORDS;
+        w[6] = w[7] = w[8] = 0xFF808080u;
+        if (!have)
+            continue;
+        if (t < ns)
+        {
+            for (int c = 0; c < 3; ++c)
+            {
+                f[c * 2] = m->uv[((size_t)t * 3u + (size_t)c) * 2u], f[c * 2 + 1] = m->uv[((size_t)t * 3u + (size_t)c) * 2u + 1];
+                w[6 + c] = m->col[(size_t)t * 3u + (size_t)c];
+            }
+            const int tx = m->tex[t];
+            w[9] = tx >= 0 && (uint32_t)tx < zm.ntex && zm.tex[tx] ? (uint32_t)tx + 1u : 0u;
+        }
+        else
+        {
+            const size_t k = (size_t)(t - ns) * 3u;
+            for (int c = 0; c < 3; ++c)
+            {
+                f[c * 2] = m->cut[(k + (size_t)c) * 5u + 3], f[c * 2 + 1] = m->cut[(k + (size_t)c) * 5u + 4];
+                w[6 + c] = m->cut_col[k + (size_t)c];
+            }
+            w[9] = 0x10000u;
+        }
+        if ((t & 63u) == 0)
+            for (int k2 = 0; k2 < 3; ++k2)
+                csum[k2] += (w[6] >> (16 - 8 * k2)) & 255u;
+        cn += (t & 63u) == 0;
+    }
+    /* a cut-out's texture, by its range */
+    if (have)
+        for (uint32_t i = 0; i < m->nranges; ++i)
+        {
+            const VanaZoneMeshRange* r = &m->ranges[i];
+            if (r->texture < 0 || (uint32_t)r->texture >= zm.ntex || !zm.tex[r->texture])
+                continue;
+            for (uint32_t c = r->first / 3u; c < (r->first + r->count) / 3u && c < nc; ++c)
+                pay[(size_t)(ns + c) * ZM_RT_WORDS + 9] = 0x10000u | ((uint32_t)r->texture + 1u);
+        }
+    const uint64_t t0 = gfx_now_ns();
+    uint32_t bytes = 0, node_bytes = 0, attr_at = 0;
+    uint8_t* tree = rtbvh_build_ex(v, 3, nt, pay, ZM_RT_WORDS, &bytes, &node_bytes, &attr_at);
+    free(v), free(pay);
+    if (!tree)
+        return;
+    gfx_scene_rt_geometry(tree, bytes, node_bytes, 1, attr_at, zm.tex, zm.ntex);
+    rt_log("[recomp] gfx: ray tracing: the zone's meshes as a tree: %u solid and %u cut-out triangles, %u KB, built in %u ms; %s, "
+           "%u textures, mean vertex colour %d %d %d\n",
+        ns, nc, bytes >> 10, (unsigned)((gfx_now_ns() - t0) / 1000000u), have ? "textured" : "no uv or textures handed over", zm.ntex,
+        cn ? (int)(csum[0] / cn) : 0, cn ? (int)(csum[1] / cn) : 0, cn ? (int)(csum[2] / cn) : 0);
+    free(tree);
+}
+
 void zonemesh_set(const VanaZoneMesh* m)
 {
     zm_free();
@@ -204,6 +296,7 @@ void zonemesh_set(const VanaZoneMesh* m)
         zm.ranges[zm.nranges++] = (ZRange){ r->first, r->count - r->count % 3, r->texture };
     }
     zm.zone = m->zone;
+    zm_rt_tree(m);
     rt_log("[recomp] gfx: zone %d's own meshes for the sun's shadows: %u parts, %u solid and %u cut-out vertices (%u KB), %u "
            "textures; %u vertices of curved rock and ground ([graphics.effects] sun_zone_mesh, sun_curved)\n",
         m->zone, zm.nranges, m->npos, m->ncut, (m->npos * 12u + m->ncut * 20u) / 1024u, zm.ntex, zm.ncurved);

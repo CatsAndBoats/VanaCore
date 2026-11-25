@@ -19,6 +19,7 @@
  * (vanacore_gfx_set_collision), laid in the world the same way and drawn over the scene see-through: walls red, floors by their
  * kind of ground. */
 #include "floors.h"
+#include "rtbvh.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -75,6 +76,7 @@ void floors_show_collision(int on)
 
 static void collision_free(void)
 {
+    gfx_scene_rt_geometry(NULL, 0, 0, 0, 0, NULL, 0); /* (the ray-traced reflections' tree was built from it) */
     gfx_buf_destroy(coll.vb);
     coll.vb = NULL, coll.ntris = coll.bytes = 0;
 }
@@ -298,6 +300,17 @@ void floors_set_collision(const GrassFloors* f)
     }
     else
         coll.bytes = 0;
+    /* the ray-traced reflections (refl_rt): a tree of these triangles, kept by the renderer; the colour word is left out by the stride */
+    if (n && (gfx_scene_floors_wanted() & 2))
+    {
+        uint32_t bytes = 0, node_bytes = 0;
+        uint8_t* tree = rtbvh_build((const float*)v, (uint32_t)(sizeof(FVert) / sizeof(float)), n / 3, &bytes, &node_bytes);
+        const int built = tree != NULL;
+        if (built)
+            gfx_scene_rt_geometry(tree, bytes, node_bytes, 0, 0, NULL, 0), free(tree);
+        rt_log("[recomp] floors: zone %d's collision as a tree for the ray-traced reflections: %u triangles, %u KB%s\n", f->zone, n / 3,
+            bytes >> 10, built ? "" : " (not built)");
+    }
     free(v);
 }
 
@@ -370,7 +383,7 @@ static void collision_draw(GfxTex* color, GfxTex* depth, const GfxScene* s)
 /* the reflections' layer of the floors (floors_scene's first part) */
 static void layer_scene(GfxTex* color, GfxTex* depth, const GfxScene* s)
 {
-    const int layer = gfx_scene_floors_wanted() && g.vb && g.ntris;
+    const int layer = (gfx_scene_floors_wanted() & 1) && g.vb && g.ntris;
     /* why the floors aren't drawn: 2 the zone has none (any ground reflects), 0 not read yet (the reflections wait) */
     const int state = layer ? 1 : g.zone && g.none ? 2 : 0;
     if (!layer)
