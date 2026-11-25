@@ -4278,7 +4278,7 @@ local function draw_presets_page(page, x, y, w)
 end
 
 -------------------------------------------------------------------------------
--- Search: the rows of every page whose name, tooltip or section title has the text
+-- Search: the rows of every page whose name has the text (not their tooltips, nor a whole section by its title)
 -------------------------------------------------------------------------------
 
 local function search_results(query)
@@ -4287,14 +4287,12 @@ local function search_results(query)
     for _, page in ipairs(PAGES) do
         if page.tab ~= nil and not page.hidden then
             for _, sec in ipairs(sections_of(page, page_rows(page))) do
-                local whole = sec.title ~= nil and sec.title:lower():find(query, 1, true) ~= nil
                 local rows = {}
                 local tab = nil -- (a tab bar's rows found: each tab's under its name, row.tab_of.head)
                 for _, row in ipairs(sec.rows) do
                     if row.kind ~= 'subheader' and row.kind ~= 'note' and row.kind ~= 'tabs' then
                         local name = (row.label or row.text or row.name or ''):lower()
-                        local tip = tip_of(row)
-                        local found = whole or name:find(query, 1, true) or (type(tip) == 'string' and tip:lower():find(query, 1, true))
+                        local found = name:find(query, 1, true)
                         -- (a True Font line by its parts' names too: "outline", "size", "bold"; a colours line, "tp colour")
                         for _, part in ipairs(not found and (row.kind == 'font' or row.kind == 'colours') and row.parts or {}) do
                             found = found or (part.label or ''):lower():find(query, 1, true) ~= nil
