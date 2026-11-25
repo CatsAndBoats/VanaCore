@@ -642,8 +642,23 @@ int wmain(int argc, wchar_t** argv)
     choice.retail = settings.retail || has_retail_argument(argc, argv);
     choice.server = settings.server;
     choice.ini = given;
-    if (!vanacore::show_start_screen(choice))
+    // VanaCore.exe is a console program: its own console (double-clicked, a shortcut, start-gui.bat's `start`) is let go while
+    // the screen is up, and a new one made for the start's progress and any error once Start Game is pressed (one a command
+    // prompt shares stays as it is). Hiding it doesn't do: Windows Terminal, Windows 11's default console, keeps its window
+    // whatever ShowWindow is told (seen 2026-11-25)
+    const bool own = owns_console_window();
+    if (own)
+        FreeConsole();
+    const bool started = vanacore::show_start_screen(choice);
+    if (!started)
         return 0;
+    if (own && AllocConsole()) {
+        FILE* stream = nullptr;
+        freopen_s(&stream, "CONOUT$", "w", stdout);
+        freopen_s(&stream, "CONOUT$", "w", stderr);
+        freopen_s(&stream, "CONIN$", "r", stdin);
+        SetConsoleTitleW(L"VanaCore");
+    }
     if (choice.retail)
         kept.push_back(L"--retail");
     else if (!choice.server.empty()) {
