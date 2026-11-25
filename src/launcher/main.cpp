@@ -636,7 +636,7 @@ int wmain(int argc, wchar_t** argv)
         kept.push_back(argv[i]);
     }
     const std::wstring given = ini_argument(argc, argv, exe_dir());
-    const std::wstring settings_ini = given.empty() ? exe_dir() + L"\vanacore.ini" : given;
+    const std::wstring settings_ini = given.empty() ? exe_dir() + L"\\vanacore.ini" : given;
     const vanacore::Settings settings = vanacore::load_settings(exe_dir(), settings_ini);
     vanacore::GuiChoice choice;
     choice.retail = settings.retail || has_retail_argument(argc, argv);
