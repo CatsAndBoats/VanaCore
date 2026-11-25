@@ -3738,6 +3738,17 @@ local function draw_section(page, sec, x, y, w, over_title, rows, hy)
                 ry = ry + S(4)
             end
             i = j
+        elseif row.box_span and st.search[1] == '' then
+            -- this row and the ones after it (box_span in all) in a box of their own (the main menu's Font line and its shadow)
+            local last = math.min(#list, i + row.box_span - 1)
+            local shown = 0 -- (another tab's box, its rows with no height: nothing to draw)
+            for k = i, last do
+                shown = shown + row_height(list[k], sec, note_width(w))
+            end
+            if shown > 0 then
+                ry = M.draw_group(page, sec, list, i, last, x, ry + S(8), w, ctx) -- (room above it, under the row before)
+            end
+            i = last + 1
         elseif row.boxed and st.search[1] == '' then
             -- one row alone in the Advanced Settings' box (Disable True Font)
             ry = M.draw_group(page, sec, list, i, i, x, ry, w, ctx)

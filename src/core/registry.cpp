@@ -1317,6 +1317,8 @@ void serve(Key key, const char* name, const std::wstring& text)
 // and out as the sharp map's edge went by with the player walking; the middle map is off by default again)
 // 2: [graphics] grass.pathpad 0.25 to unset (2026-11-22: each zone's own now, data\grass_dirt.json, and off the /vana panel)
 // 3: [graphics.effects] sun_near 50 to 10 (2026-11-23: sharp close up again; the popping past it to be met another way)
+// 4: [graphics.effects] temporal, at any value, to unset (= 0.99) (2026-11-25: Smoothing over frames left the /vana panel, so
+// no one is left holding a value they set there and can no longer see; `force`)
 static void reset_old_defaults(const wchar_t* ini)
 {
     struct Reset {
@@ -1324,13 +1326,15 @@ static void reset_old_defaults(const wchar_t* ini)
         const wchar_t* section;
         const wchar_t* key;
         double old;
+        bool force = false; // taken out at any value, not only the old default
     };
     constexpr Reset kResets[] = {
         {1, L"graphics.effects", L"sun_near", 25.0},
         {2, L"graphics", L"grass.pathpad", 0.25},
         {3, L"graphics.effects", L"sun_near", 50.0},
+        {4, L"graphics.effects", L"temporal", 0.99, true},
     };
-    constexpr int kSteps = 3;
+    constexpr int kSteps = 4;
     const int had = static_cast<int>(GetPrivateProfileIntW(L"client", L"defaults", 0, ini));
     if (had >= kSteps)
         return;
@@ -1339,10 +1343,10 @@ static void reset_old_defaults(const wchar_t* ini)
         GetPrivateProfileStringW(reset.section, reset.key, L"", value, 64, ini);
         wchar_t* end = nullptr;
         const double number = std::wcstod(value, &end);
-        if (reset.step <= had || value[0] == L'\0' || end == value || number != reset.old)
+        if (reset.step <= had || value[0] == L'\0' || (!reset.force && (end == value || number != reset.old)))
             continue;
         WritePrivateProfileStringW(reset.section, reset.key, nullptr, ini);
-        log::write(L"Settings: [%ls] %ls=%ls taken out: its default is new, and it was the old one", reset.section, reset.key, value);
+        log::write(L"Settings: [%ls] %ls=%ls taken out: its default is new, or it was reset", reset.section, reset.key, value);
     }
     WritePrivateProfileStringW(L"client", L"defaults", std::to_wstring(kSteps).c_str(), ini);
 }

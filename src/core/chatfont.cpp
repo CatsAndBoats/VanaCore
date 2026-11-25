@@ -585,6 +585,7 @@ struct Want {
     float outline_opacity = 1.0f; // ... this opaque (0-1)
     bool shadow = false;          // a soft shadow under the letters (<prefix>.shadow), in the outline's place: no outline then
     float shadow_blur = 2.0f;     // ... blurred this much (a Gaussian's sigma), the interface's pixels
+    float shadow_thick = 0.0f;    // ... of letters this much fatter (a stroke's width), the interface's pixels
     float shadow_x = 1.0f;        // ... moved this far across and down, the interface's pixels
     float shadow_y = 1.0f;
     float shadow_opacity = 0.7f;  // ... this dark (0-1)
@@ -829,59 +830,7 @@ Cut cut(const text::Sprite& sprite, float shift)
     return out;
 }
 
-// The soft shadow of `sprite`'s letter: its ink blurred (a Gaussian, sigma `blur` screen pixels) and moved (dx, dy) whole screen
-// pixels, as a Cut (premultiplied white; drawn black by the outline's pass). Padded by the blur's reach.
-Cut shadow_cut(const text::Sprite& sprite, float shift, float blur, int dx, int dy)
-{
-    Cut out;
-    const int w = sprite.width(), h = sprite.height();
-    const std::vector<std::uint32_t>& pixels = sprite.pixels();
-    int x0 = w, y0 = h, x1 = -1, y1 = -1;
-    for (int y = 0; y < h; ++y)
-        for (int x = 0; x < w; ++x)
-            if ((pixels[static_cast<std::size_t>(y) * w + x] >> 24) != 0)
-                x0 = x < x0 ? x : x0, x1 = x > x1 ? x : x1, y0 = y < y0 ? y : y0, y1 = y > y1 ? y : y1;
-    if (x1 < 0)
-        return out;
-    const int r = blur > 0.05f ? static_cast<int>(std::ceil(blur * 3.0f)) : 0;
-    const int bw = x1 - x0 + 1 + 2 * r, bh = y1 - y0 + 1 + 2 * r;
-    std::vector<float> a(static_cast<std::size_t>(bw) * bh, 0.0f), t(a.size(), 0.0f);
-    for (int y = y0; y <= y1; ++y)
-        for (int x = x0; x <= x1; ++x)
-            a[static_cast<std::size_t>(y - y0 + r) * bw + (x - x0 + r)] = static_cast<float>(pixels[static_cast<std::size_t>(y) * w + x] >> 24) / 255.0f;
-    if (r > 0) {
-        std::vector<float> k(static_cast<std::size_t>(2 * r + 1));
-        float sum = 0.0f;
-        for (int i = -r; i <= r; ++i)
-            sum += k[static_cast<std::size_t>(i + r)] = std::exp(-0.5f * static_cast<float>(i * i) / (blur * blur));
-        for (float& v : k)
-            v /= sum;
-        for (int y = 0; y < bh; ++y) // across
-            for (int x = 0; x < bw; ++x) {
-                float v = 0.0f;
-                for (int i = -r; i <= r; ++i)
-                    if (x + i >= 0 && x + i < bw)
-                        v += a[static_cast<std::size_t>(y) * bw + x + i] * k[static_cast<std::size_t>(i + r)];
-                t[static_cast<std::size_t>(y) * bw + x] = v;
-            }
-        for (int y = 0; y < bh; ++y) // down
-            for (int x = 0; x < bw; ++x) {
-                float v = 0.0f;
-                for (int i = -r; i <= r; ++i)
-                    if (y + i >= 0 && y + i < bh)
-                        v += t[static_cast<std::size_t>(y + i) * bw + x] * k[static_cast<std::size_t>(i + r)];
-                a[static_cast<std::size_t>(y) * bw + x] = v;
-            }
-    }
-    out.w = bw, out.h = bh;
-    out.x = static_cast<float>(x0 - r - sprite.pen_left() + dx) + shift, out.y = static_cast<float>(y0 - r - sprite.baseline() + dy);
-    out.ink.resize(a.size());
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        const std::uint32_t v = static_cast<std::uint32_t>(std::lround(a[i] > 1.0f ? 255.0f : a[i] * 255.0f));
-        out.ink[i] = v << 24 | v << 16 | v << 8 | v;
-    }
-    return out;
-}
+#include "chatfont_shadow.h" // Layer, layer_of, blurred, shadow_cut: a letter's soft shadow
 
 // The atlas's next place for `c`, a shelf at a time, a texel apart (`row`: the shelf's height so far)
 void place(Cut& c, int& x, int& y, int& row)
@@ -942,8 +891,10 @@ void build(int which, float sx, float sy)
     s.want = want, s.sx = sx, s.sy = sy;
     s.style = style_of(want, sy);
     s.outlined = s.style;
-    s.stroke = want.shadow ? 0.0f : want.outline * sy;
+    s.stroke = want.outline * sy;
     s.outlined.stroke = static_cast<int>(std::ceil(s.stroke)), s.outlined.exact_stroke = s.stroke;
+    s.shadowed = s.style;
+    s.shadowed.stroke = static_cast<int>(std::ceil(want.shadow_thick * sy)), s.shadowed.exact_stroke = want.shadow_thick * sy;
     s.tried.assign(kCodes, false);
     if (which == kChat)
         std::memcpy(g_ours, g_game, kWidths);
@@ -1045,8 +996,9 @@ void read_outline(const wchar_t* ini, int which, Want& want)
     want.shadow = read_set(ini, key_for(ini, which, L".shadow"), 0.0f) >= 0.5f;
     const auto clamp = [](float v, float lo, float hi) { return !(v >= lo) ? lo : v > hi ? hi : v; };
     want.shadow_blur = clamp(read_set(ini, key_for(ini, which, L".shadow.blur"), 2.0f), 0.0f, 8.0f);
+    want.shadow_thick = clamp(read_set(ini, key_for(ini, which, L".shadow.thickness"), 0.0f), 0.0f, 4.0f);
     want.shadow_x = clamp(read_set(ini, key_for(ini, which, L".shadow.x"), 1.0f), -8.0f, 8.0f);
-    want.shadow_y = clamp(read_set(ini, key_for(ini, which, L".shadow.y"), 1.0f), -8.0f, 8.0f);
+    want.shadow_y = clamp(read_set(ini, key_for(ini, which, L".shadow.y"), want.shadow_x), -8.0f, 8.0f);
     want.shadow_opacity = clamp(read_set(ini, key_for(ini, which, L".shadow.opacity"), 70.0f), 0.0f, 100.0f) / 100.0f;
 }
 

@@ -112,6 +112,8 @@ local function header(text) return { kind = 'header', text = text } end
 -- A slider that takes any number typed into its value box, beyond the slider's ends (the slider then shows its end); `low` and
 -- `high`, when given, are as far as the setting itself goes (what VanaCore reads from vanacore.ini)
 local function free(row, low, high) row.free = true; row.low = low; row.high = high; return row end
+-- A slider's value as its digits need, no zeros after the point (6.25, 5, 10)
+local function trimmed(row) row.format = function (v) return (string.format('%.2f', v):gsub('0+$', ''):gsub('%.$', '')) end; return row end
 -- A slider shown in other units than vanacore.ini keeps it in: shown = kept * a + b (Mass Grass's Range in tens of yalms, its
 -- Height as a percent). Its default, ends, step and typed limits are the shown ones; the key keeps its own units, for VanaCore
 -- and the presets. A follower's nil (put_back) takes the key out
@@ -1495,24 +1497,26 @@ local function button_tabs()
                 return area_sharp(a, a == font and 'buttons.font' or true)
             end
             line.lock_if = function () return not enabled() end
-            -- a soft shadow under the letters (chatfont.cpp read_outline), in the outline's place
-            local function shade(row) return mirror(row, font, 'buttons.font') end
-            for _, row in ipairs({
-                lock(shade(toggle('Soft shadow', 'client', font .. '.shadow', false))),
-                lock(pair('Shadow', nil, { shade(slider('Blur', 'client', font .. '.shadow.blur', 2, 0, 8, 0.5, '%.1f px')),
-                                           shade(slider('Opacity', 'client', font .. '.shadow.opacity', 70, 0, 100, 1, '%d%%')) })),
-                lock(pair('Shadow offset', nil, { shade(slider('Across', 'client', font .. '.shadow.x', 1, -8, 8, 1, '%d px')),
-                                                  shade(slider('Down', 'client', font .. '.shadow.y', 1, -8, 8, 1, '%d px')) })),
-            }) do
-                group[#group + 1] = row
-            end
             local outline = line.outline -- (the Default Font's while the area's isn't set)
             outline.get = function ()
                 local value = tonumber(vana.config.get('client', area() .. '.outline') or '')
                 return within(outline, value or tonumber(vana.config.get('client', 'truefont.outline') or '') or 0)
             end
             outline.follows = nil
+            -- the font line and its soft shadow (chatfont.cpp read_outline) in one box (vana.lua draw_section: box_span); the
+            -- shadow's down follows its across (Distance) until .shadow.y is set
+            local function shade(row) return mirror(row, font, 'buttons.font') end
+            line.box_span = 4
             group[#group + 1] = line
+            for _, row in ipairs({
+                lock(shade(toggle('Soft shadow', 'client', font .. '.shadow', false))),
+                lock(pair('Shadow', nil, { shade(slider('Blur', 'client', font .. '.shadow.blur', 2, 0, 8, 0.5, '%.1f px')),
+                                           shade(slider('Thickness', 'client', font .. '.shadow.thickness', 0, 0, 4, 0.5, '%.1f px')) })),
+                lock(pair('Shadow', nil, { shade(slider('Opacity', 'client', font .. '.shadow.opacity', 70, 0, 100, 1, '%d%%')),
+                                           shade(slider('Distance', 'client', font .. '.shadow.x', 1, -8, 8, 1, '%d px')) })),
+            }) do
+                group[#group + 1] = row
+            end
         end
         for _, row in ipairs({
             lock(pair('Colour', nil, { button(colour_pick('Buttons', 'client', key('color'), '#4B65A0')),
@@ -1999,23 +2003,23 @@ TIPS.rows = {
     ['graphics.effects.sun_free_az'] = 'Which way round the horizon the light comes from, in degrees.',
     ['graphics.effects.sun_free_el'] = 'How high over the horizon the light is, in degrees. 90 is straight down.',
     -- Ambient occlusion
-    ['graphics.effects.ao'] = 'How dark corners and creases get. Adds depth.',
-    ['graphics.effects.radius'] = 'How far round each point it looks for things to shade it.',
-    ['graphics.effects.ao_chars'] = 'How much of that shading characters take, against the world. 1 is the same, 0 none, 2 twice as much.',
-    ['graphics.effects.ao_soft_chars'] = 'Smooths that shading across a character\'s own body, so its polygons don\'t show as flat patches. 0 is off.',
+    ['graphics.effects.ao'] = 'How dark corners and creases get, 1 to 10. Adds depth.',
+    ['graphics.effects.radius'] = 'How thick the shading is: how far round each point it looks for things to shade it.',
+    ['graphics.effects.ao_chars'] = 'How much of that shading characters take, 1 to 10. 5 is the same as the world, 10 twice as much.',
+    ['graphics.effects.ao_soft_chars'] = 'Smooths that shading across a character\'s own body, so its polygons don\'t show as flat patches. Off, Low or High.',
     ['graphics.effects.ao_quality'] = 'How clean the shading in corners and creases is.\n'
         .. 'Each step up is cleaner and slower. Max is the cleanest here; set ao_quality=4 in vanacore.ini for one step more (32 taps).',
     ['graphics.effects.temporal'] = 'How much of the last frame the shading in corners and the sun\'s and small shadows keep.\n'
         .. 'Higher is smoother and steadier but trails behind things that move.\n'
         .. 'Lower is crisper and grainier. 0 shades each frame on its own.',
     -- Reflections
-    ['graphics.effects.refl'] = 'How strong reflections are on floors and flat ground.',
-    ['graphics.effects.refl_wet'] = 'How wet and shiny the ground looks.',
-    ['graphics.effects.refl_rough'] = 'How blurry the reflections are.',
-    ['graphics.effects.refl_dist'] = 'How far away reflections are drawn.',
-    ['graphics.effects.refl_sun'] = 'The bright sparkle of the sun on the ground.',
+    ['graphics.effects.refl'] = 'How strong reflections are on floors and flat ground, 1 to 10.',
+    ['graphics.effects.refl_wet'] = 'How wet and shiny the ground looks, 1 to 10.',
+    ['graphics.effects.refl_rough'] = 'How blurry the reflections are, 0 to 10.',
+    ['graphics.effects.refl_dist'] = 'How far away reflections are drawn, in world units.',
+    ['graphics.effects.refl_sun'] = 'The bright sparkle of the sun on the ground: Off, Low or High.',
     ['graphics.effects.refl_bump'] = 'How much the stone\'s own texture bends the reflections: grooves and tile edges give them depth.',
-    ['graphics.effects.refl_lift'] = 'Tilts the reflections up where the camera is low, so the floor shows more than the bottom of the walls. 0 is a true mirror.',
+    ['graphics.effects.refl_lift'] = 'Tilts the reflections up where the camera is low, so the floor shows more than the bottom of the walls. 1 is a true mirror, 10 tilts them the most.',
     ['graphics.effects.refl_floors'] = 'Which ground reflects, by the zone\'s collision (the ground the footsteps know).\n'
         .. 'Stone and metal: not dirt, grass, sand or snow.\n'
         .. 'Anything built: wood and props too.\n'
@@ -4346,38 +4350,61 @@ local TABS = {
                 slider('Size', FX, 'moon_size', 1, 0.25, 4, 0.05),
                 slider('Brightness', FX, 'moon_brightness', 1, 0, 2, 0.05),
                 effect('Ambient occlusion', 'ao', 1.0),
-                slider('Strength', FX, 'ao', 1.0, 0, 2, 0.05),
-                slider('Reach', FX, 'radius', 2.0, 0.2, 10, 0.1, '%.1f'),
-                slider('Characters Strength', FX, 'ao_chars', 1.25, 0, 2, 0.05),
-                slider('Smoothing on characters', FX, 'ao_soft_chars', 0.4, 0, 2, 0.05, '%.2f'),
+                -- Strength and Character Strength 1 to 10, as 0.2 to 2.0 in vanacore.ini (shown = kept * 5); both default to 5 (1.0)
+                trimmed(shown_as(slider('Strength', FX, 'ao', 5, 1, 10, 1, '%d'), 5)),
+                trimmed(shown_as(slider('Character Strength', FX, 'ao_chars', 5, 1, 10, 1, '%d'), 5)),
+                slider('Thickness', FX, 'radius', 2.0, 0.5, 10, 0.5, '%.1f'),
+                -- Off, Low (0.10) or High (0.5): a value in vanacore.ini between them shows as the nearer
+                (function ()
+                    local row = choice('Character Smoothing', FX, 'ao_soft_chars', '0.5', { { '0', 'Off' }, { '0.1', 'Low' }, { '0.5', 'High' } })
+                    row.get = function ()
+                        local value = tonumber(vana.config.get(FX, 'ao_soft_chars') or '')
+                        if value == nil then
+                            return row.default
+                        end
+                        return value < 0.05 and '0' or value < 0.3 and '0.1' or '0.5'
+                    end
+                    return row
+                end)(),
                 -- the taps a pixel (6 to 32), every one at the scene's full size
                 -- (4, the 32 taps, is an ini edit: the box lights none; Max is the 24 it has always run with)
                 choice('Quality', FX, 'ao_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
-                -- how much of the frame before the occlusion and the shadows keep (0 none, 0.99 most): the temporal pass
-                slider('Smoothing over frames', FX, 'temporal', 0.99, 0, 0.99, 0.01, '%.2f'),
+                -- (Smoothing over frames, `temporal`, left the panel 2026-11-25: vanacore.ini only; registry.cpp reset everyone's to 0.99)
                 -- reflections: screen space, a layer at the occlusion's size laid over the finished scene (DirectX 12); on the
                 -- Graphics page since 2026-11-04 (it was the Experimental page's); bounce light's rows follow
                 needs_dx12(effect('Reflections', 'refl', 0, 1)),
                 note('On floors and flat ground, from what is on screen: they fade at its edges. DirectX 12.'),
-                slider('Strength', FX, 'refl', 1, 0, 2, 0.05),
-                subheader('Surface'),
-                slider('Wetness', FX, 'refl_wet', 0.5, 0, 1, 0.05),
-                slider('Roughness', FX, 'refl_rough', 0.3, 0, 1, 0.05),
+                -- Strength 1 to 10 as 0.2 to 2.0 in vanacore.ini (shown = kept * 5), Wetness and Roughness 0 to 10 as 0 to 1.0 (* 10), Surface
+                -- Depth 0 to 10 as 0 to 2.0 (the 6.5 is its 1.3 default), Lift 1 to 10 as 0 to 0.5 (shown = kept * 18 + 1)
+                trimmed(shown_as(slider('Strength', FX, 'refl', 5, 1, 10, 1, '%d'), 5)),
+                -- the ray's steps (16 to 128) and the blur's taps: more is cleaner and costs more
+                -- (4 is an ini edit, as the occlusion's)
+                choice('Quality', FX, 'refl_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
+                trimmed(shown_as(slider('Wetness', FX, 'refl_wet', 5, 0, 10, 1, '%d'), 10)),
+                trimmed(shown_as(slider('Roughness', FX, 'refl_rough', 3, 0, 10, 1, '%d'), 10)),
                 -- the floor's picture read as a height tilts the reflection's normal (fx_ssr); 0 is a flat mirror
-                slider('Surface depth', FX, 'refl_bump', 1.3, 0, 2, 0.05),
-                slider('Sun glint', FX, 'refl_sun', 1, 0, 3, 0.1),
-                subheader('Reach'),
-                slider('Distance', FX, 'refl_dist', 40, 5, 150, 5, '%d'),
-                -- low rays tilted up (fx_ssr): from a low camera a true mirror shows only the walls' dark feet; 0 is the mirror
-                slider('Lift', FX, 'refl_lift', 0.15, 0, 0.5, 0.01, '%.2f'),
-                subheader('Ground and quality'),
+                trimmed(shown_as(slider('Surface Depth', FX, 'refl_bump', 6.5, 0, 10, 1, '%d'), 5)),
+                -- Off, Low (1) or High (3): a value in vanacore.ini between them shows as the nearer
+                (function ()
+                    local row = choice('Sun Glint', FX, 'refl_sun', '1', { { '0', 'Off' }, { '1', 'Low' }, { '3', 'High' } })
+                    row.get = function ()
+                        local value = tonumber(vana.config.get(FX, 'refl_sun') or '')
+                        if value == nil then
+                            return row.default
+                        end
+                        return value < 0.5 and '0' or value < 2 and '1' or '3'
+                    end
+                    return row
+                end)(),
+                advanced_group('Fine-tuning for the reflections: how far they reach, how far low rays are tilted up, and which ground '
+                               .. 'reflects. Most players never need these.'),
+                slider('Reflective Distance', FX, 'refl_dist', 100, 5, 150, 5, '%d'),
+                -- low rays tilted up (fx_ssr): from a low camera a true mirror shows only the walls' dark feet; 1 is the mirror
+                trimmed(shown_as(slider('Lift', FX, 'refl_lift', 3.7, 1, 10, 1, '%d'), 18, 1)),
                 -- which ground reflects, by the zone's collision (the kind of ground the footsteps sound for, under each pixel: floors.c,
                 -- fx_ssr); Any is the colour rule alone
                 choice('Ground', FX, 'refl_floors', '1', { { '0', 'Any' }, { '1', 'Stone and metal' }, { '2', 'Stone, metal, wood' },
                                                            { '3', 'Anything built' } }),
-                -- the ray's steps (16 to 128) and the blur's taps: more is cleaner and costs more
-                -- (4 is an ini edit, as the occlusion's)
-                choice('Quality', FX, 'refl_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
                 -- normal maps from a texture pack folder ([graphics] textures), bending the sun's per-pixel light (the renderer:
                 -- DirectX 12); shown on the Experimental page (vana.lua MOVED_PANELS, by the heading)
                 warn(effect('Normal maps (Experimental)', 'normalmap', 0, 1)),

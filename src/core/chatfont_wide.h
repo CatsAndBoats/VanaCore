@@ -27,7 +27,7 @@ bool g_cells_looked = false;
 struct Sheet {
     Want want;
     float sx = 0.0f, sy = 0.0f;
-    text::Style style, outlined; // its letters' and their outline's
+    text::Style style, outlined, shadowed; // its letters', their outline's and their shadow's (fatter) 
     float stroke = 0.0f;         // the outline's width, the screen's pixels (0 none)
     std::vector<Cut> letters, outlines;
     std::vector<VanaChatGlyph> glyphs;
@@ -166,9 +166,19 @@ bool add_glyph(int which, int code, const std::wstring& text, text::Sprite& spri
     glyph.lx = wide ? l.x : l.x - shift;
     place(l, s.x, s.y, s.row);
     if (want.shadow && want.shadow_opacity > 0.0f) {
-        // the letter's soft shadow in the outline's place (shadow_cut); the sprite still holds the letter
-        o = shadow_cut(sprite, shift, want.shadow_blur * s.sy, static_cast<int>(std::lround(want.shadow_x * s.sx)),
-                       static_cast<int>(std::lround(want.shadow_y * s.sy)));
+        // the letter's soft shadow, and its outline's stroke over it, in the outline's one picture (shadow_cut); the sprite
+        // holds the letter, a fatter one the shadow's thickness
+        text::Sprite fat, edge;
+        if (s.shadowed.stroke > 0) {
+            text::Style st = s.shadowed;
+            st.family = style.family, st.size = style.size;
+            fat.set(letter, st);
+        }
+        if (s.stroke > 0.0f)
+            edge.set(letter, outlined);
+        o = shadow_cut(s.shadowed.stroke > 0 ? fat : sprite, s.stroke > 0.0f ? &edge : nullptr, shift, want.shadow_blur * s.sy,
+                       static_cast<int>(std::lround(want.shadow_x * s.sx)), static_cast<int>(std::lround(want.shadow_y * s.sy)),
+                       want.shadow_opacity, want.outline_opacity);
         place(o, s.x, s.y, s.row);
     } else if (s.stroke > 0.0f) {
         sprite.set(letter, outlined);
@@ -197,7 +207,7 @@ void publish(int which)
     const Want& want = s.want;
     const VanaTextFont font{atlas.data(), kAtlasWidth, static_cast<std::uint32_t>(height), s.glyphs.data(),
                             static_cast<std::uint32_t>(s.glyphs.size()), kBaseline,
-                            want.shadow && want.shadow_opacity > 0.0f ? want.shadow_opacity : s.stroke > 0.0f ? want.outline_opacity : 0.0f,
+                            want.shadow && want.shadow_opacity > 0.0f ? 1.0f : s.stroke > 0.0f ? want.outline_opacity : 0.0f,
                             want.line, want.size, want.pad, want.upper ? 1u : 0u};
     vanacore_gfx_set_chat_font(which, &font);
 }

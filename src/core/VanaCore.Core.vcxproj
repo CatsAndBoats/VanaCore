@@ -390,6 +390,7 @@ exit /b 0</Command>
     <ClInclude Include="jplabels.hpp" />
     <ClInclude Include="jplabels_data.h" />
     <ClInclude Include="chatfont_wide.h" />
+    <ClInclude Include="chatfont_shadow.h" />
     <ClInclude Include="text_fit.h" />
     <ClInclude Include="text_replay.h" />
     <ClInclude Include="lua_api_gradient.h" />

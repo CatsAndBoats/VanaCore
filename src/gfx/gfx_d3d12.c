@@ -6836,7 +6836,7 @@ static const char FX_HLSL_2[] =
     /* a surface or the sky only: a ray that left the picture or went behind something (w 3) has nothing to show and the floor
      * shows no reflection there. Its last pixel stood in for it once, and every floor pixel under a pillar or by the screen's
      * side took the same pixel, stretched into streaks down the floor */
-    "  float conf = h.w > 0.5 && h.w < 2.5 ? 1.0 : 0.0;\n"
+    "  float conf = h.w > 0.5 && h.w < 2.5 ? 1.0 : (h.w > 2.5 ? 0.45 : 0.0);\n"
     "  if (h.w > 1.5) conf *= smoothstep(0.0, 0.3, dot(R, u.up.xyz));\n"
     "  conf *= smoothstep(0.0, 0.25, R.z * u.hand.x);\n"
     "  if (conf > 0.0) {\n"
@@ -6849,6 +6849,7 @@ static const char FX_HLSL_2[] =
     "    if (h.w < 1.5) conf *= 1.0 - smoothstep(0.5 * u.refl.w, u.refl.w, tt);\n"
     /* blurred more the farther the thing reflected is from the floor it shows on (a glossy cone) */
     "    float rr = rough_ * saturate(tt / (dist + tt)) * 0.05 * u.vp.w;\n"
+    "    if (h.w > 2.5) rr = max(rr, 0.03 * u.vp.w);\n"
     /* a hit on a silhouette (the distance jumps within a couple of pixels of it) reads its own pixel, not the bilinear mix across
      * the edge, and the blur's taps that land on the other side of it are replaced by it: the reflected object's rim keeps its
      * own colour and doesn't pick up the wall behind it as a fringe */
@@ -8180,8 +8181,8 @@ static const struct
     { "moghouse", offsetof(FxSettings, moghouse), 0.0f }, /* XI on Anything's default: none */
     { "temporal", offsetof(FxSettings, temporal), 0.99f },
     { "ao_quality", offsetof(FxSettings, ao_quality), 3.0f },
-    { "ao_chars", offsetof(FxSettings, ao_chars), 1.25f },
-    { "ao_soft_chars", offsetof(FxSettings, ao_soft_chars), 0.4f },
+    { "ao_chars", offsetof(FxSettings, ao_chars), 1.0f },
+    { "ao_soft_chars", offsetof(FxSettings, ao_soft_chars), 0.5f },
     { "sun_rings", offsetof(FxSettings, sun_rings), 1.0f },
     { "sun_ring_spacing", offsetof(FxSettings, sun_ring_spacing), 15.0f },
     { "sun_detail", offsetof(FxSettings, sun_detail), 4096.0f },
@@ -8260,7 +8261,7 @@ static const struct
     { "refl", offsetof(FxSettings, refl), 0.0f },
     { "refl_wet", offsetof(FxSettings, refl_wet), 0.5f },
     { "refl_rough", offsetof(FxSettings, refl_rough), 0.3f },
-    { "refl_dist", offsetof(FxSettings, refl_dist), 40.0f },
+    { "refl_dist", offsetof(FxSettings, refl_dist), 100.0f },
     { "refl_quality", offsetof(FxSettings, refl_quality), 3.0f },
     { "refl_sun", offsetof(FxSettings, refl_sun), 1.0f },
     { "refl_floors", offsetof(FxSettings, refl_floors), 1.0f },
