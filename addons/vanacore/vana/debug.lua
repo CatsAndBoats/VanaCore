@@ -303,7 +303,7 @@ local RINGS = {
       spacing = { kind = 'slider', section = FX, key = 'sun_ring_spacing', default = 15, min = 5, max = 60, step = 1 } },
     { name = 'AO rings', what = 'AO', view = '16',
       on = { kind = 'toggle', section = FX, key = 'ao_rings', default = true },
-      spacing = { kind = 'slider', section = FX, key = 'ao_ring_spacing', default = 15, min = 5, max = 60, step = 1 } },
+      spacing = { kind = 'slider', section = FX, key = 'ao_ring_spacing', default = 15, min = 2, max = 150, step = 1 } },
 }
 
 -- the taps a pixel takes in each ring, "16 / 12 / 8 / 6 taps" ("... taps (Max)" for the occlusion's, by its quality)

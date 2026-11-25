@@ -4347,7 +4347,7 @@ local TABS = {
                 choice('Quality', FX, 'ao_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
                 -- fewer of those taps past each of three rings out from the camera (fx_ao): all, then 75%, 50%, 30%
                 toggle('Rings', FX, 'ao_rings', true),
-                slider('Ring spacing', FX, 'ao_ring_spacing', 15, 5, 60, 1, '%d'),
+                slider('Ring spacing', FX, 'ao_ring_spacing', 15, 2, 150, 1, '%d'),
                 -- how much of the frame before the occlusion and the shadows keep (0 none, 0.99 most): the temporal pass
                 slider('Smoothing over frames', FX, 'temporal', 0.99, 0, 0.99, 0.01, '%.2f'),
                 -- reflections: screen space, a layer at the occlusion's size laid over the finished scene (DirectX 12); on the

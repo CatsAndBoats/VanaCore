@@ -5456,16 +5456,16 @@ static const char FX_HLSL_1[] =
     "  return (abs(r.z) < abs(l.z) && dot(r, r) > 0.0) || dot(l, l) == 0.0 ? r : l;\n"
     "}\n"
     /* the occlusion's taps at dist, of NS (ao_quality): past each of the rings (ao_rings: aor.y world units apart, out from
-     * the camera) fewer, all inside the first, then 75%, 50% and 30%, never under 4. Each ring's edge is moved by the pixel's
-     * step of the 4x4 pattern (b), so the change is dithered across the blur's block, not a line. Never fewer than the
-     * blur's block needs to cover the taps' disc (rpx pixels round): its 16 pixels' taps, about one each pixel of it. Out to
-     * a disc of ~13 pixels (some 100 world units) that is all of them: cut there, the frame's grain grew by up to 1.8x and
-     * shimmered where the temporal pass gathers few frames (the Max quality was Medium's past the second ring) */
+     * the camera) fewer, all inside the first, then 60%, 40% and 25%, never under 4. Each ring's edge is moved by the pixel's
+     * step of the 4x4 pattern (b), so the change is dithered across the blur's block, not a line. The floor is the blur's
+     * block's need to cover the taps' disc (rpx pixels round), a quarter of what it was (0.2 per pixel of the disc's area):
+     * at 0.2 it held every tap out to ~100 to 200 world units and the rings did nothing inside that, at 0.05 a ring cuts
+     * from a disc of ~9 pixels out, in exchange for a grainier far field */
     "int ao_taps(int NS, float dist, float rpx, float b) {\n"
     "  if (u.aor.x <= 0.0) return NS;\n"
     "  float ring = dist / u.aor.y + 0.3 * (b - 0.5);\n"
-    "  float keep = ring < 1.0 ? 1.0 : ring < 2.0 ? 0.75 : ring < 3.0 ? 0.5 : 0.3;\n"
-    "  return max(int(float(NS) * keep + 0.5), min(NS, max(int(ceil(0.2 * rpx * rpx)), 4)));\n"
+    "  float keep = ring < 1.0 ? 1.0 : ring < 2.0 ? 0.6 : ring < 3.0 ? 0.4 : 0.25;\n"
+    "  return max(int(float(NS) * keep + 0.5), min(NS, max(int(ceil(0.05 * rpx * rpx)), 4)));\n"
     "}\n"
     /* how far sun_map's edge-on fade may reach P (its wall): where the surface goes on flat a quarter of a unit round P along
      * both of the screen's axes (to one side of each at least: by a corner, under a ledge, it stays), and not on a character
