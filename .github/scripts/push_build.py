@@ -7,6 +7,9 @@
                                                       ... and bring its EXTERNAL files up to vanacore's
     push_build.py vanacore/vanacore --promote-from vcdev/vanacore
                                                       push vcdev's files, as they are on R2, as the vanacore build
+    push_build.py vcdev/vanacore --folder <dir> --partial
+                                                      push the folder's files into the build, nothing else listed or
+                                                      deleted (app.yaml: VanaCoreApp.exe and .dll alone)
     --dry-run                                         list what would be pushed, change nothing
     --deletes                                         also remove files the folder no longer has
 
@@ -407,7 +410,11 @@ def main():
                     help="also bring the external files (plugins, the addon updater's and cexi-addons' addons) up to BUILD's")
     ap.add_argument("--promote-from", metavar="BUILD",
                     help="push BUILD's files as they are on R2 (fetched into --folder, which must be empty or new)")
+    ap.add_argument("--partial", action="store_true",
+                    help="the folder holds only some of the build's files (the App's): the rest aren't listed or deleted")
     args = ap.parse_args()
+    if args.partial and (args.deletes or args.promote_from or args.externals_from):
+        die("--partial pushes a few files into a build: not with --deletes, --promote-from or --externals-from")
 
     cfg = config_from_env()
     r2 = R2(cfg)
@@ -501,8 +508,8 @@ def main():
     new = sorted((r for r in local if r.lower() not in remote_lower), key=str.lower)
     changed = sorted((r for r in local if r.lower() in remote_lower
                       and remote[remote_lower[r.lower()]].lower() != hashes[r].lower()), key=str.lower)
-    deleted = sorted((k for k in remote if not os.path.exists(os.path.join(folder, k))
-                      and not is_ignored(k, ignore) and not is_ignored(k, keep)), key=str.lower)
+    deleted = [] if args.partial else sorted((k for k in remote if not os.path.exists(os.path.join(folder, k))
+                                              and not is_ignored(k, ignore) and not is_ignored(k, keep)), key=str.lower)
     push_deletes = deleted if args.deletes else []
 
     log(f"{len(local)} local files, {len(remote)} in the remote state: "

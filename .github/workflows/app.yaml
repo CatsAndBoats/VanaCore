@@ -1,0 +1,305 @@
+name: VanaCore App Release
+run-name: VanaCore App release (${{ inputs.deploy }})
+
+# VanaCore App (app/: VanaCoreApp.exe and VanaCoreApp.dll), released on its own: its own version, its own GitHub
+# releases (tagged app-v<version>, never marked latest: the README's Download stays VanaCore's), and no VanaCore build or
+# release made for it. VanaCore always carries the newest published App (.github/scripts/bundle_app.ps1): release.yaml
+# puts it in every package, promote.yaml after every promotion, and prod here puts a new one into the VanaCore players
+# have already (its release's zip and the vanacore build on R2).
+#
+#   dev    the version (the patch number up when it's published already, committed), the build, signing, the two
+#          files pushed to the vcdev build on R2 for testers (nothing else there touched), and a draft App release
+#   prod   nothing built: the newest draft's files, checked to be the ones vcdev has (the ones tested), go into the
+#          vanacore build on R2 and the latest VanaCore release's zip, then the draft is published (not latest)
+#
+# The exe is changed rarely on purpose: a new signed file starts its reputation (SmartScreen) over. While
+# VCAPP_EXE_VERSION (app/shared/version.h) is the last published App's, its exe is used again as it was released and only
+# the DLL is new; raise it when the exe has to change (and with VANACOREAPP_API, which the exe checks the DLL against).
+#
+# Secrets: release.yaml's (signing: AZURE_*; R2: R2_*, CLOUDFLARE_*).
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: dev (build, sign, vcdev, draft release) or prod (the tested draft to everyone)
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: write
+
+jobs:
+  dev:
+    name: VanaCore App to vcdev
+    if: inputs.deploy == 'dev'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # one writer of R2's builds at a time, with release.yaml and promote.yaml
+    concurrency:
+      group: r2-publish
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the release notes read the history back to the last App release's tag
+
+      # ---- Version: app/shared/version.h's VCAPP_DLL_VERSION (the App's), the patch number up while it's published
+      - name: Version
+        id: version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $path = 'app/shared/version.h'
+          $source = Get-Content $path -Raw
+          $version = [regex]::Match($source, 'VCAPP_DLL_VERSION_STR "([^"]+)"').Groups[1].Value
+          $exe = [regex]::Match($source, 'VCAPP_EXE_VERSION_STR "([^"]+)"').Groups[1].Value
+          $api = [regex]::Match((Get-Content app/shared/app_api.h -Raw), '#define VANACOREAPP_API (\d+)').Groups[1].Value
+          if (-not ($version -and $exe -and $api)) { throw 'No VCAPP_DLL_VERSION_STR, VCAPP_EXE_VERSION_STR or VANACOREAPP_API' }
+          $published = @(gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
+            Where-Object { -not $_.draft -and $_.tag_name -like 'app-v*' })
+          $parts = $version -split '\.'
+          $bumped = $false
+          while ($published.tag_name -contains "app-v$version") {
+            $parts[-1] = [string]([int]$parts[-1] + 1)
+            $version = $parts -join '.'
+            $bumped = $true
+          }
+          if ($bumped) {
+            $num = (@($version -split '\.') + @('0', '0', '0') | Select-Object -First 4) -join ', '
+            $source = $source -replace '(VCAPP_DLL_VERSION_STR ")[^"]+(")', "`${1}$version`${2}"
+            $source = $source -replace '(VCAPP_DLL_VERSION_NUM )[\d, ]+', "`${1}$num"
+            [IO.File]::WriteAllText((Resolve-Path $path), $source)
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -am "VanaCore App $version"
+            foreach ($try in 1..3) {
+              git push origin "HEAD:${{ github.ref_name }}"
+              if (-not $LASTEXITCODE) { break }
+              git pull --rebase origin "${{ github.ref_name }}"
+            }
+            if ($LASTEXITCODE) { throw 'Could not push the version bump' }
+            "Bumped the App's version to $version (committed to ${{ github.ref_name }})." >> $env:GITHUB_STEP_SUMMARY
+          }
+          # the last published App, whose exe is used again while the exe's version is the same
+          $last = @($published | Sort-Object { [datetime]$_.published_at } -Descending)[0]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "exe=$exe" >> $env:GITHUB_OUTPUT
+          "api=$api" >> $env:GITHUB_OUTPUT
+          "last=$(if ($last) { $last.tag_name })" >> $env:GITHUB_OUTPUT
+          "## VanaCore App $version (exe $exe, API $api)" >> $env:GITHUB_STEP_SUMMARY
+
+      # ---- Build
+      - name: Build
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild) { throw 'No MSBuild with the C++ tools' }
+          & $msbuild app/VanaCoreApp.sln -t:Rebuild -p:Configuration=Release -p:Platform=x86 -m -v:minimal -nologo
+          if ($LASTEXITCODE) { throw 'The build failed' }
+          New-Item -ItemType Directory -Path build/app/VanaCoreApp -Force | Out-Null
+          Copy-Item app/build/Release/VanaCoreApp.exe, app/build/Release/VanaCoreApp.dll build/app/VanaCoreApp/
+
+      # The last published App's exe, as it was released, while VCAPP_EXE_VERSION is still its (a new exe only when it's
+      # raised). Its API must be this DLL's: VanaCoreApp.exe refuses a DLL of another.
+      - name: Keep the released exe
+        if: steps.version.outputs.last != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LAST: ${{ steps.version.outputs.last }}
+          EXE: ${{ steps.version.outputs.exe }}
+          API: ${{ steps.version.outputs.api }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP last
+          gh release download $env:LAST --pattern 'VanaCoreApp-*.zip' --dir $dir
+          if ($LASTEXITCODE) { throw "Couldn't download $env:LAST" }
+          Expand-Archive -Path (Get-ChildItem $dir -Filter *.zip)[0].FullName -DestinationPath "$dir/app"
+          $info = Get-Content "$dir/app/app.json" -Raw | ConvertFrom-Json
+          if ($info.exe_version -ne $env:EXE) {
+            "The exe's version is $env:EXE ($env:LAST's was $($info.exe_version)): a new exe" >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          if ([string]$info.api -ne $env:API) {
+            throw "VANACOREAPP_API is $env:API, $env:LAST's exe takes $($info.api): raise VCAPP_EXE_VERSION in app/shared/version.h for a new exe"
+          }
+          $changed = @(git diff --name-only "$env:LAST..HEAD" -- app/exe app/res app/shared/app_api.h app/VanaCoreApp.props)
+          if ($changed) {
+            "::warning::The exe's files changed since $env:LAST ($($changed -join ', ')) but VCAPP_EXE_VERSION is still $env:EXE: $env:LAST's exe is used as it was. Raise VCAPP_EXE_VERSION for a new exe."
+          }
+          Copy-Item "$dir/app/VanaCoreApp.exe" build/app/VanaCoreApp/VanaCoreApp.exe -Force
+          "The exe is $env:LAST's, as it was released (exe $env:EXE)" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Sign
+        shell: pwsh
+        env:
+          KVU: ${{ secrets.AZURE_KEY_VAULT_URL }}
+          KVI: ${{ secrets.AZURE_CLIENT_ID }}
+          KVT: ${{ secrets.AZURE_TENANT_ID }}
+          KVS: ${{ secrets.AZURE_CLIENT_SECRET }}
+          KVC: ${{ secrets.AZURE_CERT_NAME }}
+        run: |
+          if (-not ($env:KVU -and $env:KVI -and $env:KVT -and $env:KVS -and $env:KVC)) {
+            throw 'The AZURE_* signing secrets are missing: an unsigned App is never released'
+          }
+          $tools = Join-Path $env:RUNNER_TEMP tools
+          dotnet tool install AzureSignTool --version 7.0.1 --tool-path $tools
+          if ($LASTEXITCODE) { throw 'Could not install AzureSignTool' }
+          $binaries = Get-ChildItem build/app/VanaCoreApp -File
+          $unsigned = @($binaries | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -eq 'NotSigned' } | ForEach-Object FullName)
+          $unsigned | ForEach-Object { "Signing $_" }
+          if ($unsigned) {
+            & (Join-Path $tools azuresigntool.exe) sign -kvu $env:KVU -kvi $env:KVI -kvt $env:KVT -kvs $env:KVS -kvc $env:KVC `
+              -tr http://timestamp.digicert.com -td sha256 -fd sha256 @unsigned
+            if ($LASTEXITCODE) { throw 'Signing failed' }
+          }
+          $bad = @($binaries | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' })
+          $bad | ForEach-Object { "::error::No valid signature: $($_.FullName)" }
+          if ($bad) { exit 1 }
+
+      # The zip: the two files and app.json (the versions and API, for the next release's exe check)
+      - name: Zip
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          EXE: ${{ steps.version.outputs.exe }}
+          API: ${{ steps.version.outputs.api }}
+        run: |
+          @{ version = $env:VERSION; exe_version = $env:EXE; api = [int]$env:API } | ConvertTo-Json |
+            Set-Content build/app/VanaCoreApp/app.json -Encoding utf8
+          Compress-Archive -Path build/app/VanaCoreApp/* -DestinationPath "build/app/VanaCoreApp-$env:VERSION.zip"
+
+      # ---- Push to vcdev (the two files alone)
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Push to vcdev
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          $push = Join-Path $env:RUNNER_TEMP push
+          New-Item -ItemType Directory -Path $push | Out-Null
+          Copy-Item build/app/VanaCoreApp/VanaCoreApp.exe, build/app/VanaCoreApp/VanaCoreApp.dll $push
+          python .github/scripts/push_build.py vcdev/vanacore --folder $push --partial
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # ---- Draft App release, for prod to publish
+      - name: Draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          LAST: ${{ steps.version.outputs.last }}
+        run: |
+          # the App's commits since its last release (app/ and this workflow), newest first
+          $range = if ($env:LAST) { "$env:LAST..HEAD" } else { 'HEAD' }
+          $commits = @(git log $range --no-merges --pretty='format:- %s' -- app .github/workflows/app.yaml |
+            Where-Object { $_ -notmatch '^- VanaCore App \d+(\.\d+)+$' } | Select-Object -First 60)
+          $notes = @("## VanaCore App $env:VERSION", '') + $(if ($commits) { $commits } else { '- No changes.' })
+          $notes | Set-Content -Path build/app/notes.md -Encoding utf8
+          # this version's earlier draft gives way to this one
+          gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
+            Where-Object { $_.draft -and $_.name -eq "VanaCoreApp $env:VERSION" } |
+            ForEach-Object { gh api -X DELETE "repos/${{ github.repository }}/releases/$($_.id)"; "Replaced the earlier draft of VanaCoreApp $env:VERSION" }
+          gh release create "app-v$env:VERSION" "build/app/VanaCoreApp-$env:VERSION.zip" --draft --latest=false `
+            --target (git rev-parse HEAD) --title "VanaCoreApp $env:VERSION" --notes-file build/app/notes.md
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "Draft release VanaCoreApp $env:VERSION made, and its files are on vcdev: prod publishes it." >> $env:GITHUB_STEP_SUMMARY
+
+  prod:
+    name: VanaCore App to everyone
+    if: inputs.deploy == 'prod'
+    runs-on: windows-latest # push_build.py compares the build's paths as Windows ones
+    timeout-minutes: 30
+    concurrency:
+      group: r2-publish
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout the scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/push_build.py
+            .github/scripts/bundle_app.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # The newest App draft, and that its files are the ones vcdev has (the ones tested)
+      - name: Find the draft
+        id: draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $drafts = @(gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json |
+            Where-Object { $_.draft -and $_.tag_name -like 'app-v*' } | Sort-Object { [datetime]$_.created_at } -Descending)
+          if (-not $drafts) { throw 'No App draft release: run this with dev first' }
+          $draft = $drafts[0]
+          $asset = @($draft.assets | Where-Object name -like 'VanaCoreApp-*.zip')[0]
+          if (-not $asset) { throw "$($draft.name) has no zip" }
+          $zip = Join-Path $env:RUNNER_TEMP $asset.name
+          Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' } `
+            -Uri "https://api.github.com/repos/${{ github.repository }}/releases/assets/$($asset.id)" -OutFile $zip
+          $unzipped = Join-Path $env:RUNNER_TEMP draft
+          Expand-Archive -Path $zip -DestinationPath $unzipped
+          # vcdev's state on R2 (past the CDN's copy), as push_build.py writes it: gzip, path=first 6 hex of SHA-1
+          $state = Join-Path $env:RUNNER_TEMP vcdev.gz
+          Invoke-WebRequest -UseBasicParsing -Uri "https://launcher.catseyexi.com/launcher/build_vcdev_vanacore.gz?v=$([guid]::NewGuid())" -OutFile $state
+          $text = python -c "import gzip,sys; print(gzip.decompress(open(sys.argv[1],'rb').read()).decode())" $state
+          $hashes = @{}
+          foreach ($line in $text -split "`n") { $k, $v = $line.Trim() -split '=', 2; if ($k) { $hashes[$k.ToLower()] = $v.ToLower() } }
+          foreach ($file in 'VanaCoreApp.exe', 'VanaCoreApp.dll') {
+            $mine = (Get-FileHash -Algorithm SHA1 -LiteralPath (Join-Path $unzipped $file)).Hash.Substring(0, 6).ToLower()
+            if ($hashes[$file.ToLower()] -ne $mine) {
+              throw "$($draft.name)'s $file ($mine) isn't vcdev's ($($hashes[$file.ToLower()])): vcdev has other App files (a VanaCore release since puts the published App back). Run dev again. Nothing released"
+            }
+          }
+          "$($draft.name) is what vcdev has"
+          "tag=$($draft.tag_name)" >> $env:GITHUB_OUTPUT
+          "name=$($draft.name)" >> $env:GITHUB_OUTPUT
+          "older=$(($drafts | Select-Object -Skip 1 | ForEach-Object id) -join ' ')" >> $env:GITHUB_OUTPUT
+
+      # Into the vanacore build on R2 and the latest VanaCore release's zip, then published
+      - name: Into VanaCore
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          & .github/scripts/bundle_app.ps1 -Repo '${{ github.repository }}' -App '${{ steps.draft.outputs.tag }}' -Build vanacore/vanacore -Release latest
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit '${{ steps.draft.outputs.tag }}' --draft=false --latest=false --repo '${{ github.repository }}'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($id in '${{ steps.draft.outputs.older }}' -split ' ' | Where-Object { $_ }) {
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
+          }
+          "## ${{ steps.draft.outputs.name }} released: in the vanacore build and the latest VanaCore release's zip" >> $env:GITHUB_STEP_SUMMARY

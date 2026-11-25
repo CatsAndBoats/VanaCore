@@ -163,6 +163,15 @@ jobs:
         shell: cmd
         run: build-release.bat
 
+      # VanaCore App (app.yaml releases it on its own): its newest published VanaCoreApp.exe and .dll, signed as they
+      # were released, into the package. Never a draft (an App only testers have), so vcdev goes back to the published
+      # App with every push here.
+      - name: Bundle VanaCore App
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/bundle_app.ps1 -Repo '${{ github.repository }}' -Folder build/package/VanaCore
+
       - name: Sign
         shell: pwsh
         env:

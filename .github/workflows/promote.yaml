@@ -44,10 +44,12 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - name: Checkout the push script
+      - name: Checkout the scripts
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/scripts/push_build.py
+          sparse-checkout: |
+            .github/scripts/push_build.py
+            .github/scripts/bundle_app.ps1
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
@@ -121,6 +123,25 @@ jobs:
             gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
           }
           "## ${{ steps.draft.outputs.name }} promoted to vanacore and released" >> $env:GITHUB_STEP_SUMMARY
+
+      # VanaCore App: the newest published one into the vanacore build and the release just published. vcdev's copy,
+      # promoted above, is the App of release.yaml's run, and app.yaml's prod may have released a newer one since.
+      - name: Bundle VanaCore App
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          $flags = @{}
+          if ('${{ inputs.deploy }}' -ne 'push') { $flags.DryRun = $true }
+          $release = if ('${{ inputs.deploy }}' -eq 'push' -and '${{ inputs.release }}' -eq 'true') { '${{ steps.draft.outputs.tag }}' } else { '' }
+          & .github/scripts/bundle_app.ps1 -Repo '${{ github.repository }}' -Build vanacore/vanacore -Release $release @flags
 
       - name: Summary (R2 only or dry run)
         if: inputs.deploy != 'push' || !inputs.release
