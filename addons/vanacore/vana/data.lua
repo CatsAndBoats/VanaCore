@@ -1994,9 +1994,6 @@ TIPS.rows = {
     ['graphics.effects.ao_soft_chars'] = 'Smooths that shading across a character\'s own body, so its polygons don\'t show as flat patches. 0 is off.',
     ['graphics.effects.ao_quality'] = 'How clean the shading in corners and creases is.\n'
         .. 'Each step up is cleaner and slower. Max is the cleanest here; set ao_quality=4 in vanacore.ini for one step more (32 taps).',
-    ['graphics.effects.ao_rings'] = 'Takes fewer samples for that shading farther from the camera, where it covers less of the screen. Saves frames.\n'
-        .. 'Past each ring fewer are kept (all, then 75%, 50%, 30%). Off takes them all everywhere.',
-    ['graphics.effects.ao_ring_spacing'] = 'How far apart the rings are, out from the camera. Wider is cleaner in the distance and slower.',
     ['graphics.effects.temporal'] = 'How much of the last frame the shading in corners and the sun\'s and small shadows keep.\n'
         .. 'Higher is smoother and steadier but trails behind things that move.\n'
         .. 'Lower is crisper and grainier. 0 shades each frame on its own.',
@@ -4345,9 +4342,6 @@ local TABS = {
                 -- the taps a pixel (6 to 32), every one at the scene's full size
                 -- (4, the 32 taps, is an ini edit: the box lights none; Max is the 24 it has always run with)
                 choice('Quality', FX, 'ao_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
-                -- fewer of those taps past each of three rings out from the camera (fx_ao): all, then 75%, 50%, 30%
-                toggle('Rings', FX, 'ao_rings', true),
-                slider('Ring spacing', FX, 'ao_ring_spacing', 15, 2, 150, 1, '%d'),
                 -- how much of the frame before the occlusion and the shadows keep (0 none, 0.99 most): the temporal pass
                 slider('Smoothing over frames', FX, 'temporal', 0.99, 0, 0.99, 0.01, '%.2f'),
                 -- reflections: screen space, a layer at the occlusion's size laid over the finished scene (DirectX 12); on the
@@ -7721,7 +7715,7 @@ M.DEBUG_VIEW = needs_dx(choice('Debug view', FX, 'debug', '0', {
     { header = 'Rain & Water' },
     { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '17', 'Reflections' }, { '11', 'Water' },
     { header = 'Rings' },
-    { '16', 'AO rings' }, { '32', 'Rain rings' }, { '15', 'Shadow rings' },
+    { '32', 'Rain rings' }, { '15', 'Shadow rings' },
     { header = 'Shadows' },
     { '21', 'Edge-on fade' }, { '25', 'Facing the sun' }, { '27', 'Far shadow map' }, { '29', 'Round shadows on rock' },
     { '22', 'Shadow maps alone' }, { '5', 'Shadows' }, { '23', 'Sharp & middle map share' }, { '24', 'Smooth normals' },

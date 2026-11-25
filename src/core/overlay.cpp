@@ -602,7 +602,7 @@ std::wstring visual_words(int visual)
     // (12-14, the reflections' parts, have no name: no tag)
     static const wchar_t* const kNames[] = {nullptr, L"Occlusion", L"Fog", L"Bloom", L"God rays", L"Shadows", L"Ink lines",
                                             L"Depth of field", L"Bounce light", L"Glow effects lighting", L"Zone lines", L"Water",
-                                            nullptr, nullptr, nullptr, L"Shadow rings", L"AO rings", L"Reflections",
+                                            nullptr, nullptr, nullptr, L"Shadow rings", nullptr, L"Reflections",
                                             L"Reflection ground", L"Character mask"};
     if (visual <= 0 || visual >= static_cast<int>(std::size(kNames)) || kNames[visual] == nullptr)
         return {};

@@ -93,7 +93,7 @@ constexpr const char* kEffectKeys[] = {"ao",      "radius",      "grade",      "
                                        "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_lift", "gi", "gi_radius", "gi_quality",
                                        "midtones", "whites", "rolloff", "light_tint", "hue",
                                        "clarity", "elight", "elight_radius", "elight_warp", "elight_lantern", "elight_dim", "elight_actor",
-                                       "ao_quality", "ao_rings", "ao_ring_spacing", "ao_chars", "ao_soft_chars", "sun_rings", "sun_ring_spacing", "sun_detail", "sun_far_hold", "sun_near_hold", "sun_roll", "sun_plants", "sun_plants_still", "sun_fade", "normalmap", "normalmap_strength", "normalmap_view", "normalmap_refl", "normalmap_fx",
+                                       "ao_quality", "ao_chars", "ao_soft_chars", "sun_rings", "sun_ring_spacing", "sun_detail", "sun_far_hold", "sun_near_hold", "sun_roll", "sun_plants", "sun_plants_still", "sun_fade", "normalmap", "normalmap_strength", "normalmap_view", "normalmap_refl", "normalmap_fx",
                                        "moon_size", "moon_brightness", "night", "night_moon", "night_bright", "night_bright_ambient", "day_bright", "indoor_bright", "ambient_force", "day_night_warmth", "player_light", "player_light_radius", "player_light_warm", "player_light_day", "textbatch", "batch"};
 
 std::wstring g_ini;

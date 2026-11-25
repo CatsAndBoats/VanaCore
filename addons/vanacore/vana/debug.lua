@@ -17,9 +17,8 @@ the /vana window open or not, in the same look (draw.lua).
                      a real crash leaves: the chat's line, its report in logs\vanacore.log, the dump. Picked from a
                      list; Trigger asks twice.
                      vana.graphics.dlss_crash_test; DirectX 12 with DLSS or FSR running.
-  Shadow & AO rings  where the shadows' and the occlusion's rings fall (sun_rings, ao_rings: fewer taps past each one out
-                     from the camera) and the taps each takes: Show rings tints the picture by ring (the Debug view's 15 and
-                     16), with each one's switch and spacing beside it, the Graphics page's own settings; then Mass
+  Shadow rings       where the shadows' rings fall (sun_rings: fewer taps past each one out
+                     from the camera) and the taps each takes: Show rings tints the picture by ring (the Debug view's 15), with each one's switch and spacing beside it, the Graphics page's own settings; then Mass
                      Grass's rings (grass.rings.show: circles on the ground, never saved) with where they fall
   Frame recording    /vana debug <seconds> and /vana debug stop (debugrec.cpp): each frame's time and where it went, into
                      logs\frames-*.csv and logs\debug-*.log
@@ -285,13 +284,10 @@ local function views_draw(dl, x, y, w, now)
 end
 
 -------------------------------------------------------------------------------
--- Shadow and AO rings (sun_rings, ao_rings)
+-- Shadow rings (sun_rings)
 -------------------------------------------------------------------------------
 
 local FX = M.FX
-local AO_TAPS = { 6, 10, 16, 24, 32 } -- the occlusion's taps by ao_quality (gfx_d3d12.c AO_TAPS)
-local AO_KEEP = { 1, 0.75, 0.5, 0.3 } -- ... the share kept past each ring (fx_ao)
-local AO_QUALITY = { 'Low', 'Medium', 'High', 'Max', 'above Max' }
 -- the view's colours, as ring_tint draws them (gfx_d3d12.c)
 local RING_COLOURS = { { P.green, 'every tap' }, { '#E8D45C', 'past ring 1' }, { '#E8945C', 'past ring 2' }, { P.rose, 'past ring 3' } }
 
@@ -301,22 +297,11 @@ local RINGS = {
     { name = 'Shadow rings', what = 'Shadows', view = '15',
       on = { kind = 'toggle', section = FX, key = 'sun_rings', default = true },
       spacing = { kind = 'slider', section = FX, key = 'sun_ring_spacing', default = 15, min = 5, max = 60, step = 1 } },
-    { name = 'AO rings', what = 'AO', view = '16',
-      on = { kind = 'toggle', section = FX, key = 'ao_rings', default = true },
-      spacing = { kind = 'slider', section = FX, key = 'ao_ring_spacing', default = 15, min = 2, max = 150, step = 1 } },
 }
 
--- the taps a pixel takes in each ring, "16 / 12 / 8 / 6 taps" ("... taps (Max)" for the occlusion's, by its quality)
+-- the taps a pixel takes in each ring
 local function taps_text(i)
-    if i == 1 then
-        return '16 / 12 / 8 / 6 taps'
-    end
-    local q = math.max(0, math.min(4, math.floor((tonumber(vana.config.get(FX, 'ao_quality') or '') or 0) + 0.5)))
-    local n, taps = AO_TAPS[q + 1], {}
-    for k, keep in ipairs(AO_KEEP) do
-        taps[k] = math.max(math.floor(n * keep + 0.5), math.min(n, 4))
-    end
-    return table.concat(taps, ' / ') .. ' taps (' .. AO_QUALITY[q + 1] .. ')'
+    return '16 / 12 / 8 / 6 taps'
 end
 
 -- the rain's (the Debug view's 32, gfx_hlsl_rain.h dbg 6): its 100-yalm bands, and its lines
@@ -330,7 +315,7 @@ local GRASS_RING_COLOURS = { { '#40FF40', 'ring 1' }, { '#FFE040', 'ring 2' }, {
                              { '#FF3030', 'range' } }
 
 local function rings_height()
-    return S(NOTE_H) * 2 + S(ROW_H) * 3 + S(NOTE_H) * 2 + S(ROW_H) + S(NOTE_H) + S(4)
+    return S(NOTE_H) + S(ROW_H) * 2 + S(NOTE_H) * 2 + S(ROW_H) + S(NOTE_H) + S(4)
 end
 
 local function rings_draw(dl, x, y, w, now)
@@ -396,7 +381,7 @@ local function rings_draw(dl, x, y, w, now)
         y = y + S(ROW_H)
     end
 
-    -- the views' colours: the shadows' and occlusion's, then the rain's
+    -- the views' colours: the shadows', then the rain's
     for row, colours in ipairs({ RING_COLOURS, RAIN_RING_COLOURS }) do
         local lx, cy2 = x, y + S(NOTE_H) * (row - 0.5)
         for _, c in ipairs(colours) do
@@ -564,7 +549,7 @@ local TABS = {
     { id = 'collision', tab = 'Collision', title = 'Collision', height = collision_height, draw = collision_draw },
     { id = 'grass', tab = 'Grass', title = 'Mass Grass', height = grass_height, draw = grass_draw },
     { id = 'crash', tab = 'DLSS / FSR', title = 'DLSS / FSR', height = crash_height, draw = crash_draw },
-    { id = 'rings', tab = 'Rings', title = 'Shadow, AO, rain & grass rings', height = rings_height, draw = rings_draw },
+    { id = 'rings', tab = 'Rings', title = 'Shadow, rain & grass rings', height = rings_height, draw = rings_draw },
     { id = 'record', tab = 'Recording', title = 'Frame recording', height = record_height, draw = record_draw },
 }
 local TAB_LABELS = {}

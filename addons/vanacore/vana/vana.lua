@@ -634,7 +634,6 @@ local QUALITY = {
         [FX .. '.sun_distance'] = { '60', '80', '', '150' },
         [FX .. '.ao.enabled'] = { '0', '', '', '' },
         [FX .. '.ao_quality'] = { '0', '0', '', '4' }, -- (the default is Max, the 24 taps: Low and Medium keep the taps they had; 4 is 32, past Max: the box lights none)
-        [FX .. '.ao_rings'] = { '', '', '', '0' },
         [FX .. '.sun_rings'] = { '', '', '', '0' },
         [FX .. '.fog.enabled'] = { '0', '', '', '' },
         [FX .. '.bloom.enabled'] = { '0', '', '', '' },

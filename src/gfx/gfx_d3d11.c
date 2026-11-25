@@ -223,8 +223,6 @@ typedef struct FxSettings
         sun_face, sun_min, sun_direct, sun_dusk, sun_casters, sun_near, temporal, debug;
     float ao_quality; /* the occlusion's taps a pixel a frame: 0 low (6), 1 medium (10), 2 high (16), 3 ultra (24), 4 max (32);
                        * every one at the scene's own size */
-    float ao_rings;   /* ... fewer of them past each of three rings out from the camera (fx_ao): 1 on, 0 all of them everywhere */
-    float ao_ring_spacing; /* ... how far apart the rings are, world units */
     float sun_free, sun_free_az, sun_free_el; /* the shadows' light placed by hand: 1 on, its bearing round the horizon and its
                                                * height over it, degrees; the hour, the cloud and a room are left out (gfx_d3d12.c's) */
     float sun_tilt; /* the game's sun and moon tilted this many degrees south (gfx_shared.c sun_tilt) */
@@ -2710,8 +2708,6 @@ static const struct
     { "sun_handoff", offsetof(FxSettings, sun_handoff), 0.5f },
     { "temporal", offsetof(FxSettings, temporal), 0.99f },
     { "ao_quality", offsetof(FxSettings, ao_quality), 3.0f },
-    { "ao_rings", offsetof(FxSettings, ao_rings), 1.0f },
-    { "ao_ring_spacing", offsetof(FxSettings, ao_ring_spacing), 15.0f },
     { "sun_rings", offsetof(FxSettings, sun_rings), 1.0f },
     { "sun_ring_spacing", offsetof(FxSettings, sun_ring_spacing), 15.0f },
     { "sun_detail", offsetof(FxSettings, sun_detail), 4096.0f },
@@ -5844,10 +5840,9 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
             /* the occlusion's pattern held still (fx_ao): FSR gathers the frames, or the temporal pass too few to even
              * out its 16 steps (a new grain each frame, a shimmer); 2 where FSR gathers, the sun's shadows' held still too */
             u.aoq[3] = gathers ? 2.0f : g_fxs.temporal < 0.9f ? 1.0f : 0.0f;
-            /* the occlusion's rings (fx_ao): fewer taps past each, ao_ring_spacing world units apart */
-            u.aor[0] = g_fxs.ao_rings > 0.0f ? 1.0f : 0.0f;
-            u.aor[1] = fmaxf(g_fxs.ao_ring_spacing, 1.0f);
-            /* ... and the sun's shadows' (sun_look): fewer of the maps' taps past each, sun_ring_spacing apart */
+            /* the sun's shadows' rings (sun_look): fewer of the maps' taps past each, sun_ring_spacing apart */
+            u.aor[0] = 0.0f;
+            u.aor[1] = 0.0f;
             u.aor[2] = g_fxs.sun_rings > 0.0f ? 1.0f : 0.0f;
             u.aor[3] = fmaxf(g_fxs.sun_ring_spacing, 1.0f);
             zone_lines(s, have_v ? vinv + 12 : NULL, &u);

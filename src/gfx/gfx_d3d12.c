@@ -417,8 +417,6 @@ typedef struct FxSettings
         sun_face, sun_min, sun_direct, sun_dusk, sun_casters, sun_near, temporal, debug;
     float ao_quality; /* the occlusion's taps a pixel a frame: 0 low (6), 1 medium (10), 2 high (16), 3 ultra (24), 4 max (32);
                        * every one at the scene's own size */
-    float ao_rings;   /* ... fewer of them past each of three rings out from the camera (fx_ao): 1 on, 0 all of them everywhere */
-    float ao_ring_spacing; /* ... how far apart the rings are, world units */
     float sun_free, sun_free_az, sun_free_el; /* the shadows' light placed by hand: 1 on, its bearing round the horizon and its
                                                * height over it, degrees (sun_map's caller); the hour, the cloud and a room are left out */
     float sun_tilt; /* the game's sun and moon tilted this many degrees south (gfx_shared.c sun_tilt) */
@@ -4994,7 +4992,7 @@ static const char FX_HLSL_1[] =
     "  float4 elight; // VanaCore's light from the effects: strength, reach (world units), threshold, most gain\n"
     "  float4 elight2; // ... its first level's reach in scene pixels; y the reflections' fake bump (refl_bump); z how much of the lanterns' light is left out, w the dimmed effects' (el_run)\n"
     "  float4 elight3; // the characters' effects (spells, abilities): x their own strength (elight_actor), y 1 while any was drawn this frame; z 1 laid onto DLSS's output (fx_elc); w 1 while DLSS 5 has effects to leave out of its lights (fx_dlssg)\n"
-    "  float4 aor;    // the occlusion's rings (ao_rings): 1 on, how far apart they are (world units); the shadows' (sun_rings), the same\n"
+    "  float4 aor;    // z: the shadows' rings (sun_rings) 1 on, w how far apart they are (world units); x, y unused\n"
     "  float4 aoc;    // the occlusion on characters (ao_chars): x its share of ao's strength; y 1 while the characters' depth is input 9;\n"
     "                 // z the zone's shadows blurred this far across its surfaces (sun_soft_zone, world units); w 1 while the characters'\n"
     "                 // stencil mask (fx_cmask) is fx_ao's and fx_blur's input 11 and fx_comp's 10: the share is applied in fx_ao, not in fx_comp\n"
@@ -5455,18 +5453,6 @@ static const char FX_HLSL_1[] =
      * Anything, rubymatrix/xi-on-anything 6e26f8b) */
     "  return (abs(r.z) < abs(l.z) && dot(r, r) > 0.0) || dot(l, l) == 0.0 ? r : l;\n"
     "}\n"
-    /* the occlusion's taps at dist, of NS (ao_quality): past each of the rings (ao_rings: aor.y world units apart, out from
-     * the camera) fewer, all inside the first, then 60%, 40% and 25%, never under 4. Each ring's edge is moved by the pixel's
-     * step of the 4x4 pattern (b), so the change is dithered across the blur's block, not a line. The floor is the blur's
-     * block's need to cover the taps' disc (rpx pixels round), a quarter of what it was (0.2 per pixel of the disc's area):
-     * at 0.2 it held every tap out to ~100 to 200 world units and the rings did nothing inside that, at 0.05 a ring cuts
-     * from a disc of ~9 pixels out, in exchange for a grainier far field */
-    "int ao_taps(int NS, float dist, float rpx, float b) {\n"
-    "  if (u.aor.x <= 0.0) return NS;\n"
-    "  float ring = dist / u.aor.y + 0.3 * (b - 0.5);\n"
-    "  float keep = ring < 1.0 ? 1.0 : ring < 2.0 ? 0.6 : ring < 3.0 ? 0.4 : 0.25;\n"
-    "  return max(int(float(NS) * keep + 0.5), min(NS, max(int(ceil(0.05 * rpx * rpx)), 4)));\n"
-    "}\n"
     /* how far sun_map's edge-on fade may reach P (its wall): where the surface goes on flat a quarter of a unit round P along
      * both of the screen's axes (to one side of each at least: by a corner, under a ledge, it stays), and not on a character
      * (sun_char). The fade is for the bars down a wall; on a rounded model (a moogle, a barrel, a character sun_char doesn't
@@ -5582,7 +5568,7 @@ static const char FX_HLSL_1[] =
      * gathers too few to even out the pattern's 16 steps (temporal under 0.9: a new grain each frame, a shimmer); held
      * still, the blur's 4x4 block already averages them */
     "  float ka = u.aoq.w > 0.0 ? b : k;\n"
-    "  int NS = ao_taps(max(int(u.aoq.x), 1), dist, rpx, b);\n"
+    "  int NS = max(int(u.aoq.x), 1);\n"
     "  float sum = 0.0;\n"
     "  [loop] for (int s = 0; s < NS; ++s) {\n"
     "    float a = (float(s) + ka) / float(NS);\n"
@@ -7291,14 +7277,6 @@ static const char FX_HLSL_2[] =
     "  if (dbg == 5) return float4(sun, sun, sun, c.a);\n"
     "  if ((dbg >= 21 && dbg <= 25) || dbg == 28 || dbg == 29) return float4(os.y, os.y, os.y, c.a);\n"
     "  if (dbg == 15 && z != 0.0) return float4(ring_tint(c.rgb, z * u.hand.x, u.aor.zw), c.a);\n"
-    /* the occlusion's by the share of its taps fx_ao takes (ao_taps: a ring cuts none while the disc is wide) */
-    "  if (dbg == 16 && z != 0.0) {\n"
-    "    float d = z * u.hand.x, rpx = min(u.ao.x * u.proj.y * 0.5 * u.vp.w / d, u.ao.w);\n"
-    "    int2 cell = px & 3;\n"
-    "    int NS = max(int(u.aoq.x), 1);\n"
-    "    float s = float(ao_taps(NS, d, rpx, (float(BAYER[cell.y * 4 + cell.x]) + 0.5) / 16.0)) / float(NS);\n"
-    "    return float4(ring_tint(c.rgb, s >= 1.0 ? 0.0 : s >= 0.75 ? 1.5 : s >= 0.5 ? 2.5 : 3.5, float2(1.0, 1.0)), c.a);\n"
-    "  }\n"
     /* (the player's light where it reaches, as a light of its own: it fills the shadows the moon casts under it; by day the
      * world outside it darker, the sky left) */
     "  float3 pl = float3(0.0, 0.0, 0.0);\n"
@@ -8202,8 +8180,6 @@ static const struct
     { "moghouse", offsetof(FxSettings, moghouse), 0.0f }, /* XI on Anything's default: none */
     { "temporal", offsetof(FxSettings, temporal), 0.99f },
     { "ao_quality", offsetof(FxSettings, ao_quality), 3.0f },
-    { "ao_rings", offsetof(FxSettings, ao_rings), 1.0f },
-    { "ao_ring_spacing", offsetof(FxSettings, ao_ring_spacing), 15.0f },
     { "ao_chars", offsetof(FxSettings, ao_chars), 1.25f },
     { "ao_soft_chars", offsetof(FxSettings, ao_soft_chars), 0.4f },
     { "sun_rings", offsetof(FxSettings, sun_rings), 1.0f },
@@ -16006,10 +15982,9 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
             /* the occlusion's pattern held still (fx_ao): DLSS or FSR gathers the frames, or the temporal pass too few to even
              * out its 16 steps (a new grain each frame, a shimmer); 2 where they gather, the sun's shadows' held still too */
             u.aoq[3] = gathers ? 2.0f : g_fxs.temporal < 0.9f ? 1.0f : 0.0f;
-            /* the occlusion's rings (fx_ao): fewer taps past each, ao_ring_spacing world units apart */
-            u.aor[0] = g_fxs.ao_rings > 0.0f ? 1.0f : 0.0f;
-            u.aor[1] = fmaxf(g_fxs.ao_ring_spacing, 1.0f);
-            /* ... and the sun's shadows' (sun_look): fewer of the maps' taps past each, sun_ring_spacing apart */
+            /* the sun's shadows' rings (sun_look): fewer of the maps' taps past each, sun_ring_spacing apart */
+            u.aor[0] = 0.0f;
+            u.aor[1] = 0.0f;
             u.aor[2] = g_fxs.sun_rings > 0.0f ? 1.0f : 0.0f;
             u.aor[3] = fmaxf(g_fxs.sun_ring_spacing, 1.0f);
             zone_lines(s, have_v ? vinv + 12 : NULL, &u);
