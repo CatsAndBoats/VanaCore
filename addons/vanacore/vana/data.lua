@@ -1495,6 +1495,17 @@ local function button_tabs()
                 return area_sharp(a, a == font and 'buttons.font' or true)
             end
             line.lock_if = function () return not enabled() end
+            -- a soft shadow under the letters (chatfont.cpp read_outline), in the outline's place
+            local function shade(row) return mirror(row, font, 'buttons.font') end
+            for _, row in ipairs({
+                lock(shade(toggle('Soft shadow', 'client', font .. '.shadow', false))),
+                lock(pair('Shadow', nil, { shade(slider('Blur', 'client', font .. '.shadow.blur', 2, 0, 8, 0.5, '%.1f px')),
+                                           shade(slider('Opacity', 'client', font .. '.shadow.opacity', 70, 0, 100, 1, '%d%%')) })),
+                lock(pair('Shadow offset', nil, { shade(slider('Across', 'client', font .. '.shadow.x', 1, -8, 8, 1, '%d px')),
+                                                  shade(slider('Down', 'client', font .. '.shadow.y', 1, -8, 8, 1, '%d px')) })),
+            }) do
+                group[#group + 1] = row
+            end
             local outline = line.outline -- (the Default Font's while the area's isn't set)
             outline.get = function ()
                 local value = tonumber(vana.config.get('client', area() .. '.outline') or '')

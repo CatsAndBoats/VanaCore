@@ -165,7 +165,12 @@ bool add_glyph(int which, int code, const std::wstring& text, text::Sprite& spri
         glyph.frac = widen(sprite, code, s.sx);
     glyph.lx = wide ? l.x : l.x - shift;
     place(l, s.x, s.y, s.row);
-    if (s.stroke > 0.0f) {
+    if (want.shadow && want.shadow_opacity > 0.0f) {
+        // the letter's soft shadow in the outline's place (shadow_cut); the sprite still holds the letter
+        o = shadow_cut(sprite, shift, want.shadow_blur * s.sy, static_cast<int>(std::lround(want.shadow_x * s.sx)),
+                       static_cast<int>(std::lround(want.shadow_y * s.sy)));
+        place(o, s.x, s.y, s.row);
+    } else if (s.stroke > 0.0f) {
         sprite.set(letter, outlined);
         o = cut(sprite, shift);
         place(o, s.x, s.y, s.row);
@@ -191,7 +196,8 @@ void publish(int which)
     }
     const Want& want = s.want;
     const VanaTextFont font{atlas.data(), kAtlasWidth, static_cast<std::uint32_t>(height), s.glyphs.data(),
-                            static_cast<std::uint32_t>(s.glyphs.size()), kBaseline, s.stroke > 0.0f ? want.outline_opacity : 0.0f,
+                            static_cast<std::uint32_t>(s.glyphs.size()), kBaseline,
+                            want.shadow && want.shadow_opacity > 0.0f ? want.shadow_opacity : s.stroke > 0.0f ? want.outline_opacity : 0.0f,
                             want.line, want.size, want.pad, want.upper ? 1u : 0u};
     vanacore_gfx_set_chat_font(which, &font);
 }
