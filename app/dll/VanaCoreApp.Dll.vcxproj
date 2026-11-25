@@ -43,6 +43,8 @@
   <ItemGroup>
     <ClCompile Include="exports.cpp" />
     <ClCompile Include="home.cpp" />
+    <ClCompile Include="home_pages.cpp" />
+    <ClCompile Include="home_profiles.cpp" />
     <ClCompile Include="..\shared\ui.cpp" />
   </ItemGroup>
   <ItemGroup>

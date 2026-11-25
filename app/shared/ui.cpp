@@ -38,9 +38,9 @@ constexpr FontSpec kFonts[] = {
     {Font::Title, 19.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD}, {Font::Big, 24.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD},
     {Font::Body, 14.5f, DWRITE_FONT_WEIGHT_NORMAL},     {Font::Small, 13.5f, DWRITE_FONT_WEIGHT_NORMAL},
     {Font::Label, 11.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD}, {Font::Button, 14.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD},
-    {Font::Play, 21.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD},
+    {Font::Play, 21.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD}, {Font::Status, 18.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD},
 };
-constexpr FontSpec kSerifPlay = {Font::Play, 24.0f, DWRITE_FONT_WEIGHT_BOLD}; // (PT Serif Bold, res\ptserif_bold.ttf)
+constexpr FontSpec kSerifPlay = {Font::Play, 24.0f, DWRITE_FONT_WEIGHT_BOLD}, kSerifStatus = {Font::Status, 20.0f, DWRITE_FONT_WEIGHT_BOLD}; // (PT Serif Bold, res\ptserif_bold.ttf)
 constexpr FontSpec kIconFonts[] ={{Font::Icon, 18.0f, DWRITE_FONT_WEIGHT_NORMAL}, {Font::IconBig, 24.0f, DWRITE_FONT_WEIGHT_NORMAL}};
 
 // `in` (opaque, premultiplied BGRA) a `down`th the size, each pixel its block's average, then blurred (three box blurs of
@@ -210,6 +210,7 @@ void Canvas::load_icons(HMODULE module)
             for (const FontSpec& spec : kIconFonts)
                 make(L"Material Symbols Outlined", spec);
             make(L"PT Serif", kSerifPlay);
+            make(L"PT Serif", kSerifStatus);
         }
     }
     release(collection);
@@ -413,7 +414,7 @@ IDWriteTextLayout* Canvas::layout(const std::wstring& text, Font font) const
     IDWriteTextLayout* made = nullptr;
     dw_->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), fonts_[static_cast<int>(font)], 8192, 4096, &made);
     IDWriteTextLayout1* spaced = nullptr;
-    if (made != nullptr && font == Font::Play &&
+    if (made != nullptr && (font == Font::Play || font == Font::Status) &&
         SUCCEEDED(made->QueryInterface(__uuidof(IDWriteTextLayout1), reinterpret_cast<void**>(&spaced)))) {
         // Play's letters a pixel apart, half each side (still centred)
         spaced->SetCharacterSpacing(0.5f, 0.5f, 0, {0, static_cast<UINT32>(text.size())});
@@ -523,7 +524,8 @@ void Canvas::backdrop(const D2D1_RECT_F* glass)
         rt_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), shape), layer); // inside the card's round corners
         // the picture covering the card, its middle in the card's middle
         const float iw = static_cast<float>(backdrop_img_.w), ih = static_cast<float>(backdrop_img_.h);
-        const float k = std::max(w / iw, h / ih), dw = iw * k, dh = ih * k;
+        // (5% past covering: the picture's own border lines cut off its edges)
+        const float k = std::max(w / iw, h / ih) * 1.05f, dw = iw * k, dh = ih * k;
         const D2D1_RECT_F cover = D2D1::RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2);
         rt_->DrawBitmap(bitmap, cover, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         // a dark tint over it all, deeper under the head and down to the bottom's
@@ -704,6 +706,52 @@ void Canvas::play_face(const D2D1_RECT_F& at, float t, float alpha)
                               brush_, 1.0f);
 }
 
+float Canvas::paragraph(const std::wstring& text, Font font, float x, float y, float width, D2D1_COLOR_F colour)
+{
+    IDWriteTextLayout* l = nullptr;
+    if (text.empty() || FAILED(dw_->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), fonts_[static_cast<int>(font)], width, 4096, &l)))
+        return 0;
+    l->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+    DWRITE_TEXT_METRICS m{};
+    l->GetMetrics(&m);
+    brush_->SetColor(colour);
+    rt_->DrawTextLayout({x, y}, l, brush_);
+    l->Release();
+    return m.height;
+}
+
+void Canvas::styled(const std::wstring& label, Font font, float x, float cy, float alpha)
+{
+    // a dark shadow behind it, soft: a faint spread round a darker copy two pixels down
+    for (const auto& [dx, dy, a] : {std::tuple{-1.0f, 2.0f, 0.3f}, {1.0f, 2.0f, 0.3f}, {0.0f, 3.0f, 0.35f}, {0.0f, 2.0f, 0.7f}})
+        text(label, font, x + dx, cy + dy, rgb(0x020818, a * alpha));
+    // white at the top to a little less white (a cool grey) at the bottom
+    text_shaded(label, font, x, cy, rgb(pal::white, alpha), rgb(0xD6E2F2, alpha));
+}
+
+void Canvas::inset_shadow(const D2D1_RECT_F& r, float radius, float depth)
+{
+    // rings inside the edge all round, each fainter going in (no blur effect on a DC render target)
+    const int rings = static_cast<int>(depth);
+    for (int i = 0; i < rings; ++i) {
+        const float in = static_cast<float>(i), f = 1.0f - in / depth;
+        brush_->SetColor(rgb(0x000000, 0.16f * f * f));
+        rt_->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + in + 0.5f, r.top + in + 0.5f, r.right - in - 0.5f, r.bottom - in - 0.5f),
+                                                    std::max(0.0f, radius - in), std::max(0.0f, radius - in)),
+                                  brush_, 1.0f);
+    }
+}
+
+void Canvas::toggle(float x, float cy, bool on, bool hover)
+{
+    constexpr float kW = 30, kH = 16;
+    const float y = cy - kH / 2;
+    fill(x, y, kW, kH, kH / 2, on ? mix(pal::teal, pal::white, hover ? 0.15f : 0.0f) : mix(pal::well_edge, pal::hover, hover ? 1.0f : 0.0f, 0.95f));
+    if (!on)
+        outline(x, y, kW, kH, kH / 2, rgb(pal::white, hover ? 0.22f : 0.12f));
+    disc(on ? x + kW - kH / 2 : x + kH / 2, cy, kH / 2 - 2.5f, on ? rgb(pal::white) : rgb(pal::text2));
+}
+
 float Canvas::button_width(const std::wstring& label) const
 {
     return std::max(84.0f, text_width(label, Font::Button) + 32);
@@ -737,11 +785,7 @@ void Canvas::button(const D2D1_RECT_F& r, const std::wstring& label, Button styl
     if (icon == 0 || fonts_[static_cast<int>(icons)] == nullptr) {
         if (play) {
             // a dark shadow behind it, soft: a faint spread round a darker copy two pixels down
-            const float lx = r.left + (w - text_width(label, font)) / 2;
-            for (const auto& [dx, dy, a] : {std::tuple{-1.0f, 2.0f, 0.3f}, {1.0f, 2.0f, 0.3f}, {0.0f, 3.0f, 0.35f}, {0.0f, 2.0f, 0.7f}})
-                text(label, font, lx + dx, cy + dy, rgb(0x020818, a * alpha));
-            // white at the top to a little less white (a cool grey) at the bottom
-            text_shaded(label, font, lx, cy, rgb(pal::white, fg.a), rgb(0xD6E2F2, fg.a));
+            styled(label, font, r.left + (w - text_width(label, font)) / 2, cy, fg.a);
             return;
         }
         text_centred(label, font, r.left + w / 2, cy, fg);

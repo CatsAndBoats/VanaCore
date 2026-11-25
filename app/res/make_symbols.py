@@ -17,6 +17,8 @@ from fontTools.varLib import instancer
 
 ICONS = [
     "play_arrow", "undo", "download", "check_circle", "error", "info", "sync", "close", "settings", "folder_open",
+    "keyboard_arrow_up", "keyboard_arrow_down", "sports_esports", "open_in_new", "cancel", "edit", "add", "delete",
+    "radio_button_unchecked",
 ]
 
 

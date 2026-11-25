@@ -27,12 +27,13 @@ D2D1_COLOR_F rgb(std::uint32_t c, float a = 1.0f);
 D2D1_COLOR_F mix(std::uint32_t a, std::uint32_t b, float t, float alpha = 1.0f);
 
 // Segoe UI's, then the icons' (Material Symbols Outlined, res\symbols.ttf; none on Windows before 10 1703: no icons drawn)
-enum class Font { Title, Big, Body, Small, Label, Button, Play, Icon, IconBig, Count };
+enum class Font { Title, Big, Body, Small, Label, Button, Play, Status, Icon, IconBig, Count }; // (Status: START's font, smaller)
 
 // Material Symbols' codepoints, the icons in res\symbols.ttf (res\make_symbols.py's ICONS: add one there, then here)
 namespace icon {
 constexpr wchar_t play = 0xE037, undo = 0xE166, download = 0xF090, check = 0xF0BE, error = 0xF8B6, info = 0xE88E, sync = 0xE627,
-                  close = 0xE5CD, settings = 0xE8B8, folder = 0xE2C8;
+                  close = 0xE5CD, settings = 0xE8B8, folder = 0xE2C8, up = 0xE316, down = 0xE313, gamepad = 0xEA28,
+                  open = 0xE89E, cancel = 0xE888, edit = 0xF097, add = 0xE145, trash = 0xE92E, circle = 0xE836;
 }
 enum class Button { Accent, Secondary, Ghost, Play }; // (Play: the home's big one, a blue gradient in a cyan border)
 
@@ -111,6 +112,14 @@ public:
     void button(const D2D1_RECT_F& r, const std::wstring& label, Button style, float t, bool on = true, wchar_t icon = 0,
                 Font font = Font::Button);
     float button_width(const std::wstring& label) const;
+    // Text from (x, y) wrapped to `width`: the height it took
+    float paragraph(const std::wstring& text, Font font, float x, float y, float width, D2D1_COLOR_F colour);
+    // START's lettering: a line of text from `x`, its middle at `cy`, white fading to a cool grey over a soft dark shadow
+    void styled(const std::wstring& text, Font font, float x, float cy, float alpha = 1.0f);
+    // A soft shadow inside the rounded rectangle `r` (corners `radius`), `depth` in from its edges all round
+    void inset_shadow(const D2D1_RECT_F& r, float radius, float depth);
+    // A switch 30 x 16 from (x, its middle at cy): green and its knob right when on; lighter under the mouse
+    void toggle(float x, float cy, bool on, bool hover);
 
 private:
     // A picture from the module's resources: its pixels, and its bitmap once drawn
