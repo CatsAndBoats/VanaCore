@@ -369,12 +369,19 @@ struct Bucket {
     float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
 };
 
-std::uint64_t bucket_key(const float* o, std::int32_t texture)
+constexpr std::uint64_t kRtOnly = 1ull << 62; // (a bucket's key: the part is for the ray-traced reflections alone)
+
+std::int32_t texture_of_key(std::uint64_t key)
+{
+    return static_cast<std::int32_t>((key >> 32) & 0x3FFFFFFF) - 1;
+}
+
+std::uint64_t bucket_key(const float* o, std::int32_t texture, bool rt_only)
 {
     const auto cx = static_cast<std::int32_t>(std::floor(o[0] / kCell)) & 0xFFFF;
     const auto cz = static_cast<std::int32_t>(std::floor(o[2] / kCell)) & 0xFFFF;
     return static_cast<std::uint64_t>(static_cast<std::uint32_t>(texture + 1)) << 32 | static_cast<std::uint32_t>(cx) << 16 |
-           static_cast<std::uint32_t>(cz);
+           static_cast<std::uint32_t>(cz) | (rt_only ? kRtOnly : 0);
 }
 
 // the meshes' sections, decrypted and parsed; a name had twice keeps the one with more vertices
@@ -424,16 +431,21 @@ int left_out(const Buf& b, std::size_t r)
 }
 
 void lay(const MeshDef& m, const Place& pl, const std::vector<std::uint8_t>& dat, Mesh& out,
-         std::unordered_map<std::uint64_t, Bucket>& buckets, std::unordered_map<std::string, std::int32_t>& textures, bool shade)
+         std::unordered_map<std::uint64_t, Bucket>& buckets, std::unordered_map<std::string, std::int32_t>& textures, bool shade,
+         bool moving)
 {
     for (const Part& part : m.parts) {
-        if (part.blended) {
-            out.blended++;
+        out.blended += part.blended;
+        if (part.blended && !shade)
             continue;
-        }
-        const std::int32_t texture = m.cutout ? texture_of(dat, part.texture, out, textures) : -1;
+        // (shade: a blended part is laid as a cut-out by its texture's alpha, and a mover where it stands at the start, for the
+        // reflections alone: the sun's shadows would keep them where they first stood)
+        const bool rt_only = part.blended || moving;
+        const std::int32_t texture = m.cutout || part.blended ? texture_of(dat, part.texture, out, textures) : -1;
         const std::int32_t own = shade && texture < 0 ? texture_of(dat, part.texture, out, textures) : -1;
-        Bucket& bk = buckets[bucket_key(pl.o, texture)];
+        if (part.blended && texture < 0)
+            continue;
+        Bucket& bk = buckets[bucket_key(pl.o, texture, rt_only)];
         for (std::size_t i = 0; i + 5 <= part.tris.size(); i += 5) {
             float w[3];
             pl.at(&part.tris[i], w);
@@ -466,13 +478,14 @@ void flatten(std::unordered_map<std::uint64_t, Bucket>& buckets, Mesh& out)
     // (each one's room taken once: grown as it filled, Zi'Tah's 90 MB of cut-outs wanted a block half as big again beside it)
     std::size_t solid = 0, cut = 0;
     for (const auto& [key, bk] : order)
-        (static_cast<std::int32_t>(key >> 32) - 1 < 0 ? solid : cut) += bk->v.size() / 5;
+        (texture_of_key(key) < 0 ? solid : cut) += bk->v.size() / 5;
     out.pos.reserve(solid * 3), out.nrm.reserve(solid * 4), out.cut.reserve(cut * 5);
     for (const auto& [key, bk] : order) {
         if (bk->v.empty())
             continue;
         Range r;
-        r.texture = static_cast<std::int32_t>(key >> 32) - 1;
+        r.texture = texture_of_key(key);
+        r.rt_only = (key & kRtOnly) != 0;
         std::memcpy(r.lo, bk->lo, sizeof r.lo), std::memcpy(r.hi, bk->hi, sizeof r.hi);
         const auto corners = static_cast<std::uint32_t>(bk->v.size() / 5);
         r.count = corners;
@@ -530,10 +543,11 @@ bool read(const std::vector<std::uint8_t>& dat, const std::uint8_t* table1, cons
         if (!b.in(r, kRecord))
             break;
         out.placements++;
-        if (const int why_out = left_out(b, r)) {
+        const int why_out = left_out(b, r);
+        if (why_out != 0)
             (why_out == 1 ? out.stand_ins : out.moving)++;
+        if (why_out == 1 || (why_out == 2 && !shade))
             continue;
-        }
         const MeshDef* m = resolve(meshes, b.name(r));
         if (m == nullptr) {
             if (out.unfound++ < 8)
@@ -541,7 +555,7 @@ bool read(const std::vector<std::uint8_t>& dat, const std::uint8_t* table1, cons
             continue;
         }
         out.placed++;
-        lay(*m, place_of(b, r), dat, out, buckets, textures, shade);
+        lay(*m, place_of(b, r), dat, out, buckets, textures, shade, why_out == 2);
     }
     flatten(buckets, out);
     if (out.ranges.empty()) {

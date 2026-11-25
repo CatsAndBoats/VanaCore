@@ -153,7 +153,7 @@ static void zm_curved(const VanaZoneMesh* m)
         for (uint32_t i = 0; i < m->nranges; ++i)
         {
             const VanaZoneMeshRange* r = &m->ranges[i];
-            if (r->texture >= 0 || r->count < 3 || r->first + r->count > m->npos)
+            if (r->rt_only || r->texture >= 0 || r->count < 3 || r->first + r->count > m->npos)
                 continue;
             for (uint32_t v = r->first; v + 3 <= r->first + r->count; v += 3)
             {
@@ -290,6 +290,8 @@ void zonemesh_set(const VanaZoneMesh* m)
     {
         const VanaZoneMeshRange* r = &m->ranges[i];
         const int cut = r->texture >= 0;
+        if (r->rt_only)
+            continue; /* (the ray-traced reflections' alone: in their tree, no caster) */
         if (r->count < 3 || (cut ? !zm.cut || r->first + r->count > m->ncut || (uint32_t)r->texture >= zm.ntex || !zm.tex[r->texture]
                                  : !zm.pos || r->first + r->count > m->npos))
             continue; /* (a cut-out whose texture the DAT hasn't: left out) */

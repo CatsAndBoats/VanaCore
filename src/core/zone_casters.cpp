@@ -87,7 +87,7 @@ void hand(int zone, const zonemesh::Mesh* m)
     std::vector<VanaZoneMeshTexture> textures;
     if (m != nullptr) {
         for (const zonemesh::Range& r : m->ranges)
-            ranges.push_back({r.first, r.count, r.texture, {r.lo[0], r.lo[1], r.lo[2]}, {r.hi[0], r.hi[1], r.hi[2]}});
+            ranges.push_back({r.first, r.count, r.texture, {r.lo[0], r.lo[1], r.lo[2]}, {r.hi[0], r.hi[1], r.hi[2]}, r.rt_only ? 1 : 0});
         for (const zonemesh::Texture& t : m->textures)
             textures.push_back({t.argb.data(), t.width, t.height});
         v.pos = m->pos.data(), v.npos = static_cast<unsigned>(m->pos.size() / 3);

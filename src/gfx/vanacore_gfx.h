@@ -239,6 +239,7 @@ typedef struct VanaZoneMeshRange
     unsigned first, count;
     int texture;
     float lo[3], hi[3];
+    int rt_only; /* for the ray-traced reflections alone (a mover, a blended part): not the sun's shadows */
 } VanaZoneMeshRange;
 typedef struct VanaZoneMeshTexture
 {

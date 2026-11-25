@@ -22,6 +22,7 @@ namespace vanacore::zonemesh {
 struct Range {
     std::uint32_t first = 0, count = 0; // vertices in Mesh::pos (texture < 0) or Mesh::cut
     std::int32_t texture = -1;          // -1 solid; else the cut-out's texture in Mesh::textures
+    bool rt_only = false;               // for the ray-traced reflections alone (read's `shade`): a part that moves or is blended
     float lo[3] = {0, 0, 0}, hi[3] = {0, 0, 0};
 };
 

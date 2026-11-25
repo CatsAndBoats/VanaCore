@@ -6935,13 +6935,20 @@ static const char FX_HLSL_2[] =
     "    if (rti.x != 0u) {\n"
     "      float4 m0 = asfloat(g_rtv.Load4(0u)), m1 = asfloat(g_rtv.Load4(16u)), m2 = asfloat(g_rtv.Load4(32u)), m3 = asfloat(g_rtv.Load4(48u));\n"
     "      float3 ow = P.x * m0.xyz + P.y * m1.xyz + P.z * m2.xyz + m3.xyz;\n"
-    "      float3 dw = R.x * m0.xyz + R.y * m1.xyz + R.z * m2.xyz;\n"
+    /* (the tree's ray leaves along the floor's own normal, not the bumped one: the bump tilts it by the floor picture's grooves and
+     * tile edges, which the screen's blur hides, and a ray that isn't blurred showed as a checker of lines across the floor) */
+    "      float3 Rt = reflect(-V, N);\n"
+    "      if (u.bounce.w > 0.0) { float rn = dot(Rt, N); Rt = normalize(Rt + N * (sqrt(rn * rn + u.bounce.w * u.bounce.w) - rn)); }\n"
+    "      float3 dw = Rt.x * m0.xyz + Rt.y * m1.xyz + Rt.z * m2.xyz;\n"
     "      float rtmax = max(u.refl.w, 100.0);\n"
     "      uint ht; float2 hb;\n"
     /* (the meshes' tree starts the ray off the floor it leaves: ground laid over ground, a path or a drain's rim a hand above the
      * pavement, is a surface the ray meets at once from beneath, a dark band that isn't there) */
     "      float th = bvh_trace(ow, dw, rti.x == 2u ? max(0.03 * dist + 0.05, 0.4) : 0.03 * dist + 0.05, rtmax, rti.y, rti.x == 2u ? rti.z : 0u, ht, hb);\n"
-    "      if (th > 0.0) {\n"
+    /* (the meshes' tree has the zone and no one in it: where the screen found a surface nearer than the tree's, a player, a
+     * monster, a thing that moves, the screen's is shown) */
+    "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && th > 0.0 && tt < 0.9 * th - 0.3;\n"
+    "      if (th > 0.0 && !nearer) {\n"
     "        float lm = luma_at(px).x;\n"
     "        rthit = true;\n"
     "        rtw = 1.0 - smoothstep(0.5 * rtmax, rtmax, th);\n"
@@ -6954,10 +6961,10 @@ static const char FX_HLSL_2[] =
     /* the zone's fog over what is far, as the world has it */
     "          rtc = lerp(rtc, u.fogc.rgb, u.fogc.a > 0.0 ? min(1.0 - exp(-u.fogc.a * th), u.fogp.y) : 0.0);\n"
     "        }\n"
-    "      } else if (rti.x == 2u && u.fogc.a > 0.0 && conf <= 0.0) {\n"
+    "      } else if (rti.x == 2u && th <= 0.0 && u.fogc.a > 0.0 && !(h.w > 0.5 && h.w < 2.5)) {\n"
     /* a ray that leaves the zone with the screen having nothing for it: the sky, which the tree hasn't, as its fog colour */
     "        rthit = true;\n"
-    "        rtw = smoothstep(0.0, 0.3, dot(R, u.up.xyz));\n"
+    "        rtw = smoothstep(0.0, 0.3, dot(Rt, u.up.xyz));\n"
     "        rtc = u.fogc.rgb;\n"
     "      }\n"
     "    }\n"
