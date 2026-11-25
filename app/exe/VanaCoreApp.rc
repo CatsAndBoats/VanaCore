@@ -1,0 +1,35 @@
+// VanaCoreApp.exe's resources: its icon (VanaCore's, the lowest id is the one Windows shows), the logo the splash draws, and
+// its version (what signing and Explorer's Details show).
+#include <windows.h>
+#include "version.h"
+
+1 ICON "..\\res\\VanaCore.ico"
+LOGO RCDATA "..\\res\\logo.png"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION VCAPP_EXE_VERSION_NUM
+PRODUCTVERSION VCAPP_EXE_VERSION_NUM
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "VanaCore"
+            VALUE "FileDescription", "VanaCore App"
+            VALUE "FileVersion", VCAPP_EXE_VERSION_STR
+            VALUE "InternalName", "VanaCoreApp"
+            VALUE "OriginalFilename", "VanaCoreApp.exe"
+            VALUE "ProductName", "VanaCore App"
+            VALUE "ProductVersion", VCAPP_EXE_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

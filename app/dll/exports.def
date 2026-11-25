@@ -1,0 +1,4 @@
+LIBRARY VanaCoreApp
+EXPORTS
+    VanaCoreAppApi
+    VanaCoreAppRun
