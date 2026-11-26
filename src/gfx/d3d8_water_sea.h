@@ -3,12 +3,78 @@
 #pragma once
 
 #define SEA_FAR 50000.0f /* water.horizon's reach: the sheet's far edge under a pixel from the horizon (15 yalms up, 2160 high) */
-/* the whole sea's cells each way: SEA_GRID, finest round the camera (the cube of the step from it), the nearest
- * reach / (SEA_GRID / 2)^3 across (29 yalms at SEA_FAR). One quad 100,000 yalms across, clipped to the view, gave its pixels
- * near the camera a surface place and depth a few centimetres off that moved as the camera did: in Bastok Markets' canal the
- * shore's teal fade and foam rim came and went along the whole bank with every step, and the plane's edge crept up the cliff's
- * foot (2026-11-26) */
-#define SEA_GRID 24
+/* The whole sea's mesh: levels of even square cells round the camera (a geometry clipmap), SEA_RING cells each way, the first
+ * SEA_CELL across, each level's cells twice its finer one's, with that one's square cut out of it; each level held to the
+ * world on its own cells' grid (twice its cells' size: so the finer level's square starts on one of its lines), so the
+ * triangles don't slide as the camera moves. Each cell is four triangles to its middle, the coarser level's cells along the
+ * finer square split at their sides' middles to meet that level's corners (no T joins). One quad 100,000 yalms across, clipped
+ * to the view, gave its pixels near the camera a surface place and depth a few centimetres off that moved as the camera did:
+ * in Bastok Markets' canal the shore's teal fade and foam rim came and went along the whole bank with every step, and the
+ * plane's edge crept up the cliff's foot (2026-11-26); then a 24 x 24 grid in cells by the cube of the step from the camera,
+ * a few cells 30 to 1,000 yalms across in view, in long slivers to one point under the camera */
+#define SEA_CELL 2.0f /* the finest cells, round the camera (yalms) */
+#define SEA_RING 16   /* each level's cells each way (a multiple of 4) */
+#define SEA_LEVELS 16 /* the most levels: the last SEA_CELL * SEA_RING / 2 * 2^15 out, past SEA_FAR */
+#define SEA_VERTS ((SEA_RING * SEA_RING * 4 + SEA_RING * 2) * 3 * SEA_LEVELS)
+
+/* a cell's triangles to its middle (x, y, z, the bed's depth) from v[k], its place held in lo..hi; split: its sides cut at their
+ * middles (1 its z0 side, 2 its x1, 4 its z1, 8 its x0). The next k */
+static int sea_cell(float (*v)[4], int k, float x0, float z0, float s, int split, float y, const float lo[2], const float hi[2])
+{
+    const float p[5][2] = { { x0, z0 }, { x0 + s, z0 }, { x0 + s, z0 + s }, { x0, z0 + s }, { x0, z0 } };
+    const float m[2] = { x0 + s * 0.5f, z0 + s * 0.5f };
+    for (int e = 0; e < 4; ++e)
+    {
+        float r[3][2];
+        int n = 0;
+        r[n][0] = p[e][0], r[n][1] = p[e][1], ++n;
+        if (split >> e & 1)
+            r[n][0] = (p[e][0] + p[e + 1][0]) * 0.5f, r[n][1] = (p[e][1] + p[e + 1][1]) * 0.5f, ++n;
+        r[n][0] = p[e + 1][0], r[n][1] = p[e + 1][1], ++n;
+        for (int t = 0; t + 1 < n; ++t)
+        {
+            const float* c[3] = { m, r[t], r[t + 1] };
+            for (int q = 0; q < 3; ++q, ++k)
+                v[k][0] = fminf(fmaxf(c[q][0], lo[0]), hi[0]), v[k][1] = y, v[k][2] = fminf(fmaxf(c[q][1], lo[1]), hi[1]),
+                v[k][3] = SEA_DEPTH;
+        }
+    }
+    return k;
+}
+
+/* the whole sea's clipmap round cam (x, z) out over lo..hi in v: its vertex count */
+static int sea_clipmap(float (*v)[4], const float cam[2], float y, const float lo[2], const float hi[2])
+{
+    int k = 0, hole[2] = { 0, 0 };
+    float fine[2] = { 0.0f, 0.0f }; /* the finer level's first corner */
+    for (int l = 0; l < SEA_LEVELS; ++l)
+    {
+        const float s = SEA_CELL * (float)(1 << l);
+        float o[2];
+        for (int a = 0; a < 2; ++a)
+        {
+            o[a] = floorf(cam[a] / (2.0f * s)) * (2.0f * s) - (float)(SEA_RING / 2) * s;
+            hole[a] = l ? (int)lroundf((fine[a] - o[a]) / s) : 0;
+        }
+#define SEA_HOLE(i, j) (l && (i) >= hole[0] && (i) < hole[0] + SEA_RING / 2 && (j) >= hole[1] && (j) < hole[1] + SEA_RING / 2)
+        for (int j = 0; j < SEA_RING; ++j)
+            for (int i = 0; i < SEA_RING; ++i)
+            {
+                const float x0 = o[0] + (float)i * s, z0 = o[1] + (float)j * s;
+                if (SEA_HOLE(i, j) || x0 >= hi[0] || z0 >= hi[1] || x0 + s <= lo[0] || z0 + s <= lo[1])
+                    continue;
+                const int split = (SEA_HOLE(i, j - 1) ? 1 : 0) | (SEA_HOLE(i + 1, j) ? 2 : 0) | (SEA_HOLE(i, j + 1) ? 4 : 0) |
+                                  (SEA_HOLE(i - 1, j) ? 8 : 0);
+                k = sea_cell(v, k, x0, z0, s, split, y, lo, hi);
+            }
+#undef SEA_HOLE
+        fine[0] = o[0], fine[1] = o[1];
+        const float span = (float)SEA_RING * s;
+        if (o[0] <= lo[0] && o[1] <= lo[1] && o[0] + span >= hi[0] && o[1] + span >= hi[1])
+            break;
+    }
+    return k;
+}
 
 /* The sea drawn on to the horizon (water.horizon): the game's sea stops at the edge of the zone's meshes, a hard line under a far
  * draw distance. A flat sheet at the sea's level (g_sea: the lowest tiles that reach the zone's rim), SEA_UNDER lower, from the
@@ -59,25 +125,12 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
                             { mlo[0], ilo[1], ilo[0], ihi[1], 0.0f, SEA_DEPTH },  { ihi[0], ilo[1], mhi[0], ihi[1], 0.0f, SEA_DEPTH },
                             { olo[0], olo[1], ohi[0], mlo[1], SEA_DEPTH, SEA_DEPTH }, { olo[0], mhi[1], ohi[0], ohi[1], SEA_DEPTH, SEA_DEPTH },
                             { olo[0], mlo[1], mlo[0], mhi[1], SEA_DEPTH, SEA_DEPTH }, { mhi[0], mlo[1], ohi[0], mhi[1], SEA_DEPTH, SEA_DEPTH } };
-    static float v[SEA_GRID * SEA_GRID * 6][4]; /* x, y, z, the bed's depth */
-    if (full) /* the camera to olo / ohi in SEA_GRID cells each way, small round it, deep throughout */
+    static float v[SEA_VERTS][4]; /* x, y, z, the bed's depth */
+    int nv = 48;
+    if (full) /* the camera to olo / ohi in the clipmap's cells, deep throughout */
     {
-        float gx[2][SEA_GRID + 1];
-        for (int a = 0; a < 2; ++a)
-            for (int i = 0; i <= SEA_GRID; ++i)
-            {
-                const float t = (float)i / (float)SEA_GRID * 2.0f - 1.0f, c = cam[a == 0 ? 0 : 2], cube = t * t * fabsf(t);
-                gx[a][i] = i == 0 ? olo[a] : i == SEA_GRID ? ohi[a] : t < 0.0f ? c - cube * (c - olo[a]) : c + cube * (ohi[a] - c);
-            }
-        int k = 0;
-        for (int j = 0; j < SEA_GRID; ++j)
-            for (int i = 0; i < SEA_GRID; ++i)
-            {
-                const float c[6][2] = { { gx[0][i], gx[1][j] }, { gx[0][i + 1], gx[1][j] }, { gx[0][i + 1], gx[1][j + 1] },
-                                        { gx[0][i], gx[1][j] }, { gx[0][i + 1], gx[1][j + 1] }, { gx[0][i], gx[1][j + 1] } };
-                for (int e = 0; e < 6; ++e, ++k)
-                    v[k][0] = c[e][0], v[k][1] = y, v[k][2] = c[e][1], v[k][3] = SEA_DEPTH;
-            }
+        const float c2[2] = { cam[0], cam[2] };
+        nv = sea_clipmap(v, c2, y, olo, ohi);
     }
     for (int i = 0; !full && i < 8; ++i)
     {
@@ -94,8 +147,8 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
     static GfxDraw d;
     water_ground_setup(&d, s, copies, colour_copy, depth_copy, w, h);
     d.depth.noclip = (uint8_t)noclip;
-    d.data[0] = v, d.size[0] = (full ? SEA_GRID * SEA_GRID * 6 : 48) * sizeof v[0];
-    d.count = full ? SEA_GRID * SEA_GRID * 2 : 16;
+    d.data[0] = v, d.size[0] = (uint32_t)nv * sizeof v[0];
+    d.count = (uint32_t)nv / 3;
     /* The sheet is shaded as the sea's tiles it carries on from are (the water's own settings: its colour, brightness and reflection
      * as theirs; gfx_hlsl_water.h takes open water's body partly from the game's painted sea behind it and lets that through as the
      * fog would take it). Its own colour (green, a third brighter) and half reflection made it a second, lighter sea, with the
