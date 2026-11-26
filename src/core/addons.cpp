@@ -3079,11 +3079,12 @@ void on_frame()
             queue_after("//keybinds apply");
         }
     }
-    // Once per game start, when a character is in: a warning if its sort-order caches list a slot twice (see usercaches.hpp)
+    // Once per game start, when a character is in: the welcome line, and a warning if its sort-order caches list a slot twice (see usercaches.hpp)
     if (!g_caches_checked && GetTickCount64() >= g_next_cache_check) {
         g_next_cache_check = GetTickCount64() + 250;
         if (const std::uint32_t character = game::local_player_id(); character != 0) {
             g_caches_checked = true;
+            say("Thank you for using VanaCore! Type " + chat::colour(chat::kWarning, "/vana") + " in chat to get started.");
             const std::string caches = usercaches::duplicated(character);
             if (!caches.empty())
                 say_error("Possible inventory corruption (" + caches + "). If you see duplicated items, please message support on Discord.");
