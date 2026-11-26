@@ -1598,7 +1598,7 @@ local function row_height(row, sec, room)
     if row.tab_of ~= nil and not searching and (st.tabs[row.tab_of.id] or 1) ~= row.tab_of.index then
         return 0
     elseif row.kind == 'tabs' then
-        return searching and 0 or S(M.TABS_H) + S(10)
+        return searching and 0 or S(M.TABS_H) + S(0)
     end
     if row.kind == 'layers' then
         local lines = math.ceil(#row.items / LAYER_COLS)

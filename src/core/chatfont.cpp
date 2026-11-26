@@ -993,7 +993,9 @@ void read_outline(const wchar_t* ini, int which, Want& want)
     const float opacity = read_set(ini, key_for(ini, which, L".outline.opacity"), want.outline_opacity * 100.0f);
     want.outline_opacity = (!(opacity > 0.0f) ? 0.0f : opacity > 100.0f ? 100.0f : opacity) / 100.0f;
     // .shadow 1: a soft shadow in the outline's place (.shadow.blur 0-8, .shadow.x and .y -8 to 8 px, .shadow.opacity percent)
-    want.shadow = read_set(ini, key_for(ini, which, L".shadow"), 0.0f) >= 0.5f;
+    // (the switch is each area's own, so General's doesn't turn Menu Lists' on: only the buttons' chain shares it)
+    const bool shares = which == kTitles || which == kMainMenu || which == kActionMenu;
+    want.shadow = read_set(ini, shares ? key_for(ini, which, L".shadow") : std::wstring(kArea[which].prefix) + L".shadow", 0.0f) >= 0.5f;
     const auto clamp = [](float v, float lo, float hi) { return !(v >= lo) ? lo : v > hi ? hi : v; };
     want.shadow_blur = clamp(read_set(ini, key_for(ini, which, L".shadow.blur"), 2.0f), 0.0f, 10.0f);
     want.shadow_thick = clamp(read_set(ini, key_for(ini, which, L".shadow.thickness"), 0.0f), 0.0f, 5.0f);

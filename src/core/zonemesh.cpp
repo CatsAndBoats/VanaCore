@@ -435,16 +435,16 @@ void lay(const MeshDef& m, const Place& pl, const std::vector<std::uint8_t>& dat
          bool moving)
 {
     for (const Part& part : m.parts) {
-        out.blended += part.blended;
-        if (part.blended && !shade)
+        // (a blended part is left out of the reflections' tree too: the water's sheets, light shafts and the like laid as surfaces
+        // came out as panes of glass across the floor, 2026-11-25. A mover is in it where it stands at the start, for the
+        // reflections alone: the sun's shadows would keep it where it first stood)
+        if (part.blended) {
+            out.blended++;
             continue;
-        // (shade: a blended part is laid as a cut-out by its texture's alpha, and a mover where it stands at the start, for the
-        // reflections alone: the sun's shadows would keep them where they first stood)
-        const bool rt_only = part.blended || moving;
-        const std::int32_t texture = m.cutout || part.blended ? texture_of(dat, part.texture, out, textures) : -1;
+        }
+        const bool rt_only = moving;
+        const std::int32_t texture = m.cutout ? texture_of(dat, part.texture, out, textures) : -1;
         const std::int32_t own = shade && texture < 0 ? texture_of(dat, part.texture, out, textures) : -1;
-        if (part.blended && texture < 0)
-            continue;
         Bucket& bk = buckets[bucket_key(pl.o, texture, rt_only)];
         for (std::size_t i = 0; i + 5 <= part.tris.size(); i += 5) {
             float w[3];

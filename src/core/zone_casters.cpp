@@ -33,6 +33,7 @@ struct Job {
 
 std::shared_ptr<Job> g_job; // the read under way, or done and not yet handed over
 int g_wanted = 0;           // the zone whose meshes were last asked for (0: none)
+bool g_shaded = false;      // ... and the read had the textures and colours the ray-traced reflections want
 
 // The zone's model DAT, as grass_floors.cpp finds it
 std::uint32_t model_file(int zone)
@@ -108,6 +109,9 @@ void update(int zone, bool wanted)
 {
     if (!wanted)
         zone = 0;
+    // (the reflections turned to ray tracing in a zone already read without what they want: read it again)
+    if (zone != 0 && zone == g_wanted && !g_job && !g_shaded && (vanacore_gfx_floors_wanted() & 4) != 0)
+        g_wanted = -1;
     if (zone != g_wanted) {
         g_wanted = zone;
         g_job.reset(); // another zone's read finishes on its own, unheard
@@ -117,6 +121,7 @@ void update(int zone, bool wanted)
         auto job = std::make_shared<Job>();
         job->zone = zone;
         job->shade = (vanacore_gfx_floors_wanted() & 4) != 0;
+        g_shaded = job->shade;
         g_job = job;
         std::thread(read, std::move(job)).detach();
         return;
@@ -136,6 +141,12 @@ void update(int zone, bool wanted)
                L"([graphics.effects] sun_zone_mesh)",
                zone, m.placed, m.placements, m.stand_ins, m.moving, m.unfound, m.meshes, static_cast<unsigned long long>(m.triangles),
                m.blended, static_cast<unsigned>(m.textures.size()));
+    if (!m.unfound_names.empty()) {
+        std::string names;
+        for (const std::string& n : m.unfound_names)
+            names += (names.empty() ? "" : ", ") + n;
+        log::write(L"Graphics: zone %d: placements with no mesh in the model DAT, the first: %hs", zone, names.c_str());
+    }
     hand(zone, &m);
 }
 

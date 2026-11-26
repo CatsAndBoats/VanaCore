@@ -412,7 +412,14 @@ local function shadow_row(prefix, follows)
     thick.short, thick.icon = 'Thickness', 'thickness'
     row.drops, row.no_reset = true, true
     row.toggle = {
-        get = function () return from('.shadow') == '1' end,
+        get = function ()
+            -- the switch is each area's own, but the buttons' chain (titles, main menu, Action Menu) shares it
+            local value = vana.config.get('client', prefix .. '.shadow')
+            if (value == nil or value == '') and (follows == 'buttons.font' or prefix == 'titles.font') then
+                value = from('.shadow')
+            end
+            return value == '1'
+        end,
         set = function (on) vana.config.set('client', prefix .. '.shadow', on and '1' or '0') end,
     }
     local sliders_reset = row.reset
@@ -2206,6 +2213,9 @@ TIPS.rows = {
     ['graphics.effects.refl_wet'] = 'How wet and shiny the ground looks, 1 to 10.',
     ['graphics.effects.refl_rough'] = 'How blurry the reflections are, 0 to 10.',
     ['graphics.effects.refl_dist'] = 'How far away reflections are drawn, in world units.',
+    ['graphics.effects.refl_rt'] = 'How reflections are found.\n'
+        .. 'Screen Space: from what is on screen, so they change as the camera moves and fade at its edges.\n'
+        .. 'Ray Tracing: the zone\'s own buildings, sky and ground are traced, so the floor shows them wherever the camera looks. Players and monsters still come from the screen. Costs more.',
     ['graphics.effects.refl_sun'] = 'The bright sparkle of the sun on the ground: Off, Low or High.',
     ['graphics.effects.refl_bump'] = 'How much the stone\'s own texture bends the reflections: grooves and tile edges give them depth.',
     ['graphics.effects.refl_lift'] = 'Tilts the reflections up where the camera is low, so the floor shows more than the bottom of the walls. 1 is a true mirror, 10 tilts them the most.',
@@ -4566,6 +4576,19 @@ local TABS = {
                 -- Graphics page since 2026-11-04 (it was the Experimental page's); bounce light's rows follow
                 needs_dx12(effect('Reflections', 'refl', 0, 1)),
                 note('On floors and flat ground, from what is on screen: they fade at its edges. DirectX 12.'),
+                -- Screen Space (0) or Ray Tracing (refl_rt 2: the zone's own meshes in a tree the shader walks, so what the floor shows
+                -- doesn't follow the camera; 1, the collision filling only what the screen missed, is an ini edit and shows as Ray Tracing)
+                (function ()
+                    local row = choice('Method', FX, 'refl_rt', '0', { { '0', 'Screen Space' }, { '2', 'Ray Tracing' } })
+                    row.get = function ()
+                        local value = tonumber(vana.config.get(FX, 'refl_rt') or '')
+                        if value == nil then
+                            return row.default
+                        end
+                        return value < 0.5 and '0' or '2'
+                    end
+                    return row
+                end)(),
                 -- Strength 1 to 10 as 0.2 to 2.0 in vanacore.ini (shown = kept * 5), Wetness and Roughness 0 to 10 as 0 to 1.0 (* 10), Surface
                 -- Depth 0 to 10 as 0 to 2.0 (the 6.5 is its 1.3 default), Lift 1 to 10 as 0 to 0.5 (shown = kept * 18 + 1)
                 trimmed(shown_as(slider('Strength', FX, 'refl', 5, 1, 10, 1, '%d'), 5)),
@@ -6177,6 +6200,8 @@ local TABS = {
                     return row
                 end)(slider('Tab spacing', 'client', 'chat.tabs.spacing', 30, 16, 64, 1, '%d')),
                 subheader('Chat input'), -- (its look: the HUD Manager's Chat: Input Line had it until 2026-11-05)
+                -- the input line's letters and True Font (the menus' until set, as chatfont.cpp reads it)
+                area_font('input.font', 15, true),
                 (function (row) row.rebuild = true return row end)( -- the rows below lock and unlock by it
                     choice('Match', 'client', 'input.match', 'windows', { { 'windows', 'Game windows' }, { 'chat', 'Chat window' }, { 'off', 'Custom' } })),
                 pair('Background', nil, { input_own(slider('Opacity', 'client', 'input.opacity', 100, 0, 100, 1, '%d%%')),
@@ -6184,8 +6209,6 @@ local TABS = {
                 pair('Border', nil, { input_own(slider('Opacity', 'client', 'input.border.opacity', 100, 0, 100, 1, '%d%%')),
                                       input_own(colour_pick('Colour', 'client', 'input.border.color', '#8A8FA6')) }),
                 input_own(toggle('Solid border line', 'client', 'input.border.solid', false)),
-                -- the input line's letters and True Font (the menus' until set, as chatfont.cpp reads it)
-                area_font('input.font', 15, true),
                 -- the auto-translate list's (Tab while typing: "menu    fep"), its own area (chatfont.cpp kPhrases)
                 subheader('Auto-translate list'),
                 area_font('phrases.font', 15, true),

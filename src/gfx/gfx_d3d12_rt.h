@@ -16,6 +16,8 @@ static struct
     uint32_t ntex;
 } g_rtx;
 
+static int g_rt_sky; /* the sky's colour was worked out this frame, for the reflections (the composite's pass: fx_skycol) */
+
 /* gfx.h: a tree (scene 0 the collision's, 1 the zone's meshes'); NULL or 0: let the last go */
 void gfx_scene_rt_geometry(const void* data, uint32_t bytes, uint32_t node_bytes, int scene, uint32_t attr_at, GfxTex* const* tex, uint32_t ntex)
 {
@@ -41,29 +43,38 @@ void gfx_scene_rt_geometry(const void* data, uint32_t bytes, uint32_t node_bytes
 /* before fx_ssr: its two root views, the tree (or, with none, the frame's words again, which it never reads) and the frame's
  * words: the view's inverse (16 floats), then 1 (the collision's tree) or 2 (the meshes') and where the triangles start when a
  * tree is bound, else 0. Both are always set while the reflections run, since the pipeline reads them under a branch */
-static void rt_bind(ID3D12GraphicsCommandList* l, const float* view)
+static void rt_bind(ID3D12GraphicsCommandList* l, const float* view, int sky_ok)
 {
     const uint32_t nslot = g_rtx.tex ? g_rtx.ntex : 0;
-    Alloc a = ring(80 + 4 * nslot, 16);
+    Alloc a = ring(96 + 4 * nslot, 16);
     if (!a.cpu)
         return;
-    memset(a.cpu, 0, 80 + 4 * nslot);
+    memset(a.cpu, 0, 96 + 4 * nslot);
     float inv[16];
     const int k = g_fxs.refl_rt >= 2.0f && g_rtx.bvh[1] ? 1 : 0;
     const int on = g_fxs.refl_rt > 0.0f && g_rtx.bvh[k] && mat_inverse(inv, view);
     if (on)
     {
         memcpy(a.cpu, inv, 64);
-        ((uint32_t*)a.cpu)[16] = 1u + (uint32_t)k, ((uint32_t*)a.cpu)[17] = g_rtx.node_bytes[k];
+        /* this frame's world up in view space (words 20 to 22; as the effects' u.up, but not eased over frames: that one lags a
+         * camera that pitches, and a reflection taken along it swung after it) */
+        {
+            const float sign = inv[5] < 0.0f ? -1.0f : 1.0f;
+            float up[3] = { inv[1] * sign, inv[5] * sign, inv[9] * sign };
+            const float l = sqrtf(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
+            for (int j = 0; j < 3; ++j)
+                ((float*)a.cpu)[20 + j] = l > 1e-6f ? up[j] / l : 0.0f;
+        }
+        ((uint32_t*)a.cpu)[16] = 1u + (uint32_t)k, ((uint32_t*)a.cpu)[17] = g_rtx.node_bytes[k], ((uint32_t*)a.cpu)[19] = sky_ok ? 1u : 0u;
         if (k)
         {
-            /* the meshes' textures: their heap slots, read by index (word 20 on), each in the state a pixel shader reads it in */
+            /* the meshes' textures: their heap slots, read by index (word 24 on), each in the state a pixel shader reads it in */
             ((uint32_t*)a.cpu)[18] = g_rtx.attr_at;
             for (uint32_t i = 0; i < nslot; ++i)
             {
                 GfxTex* t = g_rtx.tex[i];
                 if (t && t->srv >= 0)
-                    tex_state(t, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE), ((uint32_t*)a.cpu)[20 + i] = (uint32_t)t->srv;
+                    tex_state(t, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE), ((uint32_t*)a.cpu)[24 + i] = (uint32_t)t->srv;
             }
         }
         /* (read by a pixel shader: its state beside the vertex reads' the buffers have) */
