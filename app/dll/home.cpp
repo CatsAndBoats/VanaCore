@@ -20,6 +20,8 @@ namespace {
 constexpr float kW = 640, kH = 420, kPad = 26, kLogo = 56, kBar = 86, kPlayW = 140, kPlayH = 42;
 constexpr std::uint32_t kVersionColour = 0xF3DE9C; // the head's version: a light yellow
 constexpr wchar_t kClass[] = L"VanaCoreApp.Home";
+constexpr UINT_PTR kTipTimer = 1;
+constexpr UINT kTipDelay = 450; // ms the mouse rests on a control before its tooltip shows
 
 HMODULE self()
 {
@@ -100,6 +102,7 @@ void Home::render()
     if (!canvas_.begin())
         return;
     hits_.clear();
+    tips_.clear();
     canvas_.card(0);
     const D2D1_RECT_F glass = D2D1::RectF(0, kH - kBar, kW, kH);
     canvas_.backdrop(&glass);
@@ -128,6 +131,11 @@ void Home::render()
     draw_footer();
     if (menu_)
         draw_menu();
+    if (drop_ >= 0 && tab_ == kGraphics)
+        draw_drop();
+    else
+        drop_ = -1;
+    draw_tip();
     canvas_.end();
 }
 
@@ -152,6 +160,7 @@ void Home::draw_footer()
     canvas_.styled(name, ui::Font::Status, profile.left + (pw - 24 - nw) / 2 + 4, mid);
     canvas_.glyph(menu_ ? ui::icon::up : ui::icon::down, ui::Font::IconBig, profile.right - 20, mid, ui::rgb(lit ? ui::pal::white : ui::pal::text2));
     hits_.add(kProfile, profile);
+    tip(kProfile, L"Pick a profile");
     const D2D1_RECT_F play = D2D1::RectF(profile.right + gap, mid - kPlayH / 2, profile.right + gap + kPlayW, mid + kPlayH / 2);
     const bool on = can_play();
     const float t = !on || hover_ != kPlay ? 0.0f : pressed_ == kPlay ? 1.0f : 0.6f;
@@ -200,10 +209,41 @@ void Home::draw_menu()
     std::stable_partition(hits_.list.begin(), hits_.list.end(), [](const auto& h) { return h.first >= kMenu && h.first <= kMenuManage; });
 }
 
+// The hovered control's tooltip, once the mouse has rested on it: under it (above when there's no room), its middle on the
+// control's, kept on the card
+void Home::draw_tip()
+{
+    if (!tip_up_ || pressed_ != kNone || hover_ == kNone)
+        return;
+    const std::wstring* text = nullptr;
+    for (const auto& [id, t] : tips_)
+        if (id == hover_)
+            text = &t;
+    D2D1_RECT_F at{};
+    bool found = false;
+    for (const auto& [id, r] : hits_.list)
+        if (id == hover_ && !found)
+            at = r, found = true;
+    if (text == nullptr || !found)
+        return;
+    const float w = canvas_.text_width(*text, ui::Font::Small) + 20, h = 24;
+    float x = (at.left + at.right) / 2 - w / 2, y = at.bottom + 6;
+    if (y + h > kH - 6)
+        y = at.top - 6 - h;
+    x = std::max(8.0f, std::min(x, kW - 8 - w));
+    for (int i = 4; i >= 1; --i) {
+        const float g = static_cast<float>(i);
+        canvas_.fill(x - g, y - g + 3, w + 2 * g, h + 2 * g, 5 + g, ui::rgb(0x000000, 0.07f));
+    }
+    canvas_.fill(x, y, w, h, 5, ui::rgb(0x0B0E18, 0.97f));
+    canvas_.outline(x, y, w, h, 5, ui::rgb(ui::pal::white, 0.16f));
+    canvas_.text(*text, ui::Font::Small, x + 10, y + h / 2, ui::rgb(ui::pal::text));
+}
+
 // The tab bar: each tab's name in a pill, the picked one lit with an accent edge; Errors (when something's wrong) in rose
 void Home::draw_tabs(float x, float y)
 {
-    static const wchar_t* const kNames[kTabs] = {L"FFXI", L"GRAPHICS", L"PIVOT", L"PROFILES", L"ABOUT", L"ERRORS"};
+    static const wchar_t* const kNames[kTabs] = {L"FFXI", L"GRAPHICS", L"PROFILES", L"PIVOT", L"LOGS", L"ABOUT", L"ERRORS"};
     constexpr float kTabH = 26, kTabPad = 14;
     const std::size_t wrong = errors().size();
     for (int i = 0; i < kTabs; ++i) {
@@ -230,8 +270,27 @@ void Home::draw_tabs(float x, float y)
 
 void Home::press(int hit)
 {
-    if (renaming_ >= 0 && hit != kProfileRow + renaming_ * 4 + 3) // (3: the name's box itself)
+    if (renaming_ >= 0 && hit != kProfileRow + renaming_ * 8 + 3) // (3: the name's box itself)
         end_rename(true);
+    if (drop_ >= 0) { // a click anywhere with a drop-down open: it shuts (a pick in its list kept)
+        if (hit >= kDropItem)
+            pick(hit - kDropItem);
+        drop_ = -1;
+        render();
+        return;
+    }
+    if (hit >= kDrop && hit < kDrop + kDrops) { // a drop-down opens, the list scrolled to what it has
+        drop_ = hit - kDrop;
+        const std::vector<Choice> list = choices(drop_);
+        const std::wstring now = drop_value(drop_);
+        drop_scroll_ = 0;
+        for (int i = 0; i < static_cast<int>(list.size()); ++i)
+            if (!list[i].sep && _wcsicmp(list[i].value.c_str(), now.c_str()) == 0)
+                drop_scroll_ = std::max(0, i - 3);
+        menu_ = false;
+        render();
+        return;
+    }
     if (menu_ && hit != kProfile) { // a click anywhere with the pick-list open: it shuts (and does what it was on)
         menu_ = false;
         if (hit >= kMenu && hit < kMenuManage)
@@ -258,6 +317,8 @@ void Home::press(int hit)
         render();
     } else if (hit >= kTab && hit < kTab + kTabs) {
         tab_ = static_cast<Tab>(hit - kTab);
+        if (tab_ == kLogs)
+            load_logs();
         render();
     } else if (press_profiles(hit) || press_page(hit)) {
         render();
@@ -288,6 +349,8 @@ void Home::mouse(UINT message, LPARAM lparam)
         if (at == hover_)
             return;
         hover_ = at;
+        tip_up_ = false; // (its tooltip after the mouse rests on it)
+        SetTimer(window_, kTipTimer, kTipDelay, nullptr);
     } else if (message == WM_LBUTTONDOWN) {
         pressed_ = at;
         SetCapture(window_);
@@ -299,8 +362,9 @@ void Home::mouse(UINT message, LPARAM lparam)
             press(at);
             return;
         }
-        if (at == kNone && (menu_ || renaming_ >= 0)) { // a click on nothing: the pick-list shuts, a name being typed is kept
+        if (at == kNone && (menu_ || drop_ >= 0 || renaming_ >= 0)) { // a click on nothing: the lists shut, a name being typed is kept
             menu_ = false;
+            drop_ = -1;
             if (renaming_ >= 0)
                 end_rename(true);
         }
@@ -315,7 +379,7 @@ LRESULT Home::handle(UINT message, WPARAM wparam, LPARAM lparam)
         POINT p{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
         ScreenToClient(window_, &p);
         // (with the pick-list open or a name being typed, a click anywhere is the card's: it shuts them)
-        return menu_ || renaming_ >= 0 || hits_.at(canvas_.to_card(p.x, p.y), kNone) != kNone ? HTCLIENT : HTCAPTION;
+        return menu_ || drop_ >= 0 || renaming_ >= 0 || hits_.at(canvas_.to_card(p.x, p.y), kNone) != kNone ? HTCLIENT : HTCAPTION;
     }
     case WM_CHAR:
         if (rename_key(message, wparam))
@@ -326,11 +390,16 @@ LRESULT Home::handle(UINT message, WPARAM wparam, LPARAM lparam)
     case WM_LBUTTONUP:
         mouse(message, lparam);
         return 0;
-    case WM_MOUSEWHEEL: // the Pivot and Profiles lists scroll (clamped when drawn)
-        if (tab_ == kPivot || tab_ == kProfiles) {
-            int& scroll = tab_ == kPivot ? pivot_scroll_ : profile_scroll_;
-            const int before = scroll, most = static_cast<int>(tab_ == kPivot ? overlays_.size() : profiles_.size());
-            scroll = std::max(0, std::min(scroll + (GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? -1 : 1), most));
+    case WM_MOUSEWHEEL: // an open drop-down's list, the Pivot and Profiles lists scroll (clamped when drawn)
+        if (drop_ >= 0) {
+            drop_scroll_ = std::max(0, drop_scroll_ + (GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? -2 : 2));
+            render();
+        } else if (tab_ == kPivot || tab_ == kProfiles || tab_ == kLogs) {
+            int& scroll = tab_ == kPivot ? pivot_scroll_ : tab_ == kLogs ? logs_scroll_ : profile_scroll_;
+            const int before = scroll,
+                      most = static_cast<int>(tab_ == kPivot ? overlays_.size() : tab_ == kLogs ? logs_.size() : profiles_.size());
+            const int step = tab_ == kLogs ? 3 : 1;
+            scroll = std::max(0, std::min(scroll + (GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? -step : step), most));
             if (scroll != before)
                 render();
         }
@@ -350,8 +419,9 @@ LRESULT Home::handle(UINT message, WPARAM wparam, LPARAM lparam)
     case WM_KEYDOWN:
         if (rename_key(message, wparam)) { // (a name being typed takes Enter and Esc)
             render();
-        } else if (menu_ && wparam == VK_ESCAPE) {
+        } else if ((menu_ || drop_ >= 0) && wparam == VK_ESCAPE) {
             menu_ = false;
+            drop_ = -1;
             render();
         } else if (wparam == VK_RETURN) {
             press(kPlay);
@@ -359,6 +429,15 @@ LRESULT Home::handle(UINT message, WPARAM wparam, LPARAM lparam)
             press(kClose);
         }
         return 0;
+    case WM_TIMER:
+        if (wparam == kTipTimer) {
+            KillTimer(window_, kTipTimer);
+            tip_up_ = hover_ != kNone;
+            if (tip_up_)
+                render();
+            return 0;
+        }
+        break;
     case ui::kRedraw:
         render();
         return 0;

@@ -59,16 +59,11 @@ std::wstring install_value(const wchar_t* key_name, const wchar_t* value)
     return ok ? trimmed(text) : std::wstring();
 }
 
-// The renderers the Graphics tab offers: [graphics] renderer's value, its name, a line on it
+// The renderers the Graphics tab offers: [graphics] renderer's value, its name
 struct Renderer {
-    const wchar_t *value, *name, *about;
+    const wchar_t *value, *name;
 };
-constexpr Renderer kRenderers[] = {
-    {L"d3d12", L"DirectX 12", L"VanaCore's renderer: scene effects, texture packs, faster frames (Windows 10+)"},
-    {L"d3d11", L"DirectX 11", L"The same on Direct3D 11, for cards and drivers where DirectX 12 runs badly"},
-    {L"d3d9", L"DirectX 9", L"The game drawn as it draws itself, through Direct3D 9 (ReShade's or DXVK's d3d9.dll first)"},
-    {L"d3d8", L"Original", L"The game's own Direct3D 8: no VanaCore graphics"},
-};
+constexpr Renderer kRenderers[] = {{L"d3d12", L"DirectX 12"}, {L"d3d11", L"DirectX 11"}, {L"d3d9", L"DirectX 9"}, {L"d3d8", L"Original"}};
 
 } // namespace
 
@@ -297,6 +292,9 @@ void Home::draw_page(const D2D1_RECT_F& r)
     case kErrors:
         page_errors(in);
         break;
+    case kLogs:
+        page_logs(in);
+        break;
     default:
         page_about(in);
         break;
@@ -357,16 +355,167 @@ void Home::page_graphics(const D2D1_RECT_F& r)
         hits_.add(kRenderer + i, b);
         x += bw + 6;
     }
-    y += 28;
-    canvas_.text(canvas_.fit(kRenderers[picked].about, ui::Font::Small, r.right - r.left, false), ui::Font::Small, r.left, y,
-                 ui::rgb(ui::pal::text2));
-    // the scene effects: on DirectX 12 and 11 only
-    y += 34;
-    const bool ours = picked < 2, effects = ini_get(L"graphics", L"effects", L"1") != L"0";
-    canvas_.toggle(r.left, y, ours && effects, hover_ == kEffects);
-    canvas_.text(L"Scene effects", ui::Font::Body, r.left + 42, y - 1, ui::rgb(ours ? ui::pal::text : ui::pal::faint));
-    if (ours)
-        hits_.add(kEffects, D2D1::RectF(r.left, y - 11, r.left + 42 + canvas_.text_width(L"Scene effects", ui::Font::Body), y + 11));
+    // the window's mode, the game's resolution and the interface's: /vana's three drop-downs (Client > Display, Resolution)
+    y += 38;
+    static const wchar_t* const kLabels[kDrops] = {L"MODE", L"RESOLUTION", L"UI RESOLUTION"};
+    const float gap = 12, w = (r.right - r.left - gap * 2) / 3;
+    for (int d = 0; d < kDrops; ++d) {
+        const float fx = r.left + d * (w + gap);
+        canvas_.text(kLabels[d], ui::Font::Label, fx, y, ui::rgb(ui::pal::dim));
+        const D2D1_RECT_F field = D2D1::RectF(fx, y + 12, fx + w, y + 42);
+        const bool open = drop_ == d, over = hover_ == kDrop + d;
+        canvas_.fill(field.left, field.top, w, 30, 4, ui::rgb(over || open ? ui::pal::hover : ui::pal::well, 0.95f));
+        canvas_.outline(field.left, field.top, w, 30, 4, open ? ui::rgb(ui::pal::accent, 0.8f) : ui::rgb(over ? ui::pal::accent_lo : ui::pal::well_edge));
+        const std::vector<Choice> list = choices(d);
+        const std::wstring value = drop_value(d);
+        std::wstring shown = value;
+        for (const Choice& c : list)
+            if (!c.sep && same(c.value, value))
+                shown = c.label;
+        const std::size_t dash = shown.find(L" - "); // (too long for the field: without its size)
+        if (canvas_.text_width(shown, ui::Font::Body) > w - 40 && dash != std::wstring::npos)
+            shown.resize(dash);
+        canvas_.text(canvas_.fit(shown, ui::Font::Body, w - 40, false), ui::Font::Body, field.left + 10, field.top + 14, ui::rgb(ui::pal::text));
+        canvas_.glyph(open ? ui::icon::up : ui::icon::down, ui::Font::IconBig, field.right - 16, field.top + 15, ui::rgb(over || open ? ui::pal::white : ui::pal::text2));
+        hits_.add(kDrop + d, field);
+        drop_at_[d] = field;
+    }
+}
+
+// --- the Graphics tab's drop-downs ----------------------------------------------------------------------------------------
+
+// What a drop-down has now: [ffxi] mode (unset: Borderless fullscreen, as VanaCore hands it to the game), resolution.game
+// (unset: auto), resolution.ui (unset: Same as Resolution)
+std::wstring Home::drop_value(int d) const
+{
+    if (d == kMode) {
+        std::wstring mode = ini_get(L"ffxi", L"mode");
+        mode.erase(std::remove_if(mode.begin(), mode.end(), [](wchar_t c) { return c == L' ' || c == L'_' || c == L'-'; }), mode.end());
+        for (wchar_t& c : mode)
+            c = static_cast<wchar_t>(std::towlower(c));
+        return mode.empty() ? L"borderlessfullscreen" : mode == L"0" ? L"fullscreen" : mode == L"1" ? L"windowed" : mode == L"2" ? L"borderless" : mode == L"3" ? L"borderlessfullscreen" : mode;
+    }
+    std::wstring v = ini_get(L"ffxi", d == kResolution ? L"resolution.game" : L"resolution.ui");
+    v.erase(std::remove(v.begin(), v.end(), L' '), v.end());
+    for (wchar_t& c : v)
+        c = static_cast<wchar_t>(std::towlower(c));
+    return v.empty() && d == kResolution ? L"auto" : v;
+}
+
+// A drop-down's choices, as /vana lists them (data.lua's Client page): the mode's three (the old Full screen too while the
+// file has it); the resolutions' shares of the screen (and of the game window for the interface's), a line, then the sizes,
+// widest first, the screen's own marked (added when it isn't one of them), and a size the file has that isn't listed
+std::vector<Home::Choice> Home::choices(int d) const
+{
+    std::vector<Choice> out;
+    if (d == kMode) {
+        if (drop_value(kMode) == L"fullscreen")
+            out.push_back({L"fullscreen", L"Full screen"});
+        out.push_back({L"windowed", L"Windowed"});
+        out.push_back({L"borderless", L"Borderless windowed"});
+        out.push_back({L"borderlessfullscreen", L"Borderless fullscreen"});
+        return out;
+    }
+    // the screen the app is on, and its work area (less the taskbar), in pixels
+    MONITORINFO mi{sizeof mi};
+    GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &mi);
+    const int mw = mi.rcMonitor.right - mi.rcMonitor.left, mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    const int ww = mi.rcWork.right - mi.rcWork.left, wh = mi.rcWork.bottom - mi.rcWork.top;
+    auto size = [](int w, int h) { return std::to_wstring(w) + L" x " + std::to_wstring(h); };
+    if (d == kUiResolution) {
+        out.push_back({L"", L"Same as Resolution"});
+        out.push_back({L"window", L"Fit the game window"});
+        out.push_back({L"window-75", L"75% of the game window"});
+        out.push_back({L"window-50", L"50% of the game window"});
+    }
+    for (int share : {100, 75, 50}) {
+        const std::wstring at = mw > 0 ? L" - " + size((mw * share + 50) / 100, (mh * share + 50) / 100) : L"";
+        out.push_back({share == 100 ? L"auto" : L"auto-" + std::to_wstring(share), (share == 100 ? L"Screen (auto)" : std::to_wstring(share) + L"% of the screen") + at});
+        if (share == 100 && d == kResolution)
+            out.push_back({L"auto-taskbar", L"Screen without the taskbar" + (ww > 0 ? L" - " + size(ww, wh) : L"")});
+    }
+    out.push_back({L"", L"", true});
+    static const int kSizes[][2] = {{1280, 720}, {1280, 800}, {1366, 768}, {1440, 900}, {1600, 900}, {1680, 1050}, {1920, 1080},
+                                    {1920, 1200}, {2400, 1350}, {2560, 1080}, {2560, 1440}, {2560, 1600}, {3440, 1440}, {3840, 2160}};
+    std::vector<std::pair<int, int>> sizes;
+    for (const auto& s : kSizes)
+        sizes.push_back({s[0], s[1]});
+    if (mw > 0 && std::find(sizes.begin(), sizes.end(), std::make_pair(mw, mh)) == sizes.end())
+        sizes.push_back({mw, mh});
+    std::sort(sizes.begin(), sizes.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second > b.second; });
+    for (const auto& [w, h] : sizes)
+        out.push_back({std::to_wstring(w) + L"x" + std::to_wstring(h), size(w, h) + (w == mw && h == mh ? L" (screen)" : L"")});
+    const std::wstring now = drop_value(d);
+    if (std::none_of(out.begin(), out.end(), [&](const Choice& c) { return !c.sep && same(c.value, now); }))
+        out.push_back({now, now});
+    return out;
+}
+
+// The open drop-down's list, under its field (above it when there's no room): eight rows at most, the wheel scrolls the rest
+void Home::draw_drop()
+{
+    const std::vector<Choice> list = choices(drop_);
+    const D2D1_RECT_F field = drop_at_[drop_];
+    const float row = 28, sep = 9;
+    const int most = 8, count = static_cast<int>(list.size());
+    auto height_of = [&](const Choice& c) { return c.sep ? sep : row; };
+    // the rows that show: from drop_scroll_, as many as fit in `most` rows' height
+    drop_scroll_ = std::max(0, std::min(drop_scroll_, std::max(0, count - most)));
+    float h = 8;
+    int shown = 0;
+    for (int i = drop_scroll_; i < count && h + height_of(list[i]) <= most * row + 8; ++i, ++shown)
+        h += height_of(list[i]);
+    const float w = std::max(field.right - field.left, 250.0f);
+    const float below = field.bottom + 4, above = field.top - 4 - h;
+    const float top = below + h <= canvas_.height() - 8 || above < 8 ? below : above;
+    const float left = std::min(field.left, canvas_.width() - 8 - w);
+    for (int i = 5; i >= 1; --i) {
+        const float g = static_cast<float>(i);
+        canvas_.fill(left - g, top - g + 4, w + 2 * g, h + 2 * g, 6 + g, ui::rgb(0x000000, 0.07f));
+    }
+    canvas_.fill(left, top, w, h, 6, ui::rgb(0x0B0E18, 0.98f));
+    canvas_.outline(left, top, w, h, 6, ui::rgb(ui::pal::white, 0.14f));
+    const std::wstring now = drop_value(drop_);
+    float y = top + 4;
+    for (int k = 0; k < shown; ++k) {
+        const int i = drop_scroll_ + k;
+        const Choice& c = list[i];
+        if (c.sep) {
+            canvas_.line(left + 10, y + sep / 2, left + w - 10, y + sep / 2, ui::rgb(ui::pal::white, 0.1f));
+            y += sep;
+            continue;
+        }
+        const bool picked = same(c.value, now), over = hover_ == kDropItem + i;
+        if (over)
+            canvas_.fill(left + 4, y, w - 8, row, 4, ui::rgb(ui::pal::white, 0.08f));
+        if (picked)
+            canvas_.glyph(ui::icon::check, ui::Font::Icon, left + 18, y + row / 2, ui::rgb(ui::pal::teal));
+        canvas_.text(canvas_.fit(c.label, ui::Font::Body, w - 44, false), ui::Font::Body, left + 34, y + row / 2 - 1,
+                     ui::rgb(picked || over ? ui::pal::white : ui::pal::text2));
+        hits_.add(kDropItem + i, D2D1::RectF(left + 4, y, left + w - 4, y + row));
+        y += row;
+    }
+    if (drop_scroll_ > 0 || drop_scroll_ + shown < count) // (more than show: where in the list)
+        canvas_.fill(left + w - 4, top + 6 + (h - 12) * drop_scroll_ / count, 2, std::max(12.0f, (h - 12) * shown / count), 1, ui::rgb(ui::pal::white, 0.25f));
+    // (the list's rows first: Hits::at takes the first match, and the list lies over the page)
+    std::stable_partition(hits_.list.begin(), hits_.list.end(), [](const auto& hit) { return hit.first >= kDropItem; });
+}
+
+// A pick from the open drop-down: written to the profile's file (a resolution pick also takes out [window] lastsize, the size
+// the window's edges were dragged to, as /vana does, so the window is the size picked)
+void Home::pick(int index)
+{
+    const std::vector<Choice> list = choices(drop_);
+    if (index < 0 || index >= static_cast<int>(list.size()) || list[index].sep)
+        return;
+    const std::wstring& value = list[index].value;
+    if (drop_ == kMode) {
+        ini_set(L"ffxi", L"mode", &value);
+    } else {
+        ini_set(L"ffxi", drop_ == kResolution ? L"resolution.game" : L"resolution.ui", value.empty() ? nullptr : &value);
+        if (drop_ == kResolution)
+            ini_set(L"window", L"lastsize", nullptr);
+    }
 }
 
 void Home::page_pivot(const D2D1_RECT_F& r)
@@ -383,6 +532,7 @@ void Home::page_pivot(const D2D1_RECT_F& r)
     hits_.add(kPivotRoot, choose);
     if (is_folder(pivot_root_))
         hits_.add(kPivotOpen, open);
+    tip(kPivotOpen, L"Open the overlays' folder");
     const float px = r.left + 42 + canvas_.text_width(L"Pivot", ui::Font::Body) + 14;
     canvas_.text(canvas_.fit(pivot_root_, ui::Font::Small, choose.left - 10 - px, true), ui::Font::Small, px, y, ui::rgb(ui::pal::dim));
     // the overlays: on ones in their order (looked in first at the top), then the rest
@@ -408,6 +558,7 @@ void Home::page_pivot(const D2D1_RECT_F& r)
             canvas_.fill(r.left - 6, cy - row / 2 + 1, r.right - r.left + 12, row - 2, 4, ui::rgb(ui::pal::white, 0.04f));
         canvas_.toggle(r.left, cy, o.on, hover_ == id);
         hits_.add(id, D2D1::RectF(r.left, cy - 10, r.left + 30, cy + 10));
+        tip(id, o.on ? L"Turn off" : L"Turn on");
         if (o.on)
             canvas_.text(std::to_wstring(i + 1), ui::Font::Small, r.left + 40, cy, ui::rgb(ui::pal::accent2));
         canvas_.text(canvas_.fit(o.name, ui::Font::Body, r.right - r.left - 130, true), ui::Font::Body, r.left + 58, cy - 1,
@@ -424,7 +575,7 @@ void Home::page_pivot(const D2D1_RECT_F& r)
             canvas_.glyph(part == 1 ? ui::icon::up : ui::icon::down, ui::Font::IconBig, (b.left + b.right) / 2, cy,
                           ui::rgb(can ? (hover_ == id + part ? ui::pal::white : ui::pal::text2) : ui::pal::faint));
             if (can)
-                hits_.add(id + part, b);
+                hits_.add(id + part, b), tip(id + part, part == 1 ? L"Up: looked in sooner" : L"Down: looked in later");
         }
     }
     if (static_cast<int>(overlays_.size()) > rows) // (more than fit: the wheel scrolls them)
@@ -480,11 +631,6 @@ bool Home::press_page(int hit)
     if (hit >= kRenderer && hit < kRenderer + 4) {
         const std::wstring value = kRenderers[hit - kRenderer].value;
         ini_set(L"graphics", L"renderer", &value);
-        return true;
-    }
-    if (hit == kEffects) {
-        const std::wstring value = ini_get(L"graphics", L"effects", L"1") != L"0" ? L"0" : L"1";
-        ini_set(L"graphics", L"effects", &value);
         return true;
     }
     if (hit == kPivotOn) {

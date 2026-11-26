@@ -1,6 +1,6 @@
 #pragma once
 // The app's first view: VanaCore's card over the background picture, its head (the installed VanaCore's version, who made it),
-// tabs under it (FFXI, Graphics, Pivot, Profiles, About: home_pages.cpp, home_profiles.cpp; Errors, red, when something's
+// tabs under it (FFXI, Graphics, Profiles, Pivot, Logs, About: home_pages.cpp, home_profiles.cpp; Errors, red, when something's
 // wrong), and a glass bar at the bottom: the profile and START side by side in its middle (VanaCore.exe --retail with the
 // profile's settings file).
 
@@ -35,7 +35,6 @@ private:
         kPad,
         kFfxiFolder,
         kRenderer = 30, // + the choice
-        kEffects = 40,
         kPivotOn = 50,
         kPivotRoot,
         kPivotOpen,
@@ -44,9 +43,25 @@ private:
         kMenu = 80, // the profile pick-list: + the profile; kMenuManage its last row
         kMenuManage = 99,
         kRow = 100,
-        kProfileRow = 1000, // the Profiles tab's rows: + row * 4 + part (0 pick, 1 rename, 2 delete)
+        kProfileRow = 1000, // the Profiles tab's rows: + row * 8 + part (0 pick, 1 rename, 2 delete, 3 the name's box, 4 shortcut)
+        kDrop = 5000,       // the Graphics tab's drop-downs: + the drop-down
+        kDropItem = 5100,   // the open one's list: + the choice
+        kLogsFolder = 5900,
+        kLogRow = 6000,     // the Logs tab's rows: + the log
     };
-    enum Tab { kFfxi, kGraphics, kPivot, kProfiles, kAbout, kErrors, kTabs };
+    enum Drop { kMode, kResolution, kUiResolution, kDrops };
+    // A drop-down's choice: what's written, what's shown; sep: a line between groups
+    struct Choice {
+        std::wstring value, label;
+        bool sep = false;
+    };
+    enum Tab { kFfxi, kGraphics, kProfiles, kPivot, kLogs, kAbout, kErrors, kTabs };
+    // A log file (logs\, chatlogs\: .txt and .csv): its path from the app's folder, when it was last written, its size
+    struct Log {
+        std::wstring path;
+        FILETIME written{};
+        unsigned long long bytes = 0;
+    };
     // The FFXI install: its folder and PlayOnline's (the registry's, else what Locate picked), the region's tools
     struct Install {
         std::wstring ffxi, pol, region, pad; // (pad: FFXiPadConfig.exe, "" when there's none)
@@ -71,6 +86,8 @@ private:
     void draw_tabs(float x, float y);
     void draw_footer();
     void draw_menu();
+    void draw_tip();
+    void tip(int hit, const std::wstring& text) { tips_.push_back({hit, text}); }
     void render();
     void press(int hit);
     bool play();
@@ -96,6 +113,10 @@ private:
     void page_about(const D2D1_RECT_F& r);
     void fact(float x, float cy, bool ok, const std::wstring& title, const std::wstring& detail, float room);
     bool press_page(int hit);
+    std::wstring drop_value(int d) const;
+    std::vector<Choice> choices(int d) const;
+    void draw_drop();
+    void pick(int index);
     float t_of(int hit) const;
 
     // home_profiles.cpp: the profiles, the Profiles and Errors pages
@@ -105,6 +126,7 @@ private:
     void new_profile();
     void delete_profile(int index);
     void start_rename(int index);
+    void make_shortcut(int index);
     void end_rename(bool keep);
     bool rename_key(UINT message, WPARAM wparam);
     std::wstring unique_name(const std::wstring& name, int except) const;
@@ -112,6 +134,8 @@ private:
     void page_profiles(const D2D1_RECT_F& r);
     void page_errors(const D2D1_RECT_F& r);
     bool press_profiles(int hit);
+    void load_logs();
+    void page_logs(const D2D1_RECT_F& r);
 
     const VanaCoreAppHost& host_;
     std::wstring dir_, app_ini_, ini_; // the app's folder, its vanacore.ini (the app's own [app] keys), the profile's file
@@ -126,14 +150,21 @@ private:
     int pivot_scroll_ = 0;
     std::vector<Profile> profiles_;
     int profile_ = 0, profile_scroll_ = 0;
+    std::vector<Log> logs_; // newest first, read again each time the tab opens
+    int logs_scroll_ = 0;
     int renaming_ = -1; // the profile whose name is being typed, -1: none
     std::wstring typed_;
+    std::wstring note_; // the Profiles tab's line after something was done (a shortcut made), till the tab's left
     bool menu_ = false; // the footer's pick-list is open
+    int drop_ = -1, drop_scroll_ = 0; // the Graphics tab's open drop-down (-1: none), its list scrolled this many rows
+    D2D1_RECT_F drop_at_[kDrops] = {};
     Tab tab_ = kFfxi;
     HWND window_ = nullptr;
     ui::Canvas canvas_;
     ui::Hits<int> hits_;
     int hover_ = kNone, pressed_ = kNone;
+    std::vector<std::pair<int, std::wstring>> tips_; // this frame's tooltips, by control
+    bool tip_up_ = false;                            // the hovered control's tooltip shows (after kTipDelay still)
     bool tracking_ = false;
 };
 

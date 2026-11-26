@@ -3,6 +3,8 @@
 #include "home.h"
 
 #include <shellapi.h>
+#include <shlobj.h>
+#include <shobjidl.h>
 
 #include <algorithm>
 #include <cwchar>
@@ -157,6 +159,41 @@ void Home::delete_profile(int index)
     save_profiles();
 }
 
+// A shortcut on the desktop, "FFXI <name>", that starts the game with the profile (VanaCore.exe --retail --ini <its file>;
+// vanacore.ini's: --retail alone), in VanaCore's folder, with VanaCore.exe's icon. One already there is made again.
+void Home::make_shortcut(int index)
+{
+    if (game_.empty() || index < 0 || index >= static_cast<int>(profiles_.size()))
+        return;
+    const Profile& p = profiles_[index];
+    std::wstring name = L"FFXI " + p.name;
+    for (wchar_t& c : name)
+        if (wcschr(L"\\/:*?\"<>|", c) != nullptr)
+            c = L'_';
+    PWSTR desktop = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktop)))
+        return;
+    const std::wstring path = std::wstring(desktop) + L"\\" + name + L".lnk";
+    CoTaskMemFree(desktop);
+    const std::wstring args = same(p.file, L"vanacore.ini") ? L"--retail" : L"--retail --ini \"" + p.file + L"\"";
+    IShellLinkW* link = nullptr;
+    IPersistFile* file = nullptr;
+    bool made = false;
+    if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link)))) {
+        link->SetPath(game_.c_str());
+        link->SetArguments(args.c_str());
+        link->SetWorkingDirectory(dir_.c_str());
+        link->SetIconLocation(game_.c_str(), 0);
+        link->SetDescription((L"FINAL FANTASY XI with VanaCore: the " + p.name + L" profile").c_str());
+        made = SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file))) && SUCCEEDED(file->Save(path.c_str(), TRUE));
+    }
+    if (file != nullptr)
+        file->Release();
+    if (link != nullptr)
+        link->Release();
+    note_ = made ? L"\x201C" + name + L"\x201D is on your desktop" : L"The shortcut couldn't be made";
+}
+
 void Home::start_rename(int index)
 {
     renaming_ = index;
@@ -234,7 +271,8 @@ void Home::page_profiles(const D2D1_RECT_F& r)
 {
     float y = r.top + 8;
     canvas_.text(L"PROFILES", ui::Font::Label, r.left, y, ui::rgb(ui::pal::dim));
-    canvas_.text(L"Each has its own settings: pick one beside START", ui::Font::Small, r.left + 80, y, ui::rgb(ui::pal::faint));
+    canvas_.text(note_.empty() ? L"Each has its own settings: pick one beside START" : note_, ui::Font::Small, r.left + 80, y,
+                 ui::rgb(note_.empty() ? ui::pal::faint : ui::pal::teal));
     const std::wstring add = L"New Profile";
     const float aw = canvas_.text_width(add, ui::Font::Button) + 24 + 28;
     const D2D1_RECT_F a = D2D1::RectF(r.right - aw, y - 14, r.right, y + 14);
@@ -248,14 +286,14 @@ void Home::page_profiles(const D2D1_RECT_F& r)
     if (renaming_ >= 0 && (renaming_ < profile_scroll_ || renaming_ >= profile_scroll_ + rows))
         profile_scroll_ = std::max(0, std::min(renaming_, count - rows)); // (the one being named in view)
     for (int k = 0; k < rows && profile_scroll_ + k < count; ++k) {
-        const int i = profile_scroll_ + k, id = kProfileRow + i * 4;
+        const int i = profile_scroll_ + k, id = kProfileRow + i * 8;
         const Profile& p = profiles_[i];
         const float cy = top + k * row + row / 2;
-        const bool picked = i == profile_, over = hover_ >= id && hover_ < id + 4;
+        const bool picked = i == profile_, over = hover_ >= id && hover_ < id + 8;
         if (over || picked)
             canvas_.fill(r.left - 6, cy - row / 2 + 1, r.right - r.left + 12, row - 2, 4, ui::rgb(picked ? ui::pal::accent : ui::pal::white, picked ? 0.1f : 0.04f));
         canvas_.glyph(picked ? ui::icon::check : ui::icon::circle, ui::Font::IconBig, r.left + 10, cy, ui::rgb(picked ? ui::pal::teal : ui::pal::faint));
-        const float nx = r.left + 32, buttons = r.right - 60;
+        const float nx = r.left + 32, buttons = r.right - 90;
         if (renaming_ == i) { // the name's box: what's typed, a caret after it
             const D2D1_RECT_F box = D2D1::RectF(nx - 6, cy - 12, nx + 220, cy + 12);
             canvas_.fill(box.left, box.top, box.right - box.left, box.bottom - box.top, 4, ui::rgb(ui::pal::well, 0.95f));
@@ -271,20 +309,24 @@ void Home::page_profiles(const D2D1_RECT_F& r)
         hits_.add(id, D2D1::RectF(r.left - 6, cy - row / 2, buttons - 4, cy + row / 2));
         // rename, and delete (not vanacore.ini's)
         const bool can_delete = !same(p.file, L"vanacore.ini");
-        for (int part = 1; part <= 2; ++part) {
+        // a desktop shortcut that starts the game with it, rename, and delete (not vanacore.ini's)
+        static const int kParts[] = {4, 1, 2};
+        for (int n = 0; n < 3; ++n) {
+            const int part = kParts[n];
             if (part == 2 && !can_delete)
                 continue;
-            const D2D1_RECT_F b = D2D1::RectF(buttons + (part - 1) * 30, cy - 12, buttons + (part - 1) * 30 + 26, cy + 12);
+            const D2D1_RECT_F b = D2D1::RectF(buttons + n * 30, cy - 12, buttons + n * 30 + 26, cy + 12);
             const bool on = hover_ == id + part;
             if (on)
                 canvas_.fill(b.left, b.top, 26, 24, 4, ui::rgb(part == 2 ? ui::pal::rose : ui::pal::white, pressed_ == id + part ? 0.22f : 0.12f));
-            canvas_.glyph(part == 1 ? ui::icon::edit : ui::icon::trash, ui::Font::Icon, b.left + 13, cy,
+            canvas_.glyph(part == 4 ? ui::icon::shortcut : part == 1 ? ui::icon::edit : ui::icon::trash, ui::Font::Icon, b.left + 13, cy,
                           ui::rgb(on ? (part == 2 ? ui::pal::rose : ui::pal::white) : ui::pal::dim));
             hits_.add(id + part, b);
+            tip(id + part, part == 4 ? L"Desktop shortcut: starts FFXI with " + p.name : part == 1 ? L"Rename" : L"Delete " + p.name);
         }
     }
     // (the buttons before the row under them: Hits::at takes the first match)
-    std::stable_partition(hits_.list.begin(), hits_.list.end(), [](const auto& h) { return h.first < kProfileRow || (h.first - kProfileRow) % 4 != 0; });
+    std::stable_partition(hits_.list.begin(), hits_.list.end(), [](const auto& h) { return h.first < kProfileRow || h.first >= kDrop || (h.first - kProfileRow) % 8 != 0; });
 }
 
 void Home::page_errors(const D2D1_RECT_F& r)
@@ -307,21 +349,113 @@ void Home::page_errors(const D2D1_RECT_F& r)
     }
 }
 
+// --- logs ----------------------------------------------------------------------------------------------------------------
+
+// Every .txt and .csv under logs\ and chatlogs\ (their folders too), newest first
+void Home::load_logs()
+{
+    logs_.clear();
+    std::vector<std::wstring> folders = {L"logs", L"chatlogs"};
+    for (std::size_t f = 0; f < folders.size(); ++f) {
+        WIN32_FIND_DATAW found{};
+        const HANDLE find = FindFirstFileW((dir_ + L"\\" + folders[f] + L"\\*").c_str(), &found);
+        if (find == INVALID_HANDLE_VALUE)
+            continue;
+        do {
+            const std::wstring name = found.cFileName, path = folders[f] + L"\\" + name;
+            if (name == L"." || name == L"..")
+                continue;
+            if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+                folders.push_back(path);
+                continue;
+            }
+            const std::size_t dot = name.rfind(L'.');
+            const std::wstring ext = dot == std::wstring::npos ? L"" : name.substr(dot);
+            if (same(ext, L".txt") || same(ext, L".csv"))
+                logs_.push_back({path, found.ftLastWriteTime, (static_cast<unsigned long long>(found.nFileSizeHigh) << 32) | found.nFileSizeLow});
+        } while (FindNextFileW(find, &found));
+        FindClose(find);
+    }
+    std::sort(logs_.begin(), logs_.end(), [](const Log& a, const Log& b) { return CompareFileTime(&a.written, &b.written) > 0; });
+}
+
+void Home::page_logs(const D2D1_RECT_F& r)
+{
+    float y = r.top + 8;
+    canvas_.text(L"LOGS", ui::Font::Label, r.left, y, ui::rgb(ui::pal::dim));
+    canvas_.text(std::to_wstring(logs_.size()) + L" files, newest first: click one to open it", ui::Font::Small, r.left + 50, y, ui::rgb(ui::pal::faint));
+    const std::wstring folder = L"Open Folder";
+    const float fw = canvas_.text_width(folder, ui::Font::Button) + 24 + 28;
+    const D2D1_RECT_F b = D2D1::RectF(r.right - fw, y - 14, r.right, y + 14);
+    canvas_.button(b, folder, ui::Button::Secondary, t_of(kLogsFolder), true, ui::icon::folder);
+    hits_.add(kLogsFolder, b);
+    y += 24;
+    canvas_.line(r.left, y, r.right, y, ui::rgb(ui::pal::white, 0.08f));
+    const float row = 24, top = y + 3;
+    const int rows = static_cast<int>((r.bottom - top) / row), count = static_cast<int>(logs_.size());
+    if (count == 0) {
+        canvas_.text(L"No logs yet: VanaCore writes them in logs\\ as the game runs", ui::Font::Small, r.left, top + row / 2, ui::rgb(ui::pal::dim));
+        return;
+    }
+    logs_scroll_ = std::max(0, std::min(logs_scroll_, count - rows));
+    static const wchar_t* const kMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun", L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
+    for (int k = 0; k < rows && logs_scroll_ + k < count; ++k) {
+        const int i = logs_scroll_ + k;
+        const Log& log = logs_[i];
+        const float cy = top + k * row + row / 2;
+        const bool over = hover_ == kLogRow + i;
+        if (over)
+            canvas_.fill(r.left - 6, cy - row / 2 + 1, r.right - r.left + 12, row - 2, 4, ui::rgb(ui::pal::white, 0.06f));
+        // when (local time), the size, then the file
+        SYSTEMTIME utc{}, t{};
+        FileTimeToSystemTime(&log.written, &utc);
+        SystemTimeToTzSpecificLocalTime(nullptr, &utc, &t);
+        wchar_t when[32];
+        swprintf_s(when, L"%d %s %02d:%02d", t.wDay, kMonths[(t.wMonth + 11) % 12], t.wHour, t.wMinute);
+        const unsigned long long kb = (log.bytes + 1023) / 1024;
+        const std::wstring size = kb >= 1024 ? std::to_wstring(kb / 1024) + L"." + std::to_wstring(kb % 1024 * 10 / 1024) + L" MB" : std::to_wstring(kb) + L" KB";
+        canvas_.text(when, ui::Font::Small, r.left, cy, ui::rgb(ui::pal::dim));
+        canvas_.text(size, ui::Font::Small, r.right - canvas_.text_width(size, ui::Font::Small), cy, ui::rgb(ui::pal::faint));
+        canvas_.text(canvas_.fit(log.path, ui::Font::Small, r.right - r.left - 104 - 70, true), ui::Font::Small, r.left + 104, cy,
+                     ui::rgb(over ? ui::pal::white : ui::pal::text2));
+        hits_.add(kLogRow + i, D2D1::RectF(r.left - 6, cy - row / 2, r.right + 6, cy + row / 2));
+        tip(kLogRow + i, L"Open in Notepad");
+    }
+    if (count > rows) { // where in the list
+        const float h = r.bottom - top;
+        canvas_.fill(r.right + 9, top + h * logs_scroll_ / count, 2, std::max(12.0f, h * rows / count), 1, ui::rgb(ui::pal::white, 0.25f));
+    }
+}
+
 bool Home::press_profiles(int hit)
 {
+    if (hit == kLogsFolder) {
+        ShellExecuteW(window_, nullptr, (dir_ + L"\\logs").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return false;
+    }
+    if (hit >= kLogRow) { // in Notepad
+        const int i = hit - kLogRow;
+        if (i < static_cast<int>(logs_.size()))
+            ShellExecuteW(window_, nullptr, L"notepad.exe", (L"\"" + dir_ + L"\\" + logs_[i].path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+        return false;
+    }
+    if (hit >= kDrop)
+        return false;
     if (hit == kNewProfile) {
         new_profile();
         return true;
     }
     if (hit < kProfileRow)
         return false;
-    const int i = (hit - kProfileRow) / 4, part = (hit - kProfileRow) % 4;
+    const int i = (hit - kProfileRow) / 8, part = (hit - kProfileRow) % 8;
     if (part == 0)
         use_profile(i);
     else if (part == 1)
         start_rename(i);
     else if (part == 2)
         delete_profile(i);
+    else if (part == 4)
+        make_shortcut(i);
     return true;
 }
 

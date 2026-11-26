@@ -33,7 +33,7 @@ enum class Font { Title, Big, Body, Small, Label, Button, Play, Status, Icon, Ic
 namespace icon {
 constexpr wchar_t play = 0xE037, undo = 0xE166, download = 0xF090, check = 0xF0BE, error = 0xF8B6, info = 0xE88E, sync = 0xE627,
                   close = 0xE5CD, settings = 0xE8B8, folder = 0xE2C8, up = 0xE316, down = 0xE313, gamepad = 0xEA28,
-                  open = 0xE89E, cancel = 0xE888, edit = 0xF097, add = 0xE145, trash = 0xE92E, circle = 0xE836;
+                  open = 0xE89E, cancel = 0xE888, edit = 0xF097, add = 0xE145, trash = 0xE92E, circle = 0xE836, shortcut = 0xF57A;
 }
 enum class Button { Accent, Secondary, Ghost, Play }; // (Play: the home's big one, a blue gradient in a cyan border)
 
