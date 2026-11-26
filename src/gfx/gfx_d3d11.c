@@ -239,6 +239,8 @@ typedef struct FxSettings
     float sun_detail; /* the near map's texels across, 512-8192 (sun_size) */
     float sun_fade;   /* seconds the zone's shadows the cache lets go of take to fade (cache_let_go); 0 at once */
     float sun_handoff; /* the share of the sharp map's half-width over which it fades into the far one (gfx_d3d12.c's) */
+    float normalmap, normalmap_strength, normalmap_view; /* texture packs' normal maps (gfx_d3d12.c's): on, how far they bend, the
+                                                         * debug view (1 the bent normal as the colour, 2 lit with Y turned over) */
     float moghouse;   /* how much of the sun's shadows stay indoors (GfxScene.indoors), 0 none to 1 all (gfx_d3d12.c's) */
     /* the cel look: ink lines, brightness bands, smoothing */
     float outline, outline_width, outline_depth, outline_crease, outline_fade, bands, band_soft, smooth;
@@ -1908,10 +1910,18 @@ static void draw_main(const GfxDraw* d)
     LibKey k;
     memset(&k, 0, sizeof k);
     k.vs = d->vs, k.fs = d->fs;
-    k.fs.nmap = 0; /* normal maps: the Direct3D 12 back end's */
     /* the world's lit draws lit per pixel (gfx_hlsl.c pixel_lit) */
     if (g_fxs.fx != 0.0f && g_fxs.light != 0.0f && d->vs.lighting && !d->vs.rhw && !d->vs.prog && !d->vs.flat)
         k.vs.pixel = g_fxs.light >= 2.0f ? 2 : 1; /* 1: the sun per pixel, the game's torches per vertex */
+    /* the normal maps, as Direct3D 12 has them (gfx_d3d12.c): the lit pixel function's normal bent, or the game's own shaders lit
+     * again from the vertex shader's clip-space position (gfx_hlsl.c emit_normal_relight). No detail pass here */
+    if (g_fxs.normalmap < 0.5f || (k.fs.prog ? !k.vs.prog : !k.vs.pixel))
+        k.fs.nmap = 0;
+    else if (k.fs.nmap)
+    {
+        k.fs.nmap = (uint8_t)(1 + (g_fxs.normalmap_view >= 1.5f ? 2 : g_fxs.normalmap_view >= 0.5f ? 1 : 0));
+        k.vs.cpos = k.fs.prog != 0;
+    }
     Shaders* sh = shaders_for(&k, d->vs_tokens, d->ps_tokens);
     if (!sh && k.vs.pixel)
     {
@@ -1968,7 +1978,7 @@ static void draw_main(const GfxDraw* d)
     memset(tex, 0, sizeof tex);
     for (int i = 0; i < 8; ++i)
     {
-        int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && d->fs.rain == 2) ? d->fs.st[i].tex : 0;
+        int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && (d->fs.rain == 2 || k.fs.nmap)) ? d->fs.st[i].tex : 0;
         samp[i] = g_linear;
         if (!wanted)
             continue;
@@ -2069,15 +2079,19 @@ static void draw_main(const GfxDraw* d)
         ID3D11DeviceContext_VSSetShaderResources(g_ctx, 0, GFX_NSTREAMS, streams), memcpy(g_bound.streams, streams, sizeof streams);
     size_t need = uniforms_need(d);
     uint32_t uoff = 0;
+    const GfxU* du = &d->u;
+    GfxU un;
+    if (k.fs.nmap) /* the normal maps' strength, in the fog density's neighbour (as gfx_d3d12.c has it) */
+        memcpy(&un, &d->u, need), un.params2[1] = g_fxs.normalmap_strength, du = &un;
     GfxU* cu; /* its uniforms kept in memory too, as drawn (caster_with_u) */
     rec = caster_with_u(rec, need, &cu);
     if (rec)
     {
-        memcpy(cu, &d->u, need);
-        patch_offsets(cu, &d->u, &d->vs, cbase);
+        memcpy(cu, du, need);
+        patch_offsets(cu, du, &d->vs, cbase);
         /* with copies of its own its places aren't the draw's: the draw's uniforms go in apart, and the caster's (cu) as
          * the maps are drawn - its generation is never the ring's, so sun_draw puts them in from the kept copy */
-        if (ncopy ? !uniforms_put(&d->u, need, &d->vs, base, &uoff) : !uniforms_put(cu, need, NULL, NULL, &uoff))
+        if (ncopy ? !uniforms_put(du, need, &d->vs, base, &uoff) : !uniforms_put(cu, need, NULL, NULL, &uoff))
             return;
         memcpy(rec->base, cbase, sizeof cbase);
         rec->uoff = uoff, rec->ugen = ncopy ? g_cring.gen - 1u : g_cring.gen, rec->need = (uint32_t)need;
@@ -2093,7 +2107,7 @@ static void draw_main(const GfxDraw* d)
                     rec->tex[i] = d->tex[i], d->tex[i]->sun_seen = g_serial;
         }
     }
-    else if (!uniforms_put(&d->u, need, &d->vs, base, &uoff))
+    else if (!uniforms_put(du, need, &d->vs, base, &uoff))
         return;
     uniforms_bind(uoff);
 
@@ -2689,6 +2703,9 @@ static const struct
     { "sun_smooth", offsetof(FxSettings, sun_smooth), 1.0f },
     { "sun_soft_zone", offsetof(FxSettings, sun_soft_zone), 0.5f },
     { "sun_curved", offsetof(FxSettings, sun_curved), 1.0f },
+    { "normalmap", offsetof(FxSettings, normalmap), 0.0f },
+    { "normalmap_strength", offsetof(FxSettings, normalmap_strength), 1.0f },
+    { "normalmap_view", offsetof(FxSettings, normalmap_view), 0.0f },
     { "sun_face", offsetof(FxSettings, sun_face), 1.0f },
     { "sun_min", offsetof(FxSettings, sun_min), 0.0f },
     { "sun_direct", offsetof(FxSettings, sun_direct), 0.5f },
