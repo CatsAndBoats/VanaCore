@@ -3,6 +3,12 @@
 #pragma once
 
 #define SEA_FAR 50000.0f /* water.horizon's reach: the sheet's far edge under a pixel from the horizon (15 yalms up, 2160 high) */
+/* the whole sea's cells each way: SEA_GRID, finest round the camera (the cube of the step from it), the nearest
+ * reach / (SEA_GRID / 2)^3 across (29 yalms at SEA_FAR). One quad 100,000 yalms across, clipped to the view, gave its pixels
+ * near the camera a surface place and depth a few centimetres off that moved as the camera did: in Bastok Markets' canal the
+ * shore's teal fade and foam rim came and went along the whole bank with every step, and the plane's edge crept up the cliff's
+ * foot (2026-11-26) */
+#define SEA_GRID 24
 
 /* The sea drawn on to the horizon (water.horizon): the game's sea stops at the edge of the zone's meshes, a hard line under a far
  * draw distance. A flat sheet at the sea's level (g_sea: the lowest tiles that reach the zone's rim), SEA_UNDER lower, from the
@@ -53,12 +59,25 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
                             { mlo[0], ilo[1], ilo[0], ihi[1], 0.0f, SEA_DEPTH },  { ihi[0], ilo[1], mhi[0], ihi[1], 0.0f, SEA_DEPTH },
                             { olo[0], olo[1], ohi[0], mlo[1], SEA_DEPTH, SEA_DEPTH }, { olo[0], mhi[1], ohi[0], ohi[1], SEA_DEPTH, SEA_DEPTH },
                             { olo[0], mlo[1], mlo[0], mhi[1], SEA_DEPTH, SEA_DEPTH }, { mhi[0], mlo[1], ohi[0], mhi[1], SEA_DEPTH, SEA_DEPTH } };
-    static float v[48][4]; /* x, y, z, the bed's depth */
-    if (full) /* the one quad, deep throughout */
+    static float v[SEA_GRID * SEA_GRID * 6][4]; /* x, y, z, the bed's depth */
+    if (full) /* the camera to olo / ohi in SEA_GRID cells each way, small round it, deep throughout */
     {
-        const float c[6][2] = { { olo[0], olo[1] }, { ohi[0], olo[1] }, { ohi[0], ohi[1] }, { olo[0], olo[1] }, { ohi[0], ohi[1] }, { olo[0], ohi[1] } };
-        for (int k = 0; k < 6; ++k)
-            v[k][0] = c[k][0], v[k][1] = y, v[k][2] = c[k][1], v[k][3] = SEA_DEPTH;
+        float gx[2][SEA_GRID + 1];
+        for (int a = 0; a < 2; ++a)
+            for (int i = 0; i <= SEA_GRID; ++i)
+            {
+                const float t = (float)i / (float)SEA_GRID * 2.0f - 1.0f, c = cam[a == 0 ? 0 : 2], cube = t * t * fabsf(t);
+                gx[a][i] = i == 0 ? olo[a] : i == SEA_GRID ? ohi[a] : t < 0.0f ? c - cube * (c - olo[a]) : c + cube * (ohi[a] - c);
+            }
+        int k = 0;
+        for (int j = 0; j < SEA_GRID; ++j)
+            for (int i = 0; i < SEA_GRID; ++i)
+            {
+                const float c[6][2] = { { gx[0][i], gx[1][j] }, { gx[0][i + 1], gx[1][j] }, { gx[0][i + 1], gx[1][j + 1] },
+                                        { gx[0][i], gx[1][j] }, { gx[0][i + 1], gx[1][j + 1] }, { gx[0][i], gx[1][j + 1] } };
+                for (int e = 0; e < 6; ++e, ++k)
+                    v[k][0] = c[e][0], v[k][1] = y, v[k][2] = c[e][1], v[k][3] = SEA_DEPTH;
+            }
     }
     for (int i = 0; !full && i < 8; ++i)
     {
@@ -75,8 +94,8 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
     static GfxDraw d;
     water_ground_setup(&d, s, copies, colour_copy, depth_copy, w, h);
     d.depth.noclip = (uint8_t)noclip;
-    d.data[0] = v, d.size[0] = sizeof v;
-    d.count = full ? 2 : 16;
+    d.data[0] = v, d.size[0] = (full ? SEA_GRID * SEA_GRID * 6 : 48) * sizeof v[0];
+    d.count = full ? SEA_GRID * SEA_GRID * 2 : 16;
     /* The sheet is shaded as the sea's tiles it carries on from are (the water's own settings: its colour, brightness and reflection
      * as theirs; gfx_hlsl_water.h takes open water's body partly from the game's painted sea behind it and lets that through as the
      * fog would take it). Its own colour (green, a third brighter) and half reflection made it a second, lighter sea, with the
