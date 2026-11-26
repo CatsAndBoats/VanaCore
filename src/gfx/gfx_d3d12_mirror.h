@@ -23,7 +23,12 @@ static struct
 
 /* 1 while the water asks for the mirror: every caster keeps its textures' and samplers' slots then (an alpha-tested one's are
  * kept anyway), and they're kept with the sun's shadows off too (draw_encode, caster_wanted) */
-static int mirror_wanted(void) { return g_mir.asked && g_serial < g_mir.asked + MIRROR_KEEP; }
+/* ... or while the reflections mirror the game's effects against the mirrored world (gfx_d3d12_rtfx.h mfx_wanted) */
+static int mirror_wanted(void)
+{
+    return (g_mir.asked && g_serial < g_mir.asked + MIRROR_KEEP) ||
+           (g_fxs.fx != 0.0f && g_fxs.refl > 0.0f && g_fxs.refl_rt >= 2.0f && g_fxs.refl_rt_fx > 0.0f);
+}
 
 /* the mirror's key's blend (build_pipeline): the colour as drawn and the alpha 0, where the mirror is cleared to alpha 1, the
  * sky's place */
@@ -77,13 +82,13 @@ static int mirror_targets(uint32_t w, uint32_t h, uint32_t depth_fmt)
 /* the pipeline a caster is drawn into the mirror with: its own functions with the mirror's key, lit per vertex, without what
  * the scene's passes add to a draw (normal maps, the rain's wet look, the pool, the height fog); the faces it culled by one
  * winding culled by the other (the mirror turns each over) */
-static void mirror_pipe_key(const Caster* cs, PipeKey* pk)
+static void mirror_pipe_key(const Caster* cs, PipeKey* pk, uint32_t color_fmt, uint32_t depth_fmt)
 {
     memset(pk, 0, sizeof *pk);
     pk->lib = cs->lib;
     pk->lib.vs.shadow = GFX_VS_MIRROR, pk->lib.vs.pixel = 0, pk->lib.vs.motion = 0, pk->lib.vs.cpos = 0, pk->lib.vs.inst = 0;
     pk->lib.fs.nmap = 0, pk->lib.fs.wet = 0, pk->lib.fs.pool = 0, pk->lib.fs.hfog = 0;
-    pk->color = (uint32_t)g_mir.color->dxfmt, pk->dsv = (uint32_t)g_mir.depth->dxfmt;
+    pk->color = color_fmt, pk->dsv = depth_fmt;
     pk->pipe.write_mask = 15;
     pk->depth.zenable = 1, pk->depth.zwrite = 1, pk->depth.zfunc = 4; /* D3DCMP_LESSEQUAL */
     pk->cull = (uint8_t)(cs->cull == 2 ? 3 : cs->cull == 3 ? 2 : 1), pk->fill = 3;
@@ -94,7 +99,8 @@ static void mirror_pipe_key(const Caster* cs, PipeKey* pk)
 }
 
 /* the casters into the mirror's targets, already bound: this frame's own, within the reach (far2 its square, 0 none) of cam */
-static void mirror_casters(ID3D12GraphicsCommandList* l, const float* clip_world, const float cam[3], float far2)
+static void mirror_casters(ID3D12GraphicsCommandList* l, const float* clip_world, const float cam[3], float far2, uint32_t color_fmt,
+    uint32_t depth_fmt)
 {
     D3D12_GPU_VIRTUAL_ADDRESS bound_vb[GFX_NSTREAMS];
     memset(bound_vb, 0, sizeof bound_vb);
@@ -124,7 +130,7 @@ static void mirror_casters(ID3D12GraphicsCommandList* l, const float* clip_world
         if (!ps)
         {
             PipeKey pk;
-            mirror_pipe_key(cs, &pk);
+            mirror_pipe_key(cs, &pk, color_fmt, depth_fmt);
             ps = pipeline_for(&pk, cs->vs, cs->ps);
             if (!ps)
             {
@@ -200,7 +206,8 @@ GfxTex* gfx_scene_mirror(const GfxTex* color, const GfxScene* s, float level, fl
     g_targets_bound = 0;
     drawn_forget();
     g_mir.drawn = g_mir.building = g_mir.dead = 0;
-    mirror_casters(l, clip_world, cam, reach > 0.0f ? (reach + MIRROR_SLACK) * (reach + MIRROR_SLACK) : 0.0f);
+    mirror_casters(l, clip_world, cam, reach > 0.0f ? (reach + MIRROR_SLACK) * (reach + MIRROR_SLACK) : 0.0f, (uint32_t)g_mir.color->dxfmt,
+        (uint32_t)g_mir.depth->dxfmt);
     g_targets_bound = 0; /* the game's next draw binds its own again */
     drawn_forget();
     return g_mir.drawn ? g_mir.color : NULL;

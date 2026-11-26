@@ -354,6 +354,16 @@ void vanacore_gfx_set_weather(unsigned weather, int known);
  * carries rain; bit 31 set once read, 0 not known), each frame: VanaCore's rain, in the server's rain as in thunder weather
  * (rain.thunder), falls only where the zone has rain or squall of its own */
 void vanacore_gfx_set_zone_weathers(uint32_t mask);
+/* [graphics] weather* (graphics_weather.h): VanaCore's weathers other than rain (d3d8_weather.h), particles in the air - on (weather),
+ * how much of each kind (0 none to 3: fire's embers, earth's dust, wind's leaves, ice's snow, light's motes, dark's ash), and
+ * preview (0x057's id shown whatever the weather, -1 none; this session only) */
+typedef struct VanaWeather
+{
+    int on;
+    float amount[6];
+    int preview;
+} VanaWeather;
+void vanacore_gfx_set_weather_fx(const VanaWeather* settings);
 
 typedef struct VanaWater
 {

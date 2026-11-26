@@ -129,6 +129,8 @@
     <ClInclude Include="gfx_d3d12_cmask.h" />
     <ClInclude Include="gfx_d3d12_floors.h" />
     <ClInclude Include="gfx_d3d12_rt.h" />
+    <ClInclude Include="gfx_d3d12_rtfx.h" />
+    <ClInclude Include="gfx_d3d12_rt_hlsl.h" />
     <ClInclude Include="gfx_d3d12_copies.h" />
     <ClInclude Include="gfx_d3d12_measure.h" />
     <ClInclude Include="gfx_d3d12_mirror.h" />

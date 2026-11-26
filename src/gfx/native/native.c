@@ -777,6 +777,13 @@ void vanacore_gfx_set_rain(const VanaRain* in)
 }
 void vanacore_gfx_set_weather(unsigned weather, int known) { d3d8_set_weather(weather, known); }
 void vanacore_gfx_set_zone_weathers(uint32_t mask) { d3d8_set_zone_weathers(mask); }
+void vanacore_gfx_set_weather_fx(const VanaWeather* in)
+{
+    WeatherSettings s = { in->on, { 0 }, in->preview };
+    for (int i = 0; i < WX_KINDS; ++i)
+        s.amount[i] = in->amount[i];
+    d3d8_set_weather_fx(&s);
+}
 void vanacore_gfx_set_water(const VanaWater* in)
 {
     WaterSettings s = { in->enabled, in->waves, in->speed, in->size, in->reflection, in->glint, in->brightness, in->colour,

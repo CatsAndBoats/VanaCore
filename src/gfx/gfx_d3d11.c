@@ -2502,7 +2502,8 @@ typedef struct FxU
         gmc[4], gmx[4], gmz[4], gm[4 * GFX_GROUND_MARKS][4], /* the rings of light on the ground (ground_marks) */
         rain[4], /* (Direct3D 12's rain wet ground, gfx_d3d12.c: 0 here) */
         lmatm[16], smapm[4], smapm2[4], // cppcheck-suppress unusedStructMember ; Direct3D 12's middle map (sun_mid): 0 here; smapm2[2] sun_handoff
-        toon4[4]; /* the lines on VanaCore's grass (gfx_grass_lines) */
+        toon4[4], /* the lines on VanaCore's grass (gfx_grass_lines) */
+        rtx[4];   // cppcheck-suppress unusedStructMember ; Direct3D 12's ray-traced reflections' blur: 0 here
 } FxU;
 
 /* the sun's shadow map: 32-bit depth, read through its view */

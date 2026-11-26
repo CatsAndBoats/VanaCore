@@ -732,7 +732,8 @@ bool session_only(const std::wstring& section, const std::wstring& key)
 {
     const std::wstring s = lowered(section), k = lowered(key);
     return (s == L"graphics.effects" && (k == L"debug" || k == L"sun_gate")) ||
-           (s == L"graphics" && (k == L"grass.rings.show" || k == L"grass.cover.show" || k == L"collision.show" || k == L"rain.freeze"));
+           (s == L"graphics" && (k == L"grass.rings.show" || k == L"grass.cover.show" || k == L"collision.show" || k == L"rain.freeze" ||
+                                    k == L"weather.preview"));
 }
 
 } // namespace vanacore::ini

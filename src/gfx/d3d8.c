@@ -122,6 +122,7 @@ static uint32_t g_water_shape_tiles; /* of them, tiles found by their shape: the
 static uint32_t g_water_kept_n; /* of them, kept for the water pass (d3d8_water.h water_keep), drawn at the scene's end (water_pass) */
 static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s);
 static void rain_pass(GfxTex* color, GfxTex* depth, const GfxScene* s);
+static void weather_pass(GfxTex* color, GfxTex* depth, const GfxScene* s); /* d3d8_weather.h: snow, dust, leaves, embers... */
 static void rain_set_zone(int zone);
 static void water_set_zone(int zone); /* d3d8_water_level.h: a ferry's zone (g_water_ship) */
 static int rain_game_skip(const GfxDraw* d, uint32_t tex0);
@@ -4237,6 +4238,7 @@ static void scene_finish(const char* why)
         grass_scene(g_scene.rt, g_grass_depth, &g_scene.s);
         water_pass(g_scene.rt, g_grass_depth, &g_scene.s); /* VanaCore's water over the world, the grass under it (d3d8_water.h) */
         rain_pass(g_scene.rt, g_grass_depth, &g_scene.s);  /* VanaCore's rain over it all (d3d8_rain.h) */
+        weather_pass(g_scene.rt, g_grass_depth, &g_scene.s); /* ... and its other weathers (d3d8_weather.h) */
         gfx_scene_done(g_scene.rt, &g_scene.s);
         g_scene.world_done = 1;
         g_scene.tr_why = why[0] == 's' && why[1] == 'w' ? 'w' : why[0], g_scene.tr_draws = g_scene.draws;
@@ -5696,6 +5698,7 @@ static void grass_hook(const GfxDraw* d, uint32_t prim, uint32_t count, uint32_t
 
 #include "d3d8_water.h" /* VanaCore's water: what it is (water_tile_shape, water_model), its draws (water_draw, water_shade) and its pass (water_pass) */
 #include "d3d8_rain.h" /* VanaCore's rain: the streaks, splashes and shelter (rain_pass) */
+#include "d3d8_weather.h" /* VanaCore's other weathers: snow, dust, leaves, embers, motes, ash (weather_pass) */
 
 /* The game's own character shadow (Config > Shadows): the character drawn into a render target of the game's, then that
  * texture projected onto the ground round it - a blended 3D draw sampling, through projected coordinates, a texture the game

@@ -90,7 +90,7 @@ constexpr const char* kEffectKeys[] = {"ao",      "radius",      "grade",      "
                                        "outline_grass", "outline_width_grass", "outline_depth_grass", "outline_fade_grass",
                                        "bands",  "band_soft",   "smooth",
                                        "dof",     "dof_focus",   "dof_player", "dof_range",  "dof_far",  "dof_near", "dof_sky",
-                                       "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_lift", "refl_rt", "gi", "gi_radius", "gi_quality",
+                                       "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_lift", "refl_rt", "refl_rt_res", "refl_rt_blur", "refl_rt_fx", "gi", "gi_radius", "gi_quality",
                                        "midtones", "whites", "rolloff", "light_tint", "hue",
                                        "clarity", "elight", "elight_radius", "elight_warp", "elight_lantern", "elight_dim", "elight_actor",
                                        "ao_quality", "ao_chars", "ao_soft_chars", "sun_rings", "sun_ring_spacing", "sun_detail", "sun_far_hold", "sun_near_hold", "sun_roll", "sun_plants", "sun_plants_still", "sun_fade", "normalmap", "normalmap_strength", "normalmap_view", "normalmap_refl", "normalmap_fx",
@@ -2344,8 +2344,8 @@ void track_focus()
         s_rt_wanted = rt_wanted;
         grass_floors::update_collision(static_cast<int>(zone), false); // let it go, so the next call reads it again (or lets the tree go)
     }
-    grass_floors::update_collision(static_cast<int>(zone), g_collision_show || g_rain_shelter || rt_wanted); // (the rain's shelter reads it too)
-    zone_casters::update(static_cast<int>(zone), g_effects || g_rain_shelter); // the zone's own meshes for the sun's shadows (sun_zone_mesh), and the rain's roofs
+    grass_floors::update_collision(static_cast<int>(zone), g_collision_show || g_rain_shelter || g_weather_shelter || rt_wanted); // (the rain's shelter reads it too)
+    zone_casters::update(static_cast<int>(zone), g_effects || g_rain_shelter || g_weather_shelter); // the zone's own meshes for the sun's shadows (sun_zone_mesh), and the rain's roofs
     game::Entity self;
     const bool known = index != 0 && game::entity(index, self) && self.id == id;
     vanacore_gfx_set_focus(known ? self.x : 0.0f, known ? self.z : 0.0f, known ? self.y : 0.0f, known ? 1 : 0);

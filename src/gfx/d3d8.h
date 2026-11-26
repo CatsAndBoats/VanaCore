@@ -132,6 +132,17 @@ void d3d8_set_weather(unsigned weather, int known);
 /* the weathers the zone's model DAT has (bit n for 0x057's weather n, rain and squall only with rain in them; bit 31 known, 0
  * not known), each frame: VanaCore's rain falls only where the zone has rain or squall */
 void d3d8_set_zone_weathers(uint32_t mask);
+/* [graphics] weather* (d3d8_weather.h): particles in the air in the weathers other than rain. amount: the kinds, in order fire (hot
+ * spell, heat wave), earth (dust and sand storms), wind (wind, gales), ice (snow, blizzards), light (auroras, stellar glare), dark
+ * (gloom, darkness), 0 none to 3; preview a weather (0x057's id) shown whatever the server's, -1 none */
+#define WX_KINDS 6
+typedef struct WeatherSettings
+{
+    int on;
+    float amount[WX_KINDS];
+    int preview;
+} WeatherSettings;
+void d3d8_set_weather_fx(const WeatherSettings* settings);
 
 typedef struct WaterSettings
 {

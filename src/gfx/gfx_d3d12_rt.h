@@ -83,3 +83,52 @@ static void rt_bind(ID3D12GraphicsCommandList* l, const float* view, int sky_ok)
     ID3D12GraphicsCommandList_SetGraphicsRootShaderResourceView(l, ROOT_RT, on ? g_rtx.bvh[k]->gpu : a.gpu);
     ID3D12GraphicsCommandList_SetGraphicsRootShaderResourceView(l, ROOT_RTV, a.gpu);
 }
+
+/* The sky's colour, one texel from this frame's scene (and the last frame's, to ease from), for the height fog (fog_color=sky: the
+ * composite's eighth input) and the ray-traced reflections' sky (fx_ssr's input 11, rt_sky_input) */
+static void sky_colour_pass(FxU* u, int32_t depth_srv, int32_t* comp_in)
+{
+    const int fogsky = g_fxs.fog_mode == 1.0f && g_fxs.fog > 0.0f;
+    const int rtsky = g_fxs.refl_rt >= 2.0f && g_fxs.refl > 0.0f;
+    g_rt_sky = 0;
+    if (!(fogsky || rtsky) || !g_fx.skycol_pso || !fx_tex(&g_fx.sky[0], DXGI_FORMAT_R16G16B16A16_FLOAT, 1, 1) || !fx_tex(&g_fx.sky[1], DXGI_FORMAT_R16G16B16A16_FLOAT, 1, 1))
+        return;
+    FxTex* last_sky = &g_fx.sky[g_fx.sky_i];
+    FxTex* sky = &g_fx.sky[g_fx.sky_i ^ 1];
+    g_fx.sky_i ^= 1;
+    fx_state(last_sky, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    fx_state(sky, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    float vp1[4] = { 0, 0, 1, 1 };
+    int32_t sky_in[3] = { g_fx.src.srv, depth_srv, last_sky->srv };
+    gpu_part(GP_SKY);
+    fx_draw(heap_cpu(&g_rtv, sky->rtv), 1, 1, g_fx.skycol_pso, vp1, u, sky_in, 3, 0, 0);
+    gpu_part(GP_REST);
+    fx_state(sky, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    if (fogsky)
+        comp_in[7] = sky->srv, u->grade2[3] = 1.0f;
+    g_rt_sky = rtsky;
+}
+
+/* fx_ssr's input 11: the sky's colour, where the ray-traced reflections want it and sky_colour_pass made it this frame (1); its
+ * input 10 the same when the characters' mask isn't there (a placeholder: an input past the last given must be one) */
+static int rt_sky_input(int32_t* ssr_in, int* ssr_n)
+{
+    if (!g_rt_sky || g_fxs.refl_rt < 2.0f)
+        return 0;
+    FxTex* sky = &g_fx.sky[g_fx.sky_i];
+    fx_state(sky, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    if (ssr_in[10] < 0)
+        ssr_in[10] = sky->srv;
+    ssr_in[11] = sky->srv, *ssr_n = 12;
+    return 1;
+}
+
+/* The reflections' layer's size: with the ray tracing on, 25 to 100% of the scene's each way (refl_rt_res; half by default: a ray in
+ * each pixel through the zone's tree was 8 ms a frame at 3440x1440, 2026-11-26, and what they show is soft). The composite reads it
+ * by the nearest depth of its texels (lay_at), against the depth level nearest its size: that level's index */
+static int rt_layer_size(uint32_t aw, uint32_t ah, uint32_t* w, uint32_t* h)
+{
+    const float res = g_fxs.refl_rt >= 2.0f ? fminf(fmaxf(g_fxs.refl_rt_res, 0.25f), 1.0f) : 1.0f;
+    *w = (uint32_t)ceilf((float)aw * res), *h = (uint32_t)ceilf((float)ah * res);
+    return res < 0.4f ? 2 : res < 0.6f ? 1 : 0;
+}

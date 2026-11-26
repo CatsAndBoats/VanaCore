@@ -1,6 +1,8 @@
 // VanaCore's rain on the characters: [graphics] rain* read into a VanaRain for the graphics (vanacore_gfx_set_rain), from apply_live.
 // An include unit of graphics.cpp (its readers and globals are in scope), as graphics_water.h is.
 
+#include "graphics_weather.h" // the other weathers, read with the rain (read_rain's end)
+
 static bool g_rain_shelter = false; // VanaCore's rain wants the zone's floors and its collision (track_focus: grass_floors::update, update_collision)
 
 static void read_rain(When when)
@@ -58,6 +60,7 @@ static void read_rain(When when)
         was = rain, said = true;
     }
     vanacore_gfx_set_rain(&rain);
+    read_weather(when); // [graphics] weather*: snow, dust, leaves, embers... (graphics_weather.h)
 }
 
 // The weathers the zone's model DAT has (zoneweather), read once a zone and handed over each frame (vanacore_gfx_set_zone_weathers),

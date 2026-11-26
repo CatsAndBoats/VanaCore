@@ -2216,6 +2216,9 @@ TIPS.rows = {
     ['graphics.effects.refl_rt'] = 'How reflections are found.\n'
         .. 'Screen Space: from what is on screen, so they change as the camera moves and fade at its edges.\n'
         .. 'Ray Tracing: the zone\'s own buildings, sky and ground are traced, so the floor shows them wherever the camera looks. Players and monsters still come from the screen. Costs more.',
+    ['graphics.effects.refl_rt_res'] = 'How sharp the ray traced reflections are: the share of the screen\'s size they are worked out at, 25, 50, 75 or 100%. Higher is sharper and costs more. Only with Ray Tracing.',
+    ['graphics.effects.refl_rt_blur'] = 'Softens the ray traced reflections with a Gaussian blur, 0 to 24. It stops at edges, so a building keeps its outline. Only with Ray Tracing.',
+    ['graphics.effects.refl_rt_fx'] = 'Shows spells, glows and lamps\' flares in the ray traced reflections. They are mirrored about the ground you stand on, so a floor much higher or lower shows them less truly. Only with Ray Tracing.',
     ['graphics.effects.refl_sun'] = 'The bright sparkle of the sun on the ground: Off, Low or High.',
     ['graphics.effects.refl_bump'] = 'How much the stone\'s own texture bends the reflections: grooves and tile edges give them depth.',
     ['graphics.effects.refl_lift'] = 'Tilts the reflections up where the camera is low, so the floor shows more than the bottom of the walls. 1 is a true mirror, 10 tilts them the most.',
@@ -2309,6 +2312,14 @@ TIPS.rows = {
     ['graphics.rain.sheen'] = 'How strong the reflection on them is. 0 is none.',
     ['graphics.rain.dry'] = 'How many seconds they take to dry once the rain stops.',
     ['graphics.rain.force'] = 'Shows the rain and the wet look whatever the weather.',
+    ['graphics.weather'] = "VanaCore's own particles in the weathers other than rain, where the zone has that weather. None under roofs.",
+    ['graphics.weather.preview'] = "Shows a weather's particles whatever the weather. The sky and light stay the zone's. For this session only.",
+    ['graphics.weather.fire'] = 'Embers in hot spells and heat waves. 0 is none.',
+    ['graphics.weather.dust'] = 'Grit and dust clouds in dust and sand storms. 0 is none.',
+    ['graphics.weather.wind'] = 'Leaves and streaks of wind in wind and gales. 0 is none.',
+    ['graphics.weather.snow'] = 'Snowflakes in snow and blizzards. 0 is none.',
+    ['graphics.weather.light'] = 'Motes of light in auroras and stellar glare. 0 is none.',
+    ['graphics.weather.dark'] = 'Ash and dark wisps in gloom and darkness. 0 is none.',
     ['graphics.water.ripples'] = 'How strong the fine ripples over the waves are.',
     ['graphics.water.ripple.size'] = 'How large the fine ripples are.',
     ['graphics.water.colour'] = 'Slide the water from blue to green.',
@@ -4579,13 +4590,46 @@ local TABS = {
                 -- Screen Space (0) or Ray Tracing (refl_rt 2: the zone's own meshes in a tree the shader walks, so what the floor shows
                 -- doesn't follow the camera; 1, the collision filling only what the screen missed, is an ini edit and shows as Ray Tracing)
                 (function ()
-                    local row = choice('Method', FX, 'refl_rt', '0', { { '0', 'Screen Space' }, { '2', 'Ray Tracing' } })
+                    local row = choice('Method', FX, 'refl_rt', '2', { { '0', 'Screen Space' }, { '2', 'Ray Tracing' } })
+                    row.rebuild = true -- (the rows below lock by it)
                     row.get = function ()
                         local value = tonumber(vana.config.get(FX, 'refl_rt') or '')
                         if value == nil then
                             return row.default
                         end
                         return value < 0.5 and '0' or '2'
+                    end
+                    return row
+                end)(),
+                -- the ray traced layer's size, a share of the scene's each way (refl_rt_res 0.25 to 1), for the ray tracing only
+                (function ()
+                    local row = choice('Ray Tracing Resolution', FX, 'refl_rt_res', '0.5', { { '0.25', 'Low' }, { '0.5', 'Medium' }, { '0.75', 'High' }, { '1', 'Max' } })
+                    row.lock_if = function () return (tonumber(vana.config.get(FX, 'refl_rt') or '') or 2) < 0.5 end
+                    row.get = function ()
+                        local value = tonumber(vana.config.get(FX, 'refl_rt_res') or '')
+                        if value == nil then
+                            return row.default
+                        end
+                        return value < 0.375 and '0.25' or value < 0.625 and '0.5' or value < 0.875 and '0.75' or '1'
+                    end
+                    return row
+                end)(),
+                -- a Gaussian over the ray traced layer, its radius in texels of the layer (refl_rt_blur 0 to 24), for the ray tracing only
+                (function ()
+                    local row = slider('Ray Tracing Blur', FX, 'refl_rt_blur', 0, 0, 24, 1, '%d')
+                    row.lock_if = function () return (tonumber(vana.config.get(FX, 'refl_rt') or '') or 2) < 0.5 end
+                    return row
+                end)(),
+                -- the game's effects (spells, glows, lamps' flares) mirrored into the ray traced reflections (refl_rt_fx), for the ray tracing only
+                (function ()
+                    local row = choice('Reflect Effects', FX, 'refl_rt_fx', '0', { { '0', 'Off' }, { '1', 'On' } })
+                    row.lock_if = function () return (tonumber(vana.config.get(FX, 'refl_rt') or '') or 2) < 0.5 end
+                    row.get = function ()
+                        local value = tonumber(vana.config.get(FX, 'refl_rt_fx') or '')
+                        if value == nil then
+                            return row.default
+                        end
+                        return value > 0 and '1' or '0'
                     end
                     return row
                 end)(),
@@ -4749,6 +4793,23 @@ local TABS = {
                 needs_dx(slider('Mirror detail', 'graphics', 'water.mirror.scale', 0.5, 0.25, 1, 0.05)),
                 needs_dx(slider('Mirror reach', 'graphics', 'water.mirror.reach', 300, 0, 2000, 10, '%d')),
                 needs_dx(slider('Mirror ripple', 'graphics', 'water.mirror.waves', 1, 0, 4, 0.05)),
+                -- VanaCore's weathers other than rain (src/gfx/d3d8_weather.h): particles in the air round the camera in the server's
+                -- weather, in a zone that has it ([graphics] weather*; graphics_weather.h). weather.preview is this session's only
+                needs_dx({ kind = 'header', text = 'Weather Effects (Experimental)', section = 'graphics', key = 'weather',
+                           switch = { get = function () return (tonumber(vana.config.get('graphics', 'weather') or '') or 1) ~= 0 end,
+                                      set = function (on) vana.config.set('graphics', 'weather', on and '1' or '0') end } }),
+                needs_dx(dropdown('Weather preview', 'graphics', 'weather.preview', '-1',
+                                  { { '-1', "Off (the zone's weather)" }, { '4', 'Hot spell' }, { '5', 'Heat wave' },
+                                    { '8', 'Dust storm' }, { '9', 'Sand storm' }, { '10', 'Wind' }, { '11', 'Gales' },
+                                    { '12', 'Snow' }, { '13', 'Blizzards' }, { '16', 'Auroras' }, { '17', 'Stellar glare' },
+                                    { '18', 'Gloom' }, { '19', 'Darkness' } })),
+                subheader('Amount'),
+                needs_dx(slider('Embers', 'graphics', 'weather.fire', 1, 0, 3, 0.05)),
+                needs_dx(slider('Dust', 'graphics', 'weather.dust', 1, 0, 3, 0.05)),
+                needs_dx(slider('Leaves', 'graphics', 'weather.wind', 1, 0, 3, 0.05)),
+                needs_dx(slider('Snow', 'graphics', 'weather.snow', 1, 0, 3, 0.05)),
+                needs_dx(slider('Light motes', 'graphics', 'weather.light', 1, 0, 3, 0.05)),
+                needs_dx(slider('Ash', 'graphics', 'weather.dark', 1, 0, 3, 0.05)),
                 -- Mass Grass (src/gfx/grass.c): tufts and flowers scattered on the zone's grass-textured ground round the player;
                 -- shown as Game Options' last sub-tab since 2026-11-06, it was the Experimental page's (vana.lua MOVED_PANELS)
                 -- reset_also: its settings no longer on the panel, taken out by its reset too (reset_rows). grass.tufts and grass.limit
