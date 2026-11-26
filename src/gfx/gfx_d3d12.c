@@ -6805,7 +6805,7 @@ static const char FX_HLSL_2[] =
      * shows them (the wetness at its most), in patches - the mask's green a noise laid in the world (and the low ground),
      * which rain.puddles cuts at a level, more of the ground wet the higher it is - and none between them. rain.reflect how
      * strong. The floor's own gloss and bump: a wet patch is the floor's reflection, no sharper */
-    "  float rwet = 0.0, rough_ = u.refl.z;\n"
+    "  float rwet = 0.0, rough_ = u.refl.z * (u.refl.y < 0.5 ? lerp(1.8, 1.0, 2.0 * u.refl.y) : lerp(1.0, 0.5, 2.0 * u.refl.y - 1.0));\n"
     "  if (chr) amt = saturate(u.refl.x * flat_ * saturate(0.3 + 1.5 * F) * saturate(1.4 - luma) * u.rays.w), wet = 1.0;\n"
     "  else if (u.rain.w > 0.0) {\n"
     "    float4 rnm = RAIN_AT(px);\n"
@@ -6840,7 +6840,7 @@ static const char FX_HLSL_2[] =
     "    float3 t = (0.8 * bump) * (((lr - ll) / m) * tx + ((lu - ld) / m) * ty);\n"
     "    t /= max(1.0, length(t) / 0.5);\n"
     "    Nb = normalize(N - t);\n"
-    "    amt *= 1.0 - saturate(bump) * 0.6 * saturate(2.0 * (m - bc.x) / m);\n"
+    "    if (u.rtx.x < 0.5) amt *= 1.0 - saturate(bump) * 0.6 * saturate(2.0 * (m - bc.x) / m);\n" /* (blurred: refl_relief's, after it) */
     "  }\n"
     "  float3 R = reflect(-V, Nb);\n"
     /* a ray that leaves the floor low, tilted up (refl_lift): its rise above the floor's plane at least about the lift, eased
@@ -6907,10 +6907,10 @@ static const char FX_HLSL_2[] =
     "    w = saturate(amt * conf);\n"
     "    lay = rc * w;\n"
     "  }\n"
-    /* Render visual 33 (Ray-traced reflections): red where the tree's ray is what shows, green where the screen's is */
+    /* Render visual 33 (Ray-traced reflections): the tree's ray by what it met (rtd, gfx_d3d12_rt_hlsl.h), green the screen's */
     "  if (int(u.grade.w) == 33) {\n"
     "    w = amt > 0.003 ? 0.6 : 0.0;\n"
-    "    lay = rthit ? float3(1.0, 0.0, 0.0) * w : (conf > 0.0 ? float3(0.0, 1.0, 0.0) * w : float3(0.0, 0.0, 0.0));\n"
+    "    lay = rthit ? rtd * w : (conf > 0.0 ? float3(0.0, 1.0, 0.0) * w : float3(0.0, 0.0, 0.0));\n"
     "  }\n"
     /* the sun's glint on the wet floor, where it is lit: from the light the shadows fall from (sunsh, held over the horizon at
      * dusk, so the glint and the shadows that block it agree), and faded as the shadows are (sunsh.w: the game's direct light,
@@ -7177,7 +7177,8 @@ static const char FX_HLSL_2[] =
     /* Render visual 17: the reflections as laid over, at twice their weight, in their own colour over the grey: where they land
      * and what they show */
     "    if (dv == 17 || dv == 33) return float4(grey * (1.0 - saturate(2.0 * L.a)) + saturate(2.0 * L.rgb), c.a);\n"
-    "    o = o * (1.0 - saturate(L.a)) + L.rgb;\n"
+    "    L *= refl_relief(px, c.rgb, dist);\n"
+    "    o = wet_floor(o, L.a) * (1.0 - saturate(L.a)) + L.rgb;\n"
     "  }\n"
     "  if (dview == 17 || dview == 33) return float4(grey.xxx, c.a);\n"
     "  if (dview == 30) return float4(dot(c.rgb, LUMA).xxx, c.a);\n"
@@ -15736,7 +15737,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         const uint32_t gw = (uint32_t)ceilf(vw / gdiv), gh = (uint32_t)ceilf(vh / gdiv);
         u.bounce[0] = (float)gw, u.bounce[1] = (float)gh;
         u.refl2[0] = REFL_STEPS[rq];
-        u.rtx[0] = g_fxs.refl_rt >= 2.0f ? floorf(fminf(fmaxf(g_fxs.refl_rt_blur, 0.0f), 24.0f) + 0.5f) : 0.0f;
+        u.rtx[0] = g_fxs.refl_rt >= 2.0f ? floorf(fminf(fmaxf(g_fxs.refl_rt_blur, 0.0f) + 8.0f * fmaxf(1.0f - 2.0f * g_fxs.refl_wet, 0.0f), 24.0f) + 0.5f) : 0.0f; /* (drier, softer) */
         u.refl2[1] = g_fxs.refl_sun, u.refl2[2] = g_fxs.gi;
         /* ... the reflections' pattern turning from frame to frame only where DLSS gathers the frames (else it would shimmer);
          * the bounce light's turns with its temporal pass's (u.hist.y) unless held still (gi_still) */

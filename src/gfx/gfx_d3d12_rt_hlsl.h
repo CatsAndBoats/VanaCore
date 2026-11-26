@@ -4,11 +4,34 @@
 #pragma once
 
 #define RT_TRACE_HLSL \
+    /* a floor's own colour where it reflects (fx_refl, a its reflection's weight), by how wet it is (refl_wet, u.refl.y): wet stone \
+     * is darker and its colour deeper. Dry to half way it is as drawn. With the reflection sharper the wetter (the blur, fx_ssr's \
+     * rough_ and u.rtx.x), wetness is a look of its own: it was a second strength, more of the same reflection */ \
+    "float3 wet_floor(float3 c, float a) {\n" \
+    "  float k = smoothstep(0.3, 1.0, u.refl.y) * smoothstep(0.0, 0.2, a);\n" \
+    "  float l = dot(c, LUMA);\n" \
+    "  return lerp(c, max(lerp(float3(l, l, l), c, 1.25), 0.0) * 0.72, k);\n" \
+    "}\n" \
+    /* the floor's own relief on a blurred reflection (fx_refl, at the scene's size, after the blur; refl_bump, u.elight2.y): the \
+     * share of it a pixel keeps, less in a groove - a pixel darker than both its neighbours across it, which a shadow's edge, \
+     * darker on one side alone, is not. fx_ssr takes it off the weight before the blur (its amt), and with the ray-traced \
+     * reflections' blur on (u.rtx.x) the grooves and tile edges went soft with the reflection, Surface Depth doing nothing under \
+     * a wide blur: there it is left to this, 1 without the blur */ \
+    "float refl_relief(int2 px, float3 c, float dist) {\n" \
+    "  float bump = saturate(u.elight2.y) * (1.0 - smoothstep(25.0, 70.0, dist));\n" \
+    "  if (u.rtx.x < 0.5 || bump <= 0.0) return 1.0;\n" \
+    "  float lc = dot(c, LUMA), lr = dot(texel(1, px + int2(1, 0)).rgb, LUMA), ll = dot(texel(1, px - int2(1, 0)).rgb, LUMA);\n" \
+    "  float lu = dot(texel(1, px - int2(0, 1)).rgb, LUMA), ld = dot(texel(1, px + int2(0, 1)).rgb, LUMA);\n" \
+    "  float m = max(0.25 * (lr + ll + lu + ld), 0.04);\n" \
+    "  return 1.0 - bump * 0.6 * saturate(2.0 * (max(min(lr, ll), min(lu, ld)) - lc) / m);\n" \
+    "}\n" \
     /* the zone's collision as a tree (rtbvh.h; Direct3D 12 only): its nodes, 32 bytes each, then its triangles, 36; the frame's \
      * words beside it. bvh_trace finds the nearest hit; with the meshes' tree, tri_tex its colour */ \
     "#ifdef ZL_LATE\n" \
     "ByteAddressBuffer g_bvh : register(t0, space3);\n" \
     "ByteAddressBuffer g_rtv : register(t1, space3);\n" \
+    /* what the last walk met, for Render visual 33: 1 it ran out of steps, 2 two surfaces at one place, 4 its stack was full */ \
+    "static uint g_rtf = 0u;\n" \
     /* the meshes' tree's own words for a triangle (ab: where they start, zonemesh.c: 10 words each): the three corners' uv (6), the \
      * three vertex colours (3: 0xAARRGGBB), and the texture (bits 0 to 15: its index + 1 in the frame words' list from byte 96, 0 \
      * none; bit 16: cut out by its alpha). The colour of the surface a ray found: vc the vertex colour there */ \
@@ -43,6 +66,8 @@
     "  uint stack[32];\n" \
     "  uint sp = 0u, node = 0u;\n" \
     "  float best = -1.0, tm = tmax;\n" \
+    "  bool done = false;\n" \
+    "  g_rtf = 0u;\n" \
     "  [loop] for (int it = 0; it < 640; ++it) {\n" \
     "    uint nb = node * 32u;\n" \
     "    float4 n0 = asfloat(g_bvh.Load4(nb)), n1 = asfloat(g_bvh.Load4(nb + 16u));\n" \
@@ -63,6 +88,12 @@
     "            float vv = dot(d, qv) * idt;\n" \
     "            float t = dot(e2, qv) * idt;\n" \
     "            if (uu >= 0.0 && vv >= 0.0 && uu + vv <= 1.0 && t > tmin && t < tm) {\n" \
+    /* (two surfaces at one place - a tile's triangle stored twice, a far copy laid over the near one - each a hair nearer than the \
+     * other from one ray to the next: the one first in the tree is taken, always. By which was nearer, the two traded places with \
+     * every small move of the ray, pixel to pixel and frame to frame, and that part of the reflection flickered. tm stays a hair \
+     * past the hit so the other is still met) */ \
+    "              float te = 0.002 + 0.0003 * t;\n" \
+    "              if (best > 0.0 && t > best - te) { g_rtf |= 2u; if (a + k > ht) continue; }\n" \
     "              /* (a cut-out's clear texel is no surface: the ray goes on) */\n" \
     /* (only a cut-out mesh's, bit 16, at the game's cut: the game draws every other mesh solid whatever its texture's alpha holds - \
      * Bastok Markets' stone and wood are clear over nine texels in ten, a mask for the decals blended over them - and a cut by it \
@@ -71,7 +102,7 @@
     "                float3 vcx;\n" \
     "                if (tri_tex(ab, a + k, float2(uu, vv), 0.0, vcx).a < 0.185) continue;\n" \
     "              }\n" \
-    "              best = t; tm = t;\n" \
+    "              best = t; tm = t + te;\n" \
     "              ht = a + k; hb = float2(uu, vv);\n" \
     "              if (first) return t;\n" \
     "            }\n" \
@@ -88,13 +119,14 @@
     "          node = na ? a : cb;\n" \
     "          pop = false;\n" \
     "        }\n" \
-    "      }\n" \
+    "      } else g_rtf |= 4u;\n" \
     "    }\n" \
     "    if (pop) {\n" \
-    "      if (sp == 0u) break;\n" \
+    "      if (sp == 0u) { done = true; break; }\n" \
     "      node = stack[--sp];\n" \
     "    }\n" \
     "  }\n" \
+    "  if (!done) g_rtf |= 1u;\n" \
     "  return best;\n" \
     "}\n" \
     "#endif\n" \
@@ -105,7 +137,7 @@
      * the zone's collision (rtbvh.h), in the world: g_rtv has the view's inverse to take the ray there, and says whether a tree is \
      * bound (word 16; word 17 where its triangles start) */ \
     "  bool rthit = false;\n" \
-    "  float3 rtc = float3(0.0, 0.0, 0.0);\n" \
+    "  float3 rtc = float3(0.0, 0.0, 0.0), rtd = float3(1.0, 0.0, 0.0);\n" \
     "  float rtw = 0.0;\n" \
     "#ifdef ZL_LATE\n" \
     /* (word 16 is 2 with the zone's meshes bound, refl_rt 2: they take every ray, not only the misses, so what the floor shows \
@@ -130,13 +162,25 @@
     /* (the meshes' tree starts the ray off the floor it leaves: ground laid over ground, a path or a drain's rim a hand above the \
      * pavement, is a surface the ray meets at once from beneath, a dark band that isn't there) */ \
     "      float th = bvh_trace(ow, dw, rti.x == 2u ? max(0.03 * dist + 0.05, 0.4) : 0.03 * dist + 0.05, rtmax, rti.y, rti.x == 2u ? rti.z : 0u, false, ht, hb);\n" \
+    "      uint rtf = g_rtf;\n" \
     /* (the meshes' tree has the zone and no one in it: where the screen found a surface nearer than the tree's, a player, a \
      * monster, a thing that moves, the screen's is shown) */ \
     /* (only a character: the screen's ray often finds the floor itself a hand away at a low angle, which is no one standing there, \
      * and took the tree's answer from half the floor) */ \
     /* (the characters' mask is bound only while the rain wets them, so it can't say which is one: a surface the screen found \
      * clearly nearer than the tree's, and well above the floor the ray left, is something standing in front of it) */ \
-    "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && th > 0.0 && tt < th - 0.3 && tt * dot(R, upn) > 0.4;\n" \
+    "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && (th <= 0.0 || tt < th - 0.3) && tt * dot(R, upn) > 0.4;\n" \
+    /* (... and not the zone's own: the screen's ray goes by the bumped normal, tilted by the floor's grooves, and found a wall's \
+     * foot or a step nearer than the tree's clean ray did - a speckle of the screen's reflection across the floor, each pixel \
+     * dithered anew every frame, which flickered. So the tree is asked for the very point the screen found: a surface of its own \
+     * there, and the tree's ray stands - its hit, or the sky where it met nothing: only what the tree hasn't is the screen's) */ \
+    "      if (nearer) {\n" \
+    "        float3 Hs = pos_at(0, h.xy) - P;\n" \
+    "        float hl = max(length(Hs), 1e-3), ht_ = 0.35 + 0.02 * hl;\n" \
+    "        uint ct; float2 cb_;\n" \
+    "        float3 hdw = (Hs.x * m0.xyz + Hs.y * m1.xyz + Hs.z * m2.xyz) / hl;\n" \
+    "        if (bvh_trace(ow, hdw, max(hl - ht_, 0.05), hl + ht_, rti.y, rti.z, true, ct, cb_) > 0.0) nearer = false;\n" \
+    "      }\n" \
     "      if (th > 0.0 && !nearer) {\n" \
     "        float lm = luma_at(px).x;\n" \
     "        rthit = true;\n" \
@@ -185,15 +229,25 @@
     "            if (nls > 0.0) {\n" \
     "              float3 sdw = u.sunsh.x * m0.xyz + u.sunsh.y * m1.xyz + u.sunsh.z * m2.xyz;\n" \
     "              uint st; float2 stb;\n" \
-    "              if (bvh_trace(ow + dw * th, sdw, 0.08 + 0.003 * th, 400.0, rti.y, rti.z, true, st, stb) > 0.0) sm = min(sm, u.smap2.z);\n" \
+    /* (from a little off the surface, along its own facing: from the point itself, a ray low over a curved wall met the wall's \
+     * next triangle at once, here and not a pixel on) */ \
+    "              float3 so = ow + dw * th + (nv.x * m0.xyz + nv.y * m1.xyz + nv.z * m2.xyz) * (0.04 + 0.002 * th);\n" \
+    "              if (bvh_trace(so, sdw, 0.05, 400.0, rti.y, rti.z, true, st, stb) > 0.0) sm = min(sm, u.smap2.z);\n" \
     "            }\n" \
     "            rtc *= max(lerp(1.0, sm, u.smap.x), 0.15);\n" \
     "          }\n" \
     /* the zone's fog over what is far, as the world has it */ \
     "          rtc = lerp(rtc, u.fogc.rgb, u.fogc.a > 0.0 ? min(1.0 - exp(-u.fogc.a * th), u.fogp.y) : 0.0);\n" \
     "          rtc = lerp(rtc, scol, sbw);\n" \
+    /* Render visual 33's colour of a pixel the tree's ray shows: red its own colour, yellow the screen's picture of the same \
+     * point, orange between the two (it turns with the camera); white two surfaces at one place, magenta the walk ran out of \
+     * steps, cyan its stack was full - what a part of the reflection that flickers is likely to be */ \
+    "          rtd = lerp(float3(1.0, 0.0, 0.0), float3(1.0, 1.0, 0.0), sbw);\n" \
+    "          if ((rtf & 2u) != 0u) rtd = float3(1.0, 1.0, 1.0);\n" \
+    "          if ((rtf & 4u) != 0u) rtd = float3(0.0, 1.0, 1.0);\n" \
+    "          if ((rtf & 1u) != 0u) rtd = float3(1.0, 0.0, 1.0);\n" \
     "        }\n" \
-    "      } else if (rti.x == 2u && th <= 0.0 && rti.w == 1u && !(h.w > 0.5 && h.w < 1.5)) {\n" \
+    "      } else if (rti.x == 2u && th <= 0.0 && rti.w == 1u && !nearer) {\n" \
     /* a ray that leaves the zone with the screen having nothing for it: the sky, which the tree hasn't: its colour as the sky pass \
      * has it (one texel, input 11: the lowest sky in the view's top, held while none is in view) */ \
     "        rthit = true;\n" \
@@ -202,6 +256,7 @@
     "        float el = saturate(dot(Rt, upn));\n" \
     "        rtw = smoothstep(0.0, 0.3, el) * lerp(1.0, 0.45, el);\n" \
     "        float3 sk = texel(11, int2(0, 0)).rgb;\n" \
+    "        rtd = (rtf & 1u) != 0u ? float3(1.0, 0.0, 1.0) : float3(0.0, 0.3, 1.0);\n" \
     "        rtc = lerp(sk, dot(sk, LUMA) * float3(0.75, 0.85, 1.1), 0.5 * el) * lerp(1.0, 0.6, el);\n" \
     "      }\n" \
     "    }\n" \

@@ -2210,7 +2210,7 @@ TIPS.rows = {
         .. 'Lower is crisper and grainier. 0 shades each frame on its own.',
     -- Reflections
     ['graphics.effects.refl'] = 'How strong reflections are on floors and flat ground, 1 to 10.',
-    ['graphics.effects.refl_wet'] = 'How wet and shiny the ground looks, 1 to 10.',
+    ['graphics.effects.refl_wet'] = 'How wet the ground looks, 0 to 10. Dry is soft and reflects only at low angles. Wet is darker, sharper and mirrors from above.',
     ['graphics.effects.refl_rough'] = 'How blurry the reflections are, 0 to 10.',
     ['graphics.effects.refl_dist'] = 'How far away reflections are drawn, in world units.',
     ['graphics.effects.refl_rt'] = 'How reflections are found.\n'
