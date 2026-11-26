@@ -186,6 +186,8 @@ The idea and the first look at it are thanks to Settra.
 
 `[language] playonline=` sets the game's text language: `1` Japanese, `2` English, `0` (default) the game's own setting. PlayOnline keeps it as `Language` (0 Japanese, 1 English) in `HKLM\SOFTWARE\PlayOnline[US|EU]\SquareEnix\PlayOnlineViewer\Settings`, which the bootloader reads and hands to the game; VanaCore serves that value the same way as `[ffxi]`'s. The PlayOnline region (which registry keys and polcore the bootloader uses) is separate: xiloader's `--lang JP|US|EU` on the command line, US by default.
 
+The log window's Maximum lines displayed (the game's Config > Windows > Window Settings) goes down to 1; the game stops it at 4, and its log window took anything under 4 as 24 (`src/core/game_config.cpp`). Minimum lines displayed already goes down to 0.
+
 #### Extended Gameplay window
 `[client] gamesettings.extended=1` (/vana: HUD > Main Menu: Config > Enable extended game settings) adds VanaCore's rows to the game's own Config > Gameplay window, under Music Volume; Gamma Adjustment and Inventory move down and the window grows. They're sliders like the game's (select one, Left and Right move it, select or cancel ends it), with their own help lines:
 

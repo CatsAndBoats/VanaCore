@@ -36,6 +36,18 @@ constexpr int kShadowsOff = 1;
 
 SetConfigFn g_set = nullptr;
 
+// The log window's "Maximum lines displayed" (Config > Windows > Window Settings) down to 1, not 4. Option 15's range is in
+// its table entry (+0x18 the least, +0x1C the most, 20, +0x20 its default, 8), which setConfig and a character's config
+// loading hold it to; and the window's Left key won't go under 4 by itself (conf5w1's handler, VA 0x10198229:
+// mov eax,[esi+2Ch]; cmp eax,4; jle; ... push 0Fh), the 4 at +5.
+constexpr int kLogLinesOption = 15;
+constexpr std::size_t kLeast = 0x18;
+constexpr std::int32_t kLogLinesGame = 4, kLogLinesLeast = 1;
+constexpr char kLogLinesLeft[] = "8B 46 2C 83 F8 04 7E ?? 8B 16 48 50 6A 0F 8B CE 89 46 2C";
+// And the log window's own setter of its most lines (VA 0x101618E0, both windows) makes anything over 24 or under 4 24:
+// mov ax,[esp+4]; cmp ax,18h; jg; cmp ax,4; jl; mov [ecx+4Eh],ax ... mov word [ecx+4Eh],18h. The 4 at +0xD.
+constexpr char kLogLinesSet[] = "66 8B 44 24 04 66 3D 18 00 7F 0C 66 3D 04 00 7C 06 66 89 41 4E";
+
 const wchar_t* shadows_name(int value)
 {
     return value == 0 ? L"Normal" : value == 1 ? L"Off" : value == 2 ? L"High" : L"?";
@@ -61,6 +73,29 @@ std::int32_t field(const std::vector<std::uint8_t>& table, int option, std::size
     return value;
 }
 
+void log_lines_least(std::uintptr_t at, std::uintptr_t offset, const wchar_t* what)
+{
+    auto* least = reinterpret_cast<std::uint8_t*>(at + offset);
+    DWORD old = 0;
+    if (at == 0 || *least != kLogLinesGame || !VirtualProtect(least, 1, PAGE_EXECUTE_READWRITE, &old)) {
+        log::write(L"Game config: %ls wasn't found: the log's maximum lines stop at 4", what);
+        return;
+    }
+    *least = static_cast<std::uint8_t>(kLogLinesLeast);
+    VirtualProtect(least, 1, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), least, 1);
+}
+
+// Option 15's least lowered in a (new) table of options
+void log_lines_range(std::uintptr_t table)
+{
+    const std::uintptr_t entry = table + kLogLinesOption * kEntry, at = entry + kLeast;
+    std::int32_t number = 0, least = 0;
+    if (read(&number, entry + 4, sizeof number) && number == kLogLinesOption && read(&least, at, sizeof least) &&
+        least == kLogLinesGame)
+        *reinterpret_cast<std::int32_t*>(at) = kLogLinesLeast;
+}
+
 void find()
 {
     g_searched = true;
@@ -72,6 +107,8 @@ void find()
     }
     std::memcpy(&g_config_global, reinterpret_cast<const void*>(code + 2), sizeof g_config_global);
     g_set = reinterpret_cast<SetConfigFn>(scan::find(game, kSetConfig));
+    log_lines_least(scan::find(game, kLogLinesLeft), 5, L"the Window Settings' Left key for the log's maximum lines");
+    log_lines_least(scan::find(game, kLogLinesSet), 0xD, L"the log window's setter of its maximum lines");
     log::write(L"Game config: the game's options hang from FFXiMain.dll+0x%X; changes are logged",
                static_cast<unsigned>(g_config_global - reinterpret_cast<std::uintptr_t>(game)));
 }
@@ -113,6 +150,7 @@ void on_frame()
     if (!read(bytes.data(), table, bytes.size()))
         return;
     if (table != g_table || g_last.size() != bytes.size()) {
+        log_lines_range(table);
         // a new table (the game made its options): the first look, said once
         if (g_table == 0) {
             int saved = 0;
