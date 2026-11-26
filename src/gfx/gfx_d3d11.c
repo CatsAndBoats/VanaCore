@@ -5065,12 +5065,16 @@ static void up_replay(void)
     g_up_nheld = 0, g_up_len = 0;
 }
 
+#define SHOT_UP g_up
+#include "gfx_scene_shot.h" /* gfx_scene_shot: the scene before the interface, for a screenshot without it */
+
 /* Before each draw: the noted scene through FSR once it's all drawn - at the first draw reading it (the composite onto
  * the back buffer); the interface drawn into it before then held, and drawn over FSR's output (at its size) after. 1
  * when up_draw_over draws this draw, 2 when it's held, 0 to draw it as usual. A 3D draw into the scene's target after
  * FSR ran ends its output's use (the scene read as it is from then). */
 static int up_on_draw(const GfxDraw* d)
 {
+    shot_on_draw(d);
     if (g_up.pend_serial == g_serial && g_up.pend_color)
     {
         if (g_rt == g_up.pend_color && d->overlay && up_hold(d))
@@ -5086,6 +5090,7 @@ static int up_on_draw(const GfxDraw* d)
         {
             g_up.pend_serial = 0;
             up_run();
+            shot_after_run();
             g_up.replay_depth = g_up.out_serial == g_serial ? up_depth_up() : NULL;
             up_replay();
         }
@@ -5632,6 +5637,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
     const int fsr_on = g_up.quality >= 0 && !up_gave_up(); /* FSR, last (up_frame) */
     const int gathers = fsr_on && !up_fsr1();              /* ... AMD's, jittered, gathering the frames: not FSR 1's */
     int aa = g_fxs.aa != 0.0f && !gathers;                 /* AMD's FSR smooths edges itself; FSR 1 wants them smoothed first */
+    shot_scene(color, s);
     if (!fsr_on && g_up.out)
     {
         up_release(); /* FSR off: its textures let go (made again when it's back) */

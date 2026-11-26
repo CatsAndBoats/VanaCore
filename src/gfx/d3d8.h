@@ -172,6 +172,7 @@ typedef struct WaterSettings
      * the scene's each way (water.mirror.scale), how far from the camera what's mirrored reaches, in yalms (water.mirror.reach,
      * 0 all of it), and how far the waves push it about (water.mirror.waves) */
     float mirror, mirror_scale, mirror_reach, mirror_waves;
+    int tris; /* 1: the triangles debug view ([graphics.effects] debug=34, d3d8_water_tris.h) */
 } WaterSettings;
 void d3d8_set_water(const WaterSettings* settings);
 void d3d8_set_water_zones_off(const uint16_t* zones, unsigned n);

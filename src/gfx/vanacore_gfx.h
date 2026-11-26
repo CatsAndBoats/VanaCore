@@ -389,6 +389,7 @@ typedef struct VanaWater
     /* the world mirrored in the water: its strength (water.mirror, 0 off), its size as a share of the scene's (water.mirror.scale),
      * how far what's mirrored reaches in yalms (water.mirror.reach, 0 all) and how far the waves push it about (water.mirror.waves) */
     float mirror, mirror_scale, mirror_reach, mirror_waves;
+    int tris; /* 1: the water's triangles, each a flat colour, its edges over them ([graphics.effects] debug=34) */
 } VanaWater;
 void vanacore_gfx_set_water(const VanaWater* settings);
 /* The zones (the game's zone ids) VanaCore's water is never drawn in, the game's own left there as with water off; copied, and
@@ -878,6 +879,15 @@ int vanacore_gfx_mover_box(int slot, float* box);
 /* That layer as drawn this frame (BGRA, premultiplied alpha) into pixels with pitch, for a screenshot
  * with VanaCore's drawing (NULL pixels: only its size). 0 when nothing was drawn into it. */
 int vanacore_gfx_ui_layer(uint32_t* w, uint32_t* h, void* pixels, uint32_t pitch);
+
+/* Game thread. A screenshot of the 3D scene without the game's interface (its chat log, menus and windows, the names over
+ * heads) or VanaCore's drawing: the scene as the frame shows it - the game's own effects, VanaCore's, the upscaler, the colour
+ * grade - copied just before the interface is drawn. vanacore_gfx_scene_shot_want(1) asks for the next frame's (it stays asked
+ * for while frames have no scene: the title's menus, a loading screen; 0 takes the asking back). vanacore_gfx_scene_shot then
+ * says 1 once it's taken, with its size and Direct3D 8 format (D3DFMT_X8R8G8B8 or A8R8G8B8: BGRX; a 16-bit one in a 16-bit
+ * mode); with pixels (pitch bytes a row, 4 a pixel at most) it also reads it and lets it go. */
+void vanacore_gfx_scene_shot_want(int on);
+int vanacore_gfx_scene_shot(uint32_t* w, uint32_t* h, uint32_t* d3dfmt, void* pixels, uint32_t pitch);
 
 /* Game thread. Rectangles of the game's picture kept over everything drawn after them (the auto-translate list and the
  * windows over fancychat's chat, over addons' drawing): each take copies one from the back buffer (x, y, w, h in the

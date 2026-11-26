@@ -37,7 +37,9 @@ static void read_water(When when)
     // is its debug view, the water found drawn in colour; water.log=1 logs every map model the game loads with the directories above it
     water.detect = static_cast<int>(number(L"water.detect", 2.0f, 0.0f, 2.0f) + 0.5f);
     const std::wstring view = effect_enabled(L"debug") ? read(L"graphics.effects", L"debug") : std::wstring();
-    water.view = !view.empty() && std::lround(std::wcstof(view.c_str(), nullptr)) == 11 ? 1 : 0;
+    const long view_n = view.empty() ? 0 : std::lround(std::wcstof(view.c_str(), nullptr));
+    water.view = view_n == 11 ? 1 : 0;
+    water.tris = view_n == 34 ? 1 : 0; // the water's triangles, each a flat colour, its edges over them (d3d8_water_tris.h)
     water.probe = static_cast<int>(number(L"water.probe", 0.0f, 0.0f, 3.0f)); // what the pass reads from the scene (never saved)
     water::set_log(flag(L"water.log", false));
     water.log = flag(L"water.log", false) ? 1 : 0;

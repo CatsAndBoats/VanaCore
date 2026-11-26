@@ -22,6 +22,8 @@
 #include "graphics.hpp"
 #include "log.hpp"
 
+#include "../gfx/vanacore_gfx.h"
+
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "ole32.lib")
 
@@ -55,6 +57,53 @@ void report(std::string message)
     g_results.push_back(std::move(message));
 }
 
+// A row of a Direct3D 8 surface as 24-bit BGR; false for a format a back buffer or the scene's target doesn't have.
+bool row_to_bgr(DWORD format, const BYTE* row, UINT width, BYTE* out)
+{
+    for (UINT x = 0; x < width; ++x, out += 3) {
+        switch (format) {
+        case d3d8::kFormatX8R8G8B8:
+        case d3d8::kFormatA8R8G8B8:
+            std::memcpy(out, row + x * 4, 3); // B, G, R
+            break;
+        case d3d8::kFormatR5G6B5: {
+            const std::uint16_t v = reinterpret_cast<const std::uint16_t*>(row)[x];
+            out[0] = static_cast<BYTE>((v & 31) * 255 / 31);
+            out[1] = static_cast<BYTE>(((v >> 5) & 63) * 255 / 63);
+            out[2] = static_cast<BYTE>(((v >> 11) & 31) * 255 / 31);
+            break;
+        }
+        case d3d8::kFormatX1R5G5B5:
+        case d3d8::kFormatA1R5G5B5: {
+            const std::uint16_t v = reinterpret_cast<const std::uint16_t*>(row)[x];
+            out[0] = static_cast<BYTE>((v & 31) * 255 / 31);
+            out[1] = static_cast<BYTE>(((v >> 5) & 31) * 255 / 31);
+            out[2] = static_cast<BYTE>(((v >> 10) & 31) * 255 / 31);
+            break;
+        }
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
+// `frame` made width x height from a surface's rows, `pitch` bytes apart; false and why for a format that isn't read.
+bool fill(Frame& frame, DWORD format, UINT width, UINT height, const BYTE* bits, size_t pitch, std::string& error)
+{
+    frame.width = width;
+    frame.height = height;
+    frame.stride = (width * 3 + 3) & ~3u;
+    frame.pixels.assign(static_cast<size_t>(frame.stride) * height, 0);
+    for (UINT y = 0; y < height; ++y) {
+        if (!row_to_bgr(format, bits + y * pitch, width, frame.pixels.data() + static_cast<size_t>(y) * frame.stride)) {
+            error = "the picture's format (" + std::to_string(format) + ") isn't supported";
+            return false;
+        }
+    }
+    return true;
+}
+
 // Copies the back buffer into `frame`. Render targets can't be locked, so it goes through a system
 // memory surface of the same format.
 bool capture(void* device, Frame& frame, std::string& error)
@@ -86,47 +135,11 @@ bool capture(void* device, Frame& frame, std::string& error)
         error = "the frame couldn't be read";
         return false;
     }
-    frame.width = desc.width;
-    frame.height = desc.height;
-    frame.stride = (desc.width * 3 + 3) & ~3u;
-    frame.pixels.assign(static_cast<size_t>(frame.stride) * desc.height, 0);
-    bool supported = true;
-    for (UINT y = 0; y < desc.height && supported; ++y) {
-        const BYTE* row = static_cast<const BYTE*>(locked.bits) + static_cast<size_t>(y) * locked.pitch;
-        BYTE* out = frame.pixels.data() + static_cast<size_t>(y) * frame.stride;
-        for (UINT x = 0; x < desc.width; ++x, out += 3) {
-            switch (desc.format) {
-            case d3d8::kFormatX8R8G8B8:
-            case d3d8::kFormatA8R8G8B8:
-                std::memcpy(out, row + x * 4, 3); // B, G, R
-                break;
-            case d3d8::kFormatR5G6B5: {
-                const std::uint16_t v = reinterpret_cast<const std::uint16_t*>(row)[x];
-                out[0] = static_cast<BYTE>((v & 31) * 255 / 31);
-                out[1] = static_cast<BYTE>(((v >> 5) & 63) * 255 / 63);
-                out[2] = static_cast<BYTE>(((v >> 11) & 31) * 255 / 31);
-                break;
-            }
-            case d3d8::kFormatX1R5G5B5:
-            case d3d8::kFormatA1R5G5B5: {
-                const std::uint16_t v = reinterpret_cast<const std::uint16_t*>(row)[x];
-                out[0] = static_cast<BYTE>((v & 31) * 255 / 31);
-                out[1] = static_cast<BYTE>(((v >> 5) & 31) * 255 / 31);
-                out[2] = static_cast<BYTE>(((v >> 10) & 31) * 255 / 31);
-                break;
-            }
-            default:
-                supported = false;
-            }
-        }
-    }
+    const bool supported = fill(frame, desc.format, desc.width, desc.height, static_cast<const BYTE*>(locked.bits),
+                                static_cast<size_t>(locked.pitch), error);
     call(copy, slot::SurfaceUnlockRect);
     call<ULONG>(copy, slot::Release);
-    if (!supported) {
-        error = "the back buffer's format (" + std::to_string(desc.format) + ") isn't supported";
-        return false;
-    }
-    return true;
+    return supported;
 }
 
 // Writes `frame` to `path` as a PNG. Runs on its own thread.
@@ -426,17 +439,81 @@ void run_captures(void* device, bool overlays)
         each.done(ok, frame.width, frame.height, frame.stride, frame.pixels, error);
 }
 
+// capture()'s requests for the scene without the game's interface (ui false). The renderer copies a frame's scene just before
+// the interface is drawn (vanacore_gfx_scene_shot): asked for at one Present, taken while the next frame is drawn, read at that
+// frame's Present. A screen with no 3D scene (the title's menus, a loading screen) never has one: given up after kSceneWait.
+std::vector<Captured> g_scene_captures; // under g_captures_lock
+std::atomic<bool> g_scene_waiting{false};
+ULONGLONG g_scene_asked = 0;           // when the renderer was asked (the game's thread); 0: not yet
+constexpr ULONGLONG kSceneWait = 3000; // milliseconds
+
+// The renderer's copy into `frame`, once there is one. True when the wait is over: `ok` and `error` then say how.
+bool take_scene(Frame& frame, bool& ok, std::string& error)
+{
+    ok = false;
+    if (!graphics::active()) {
+        error = "the scene without the game's interface needs renderer=d3d12 or d3d11";
+        return true;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (g_scene_asked == 0) {
+        vanacore_gfx_scene_shot_want(1);
+        g_scene_asked = now;
+        return false;
+    }
+    uint32_t width = 0, height = 0, format = 0;
+    if (!vanacore_gfx_scene_shot(&width, &height, &format, nullptr, 0)) {
+        if (now - g_scene_asked < kSceneWait)
+            return false;
+        vanacore_gfx_scene_shot_want(0);
+        g_scene_asked = 0;
+        error = "no 3D scene was drawn in 3 seconds (a screen that is all interface?): take it with ui true";
+        return true;
+    }
+    g_scene_asked = 0;
+    const size_t pitch = static_cast<size_t>(width) * 4; // (two bytes a pixel in a 16-bit mode: room for either)
+    std::vector<BYTE> rows(pitch * height, 0);
+    vanacore_gfx_scene_shot(&width, &height, &format, rows.data(), static_cast<uint32_t>(pitch));
+    ok = fill(frame, format, width, height, rows.data(), pitch, error);
+    return true;
+}
+
+void run_scene_captures()
+{
+    if (!g_scene_waiting)
+        return;
+    Frame frame;
+    std::string error;
+    bool ok = false;
+    if (!take_scene(frame, ok, error))
+        return;
+    std::vector<Captured> due;
+    {
+        const std::lock_guard lock(g_captures_lock);
+        due.swap(g_scene_captures);
+        g_scene_waiting = false;
+    }
+    for (const Captured& done : due)
+        done(ok, frame.width, frame.height, frame.stride, frame.pixels, error);
+}
+
 } // namespace
 
-void capture(bool overlays, Captured done)
+void capture(bool overlays, Captured done, bool ui)
 {
     const std::lock_guard lock(g_captures_lock);
-    g_captures.push_back({overlays, std::move(done)});
-    g_capture_waiting = true;
+    if (ui) {
+        g_captures.push_back({overlays, std::move(done)});
+        g_capture_waiting = true;
+    } else {
+        g_scene_captures.push_back(std::move(done));
+        g_scene_waiting = true;
+    }
 }
 
 void before_overlay(void* device)
 {
+    run_scene_captures();
     run_captures(device, false);
     if (g_pending == 0) {
         g_pending = -1;

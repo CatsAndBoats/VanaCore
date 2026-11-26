@@ -351,6 +351,11 @@ int gfx_scene_snapshot(GfxTex* color, GfxTex** colour_copy, GfxTex** depth_copy,
     quads_flush();
     return g_backend->scene_snapshot(color, colour_copy, depth_copy, w, h);
 }
+void gfx_scene_shot_want(int on) { g_backend->scene_shot_want(on); }
+int gfx_scene_shot(uint32_t* w, uint32_t* h, uint32_t* d3dfmt, void* pixels, uint32_t pitch)
+{
+    return g_backend->scene_shot(w, h, d3dfmt, pixels, pitch);
+}
 GfxTex* gfx_scene_mirror(const GfxTex* color, const GfxScene* s, float level, float scale, float reach)
 {
     quads_flush();

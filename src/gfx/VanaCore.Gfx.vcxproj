@@ -99,6 +99,7 @@
     <ClInclude Include="d3d8_water_mirror.h" />
     <ClInclude Include="d3d8_water_sea.h" />
     <ClInclude Include="d3d8_water_ocean.h" />
+    <ClInclude Include="d3d8_water_tris.h" />
     <ClInclude Include="d3d8_chatfont.h" />
     <ClInclude Include="d3d8_chatfont_big.h" />
     <ClInclude Include="d3d8_chatfont_report.h" />
@@ -130,6 +131,7 @@
     <ClInclude Include="gfx_d3d12_floors.h" />
     <ClInclude Include="gfx_d3d12_rt.h" />
     <ClInclude Include="gfx_d3d12_rtfx.h" />
+    <ClInclude Include="gfx_d3d12_mo_fill.h" />
     <ClInclude Include="gfx_d3d12_rt_hlsl.h" />
     <ClInclude Include="gfx_d3d12_copies.h" />
     <ClInclude Include="gfx_d3d12_measure.h" />
@@ -144,6 +146,7 @@
     <ClInclude Include="gfx_rename.h" />
     <ClInclude Include="gfx_hlsl.h" />
     <ClInclude Include="gfx_shared.h" />
+    <ClInclude Include="gfx_scene_shot.h" />
     <ClInclude Include="grass_centre.h" />
     <ClInclude Include="grass_keep.h" />
     <ClInclude Include="grass_moss.h" />

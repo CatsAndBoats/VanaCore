@@ -8028,7 +8028,7 @@ M.DEBUG_VIEW = needs_dx(choice('Debug view', FX, 'debug', '0', {
     { '3', 'Bloom' }, { '8', 'Bounce light' }, { '7', 'Depth of field' }, { '2', 'Fog' }, { '9', 'Glow effects' }, { '4', 'God rays' },
     { '6', 'Ink lines' }, { '1', 'Occlusion' },
     { header = 'Rain & Water' },
-    { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '17', 'Reflections' }, { '33', 'Ray-traced reflections' }, { '11', 'Water' },
+    { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '17', 'Reflections' }, { '33', 'Ray-traced reflections' }, { '11', 'Water' }, { '34', 'Water triangles' },
     { header = 'Rings' },
     { '32', 'Rain rings' }, { '15', 'Shadow rings' },
     { header = 'Shadows' },

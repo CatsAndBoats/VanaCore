@@ -43,7 +43,7 @@ void gfx_scene_rt_geometry(const void* data, uint32_t bytes, uint32_t node_bytes
 /* before fx_ssr: its two root views, the tree (or, with none, the frame's words again, which it never reads) and the frame's
  * words: the view's inverse (16 floats), then 1 (the collision's tree) or 2 (the meshes') and where the triangles start when a
  * tree is bound, else 0. Both are always set while the reflections run, since the pipeline reads them under a branch */
-static void rt_bind(ID3D12GraphicsCommandList* l, const float* view, int sky_ok)
+static void rt_bind(ID3D12GraphicsCommandList* l, const GfxScene* s, int sky_ok)
 {
     const uint32_t nslot = g_rtx.tex ? g_rtx.ntex : 0;
     Alloc a = ring(96 + 4 * nslot, 16);
@@ -52,7 +52,7 @@ static void rt_bind(ID3D12GraphicsCommandList* l, const float* view, int sky_ok)
     memset(a.cpu, 0, 96 + 4 * nslot);
     float inv[16];
     const int k = g_fxs.refl_rt >= 2.0f && g_rtx.bvh[1] ? 1 : 0;
-    const int on = g_fxs.refl_rt > 0.0f && g_rtx.bvh[k] && mat_inverse(inv, view);
+    const int on = g_fxs.refl_rt > 0.0f && g_rtx.bvh[k] && mat_inverse(inv, s->view);
     if (on)
     {
         memcpy(a.cpu, inv, 64);
@@ -64,6 +64,13 @@ static void rt_bind(ID3D12GraphicsCommandList* l, const float* view, int sky_ok)
             const float l = sqrtf(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
             for (int j = 0; j < 3; ++j)
                 ((float*)a.cpu)[20 + j] = l > 1e-6f ? up[j] / l : 0.0f;
+        }
+        /* the scene's ambient light (word 23: 10 bits a channel, 0 to 2), for the light on what a ray finds as the game has it */
+        {
+            uint32_t w = 0;
+            for (int j = 0; j < 3; ++j)
+                w |= (uint32_t)(fminf(fmaxf(s->ambient[j], 0.0f), 2.0f) * 511.0f + 0.5f) << (10 * j);
+            ((uint32_t*)a.cpu)[23] = w;
         }
         ((uint32_t*)a.cpu)[16] = 1u + (uint32_t)k, ((uint32_t*)a.cpu)[17] = g_rtx.node_bytes[k], ((uint32_t*)a.cpu)[19] = sky_ok ? 1u : 0u;
         if (k)

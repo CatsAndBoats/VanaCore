@@ -303,6 +303,7 @@ static void water_view(GfxDraw* d, uint32_t rgb)
         d->pipe.src = 5, d->pipe.dst = 6, d->pipe.op = 1; /* SRCALPHA, INVSRCALPHA, ADD */
 }
 #include "d3d8_water_light.h" /* the sun, the moon and the ambient the water is shaded by (water_lights, water_sun, water_shade) */
+#include "d3d8_water_tris.h" /* the triangles debug view (water_tris_draw; debug=34) */
 
 
 /* a draw the pass can draw again at the scene's end: every stream it reads in a static buffer of the game's, its indices too (the
@@ -1289,7 +1290,7 @@ static void water_ground_pass(const GfxScene* s, int copies, GfxTex* colour_copy
             continue;
         d.buf[0] = g_bake_buf, d.buf_off[0] = b->at * BAKE_STRIDE * 4, d.size[0] = b->n * BAKE_STRIDE * 4;
         d.count = b->n / 3;
-        gfx_draw(&d);
+        water_tris_draw(&d);
         ++drawn, tris += d.count;
     }
     static uint64_t said_ns;
@@ -1356,7 +1357,7 @@ static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s)
             water_mirror_bind(d);
             rain_water_bind(d);
         }
-        gfx_draw(d);
+        water_tris_draw(d);
     }
     if (floors)
         water_ground_pass(s, copies, colour_copy, depth_copy, w, h);

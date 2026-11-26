@@ -570,9 +570,11 @@ static void emit_normal_relight(Sb* b, int nmap)
  * are lit here. */
 static void emit_fs_signature(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
 {
-    (void)k;
     int pix = pixel_lit(vk);
-    sb_printf(b, depth_only(vk) ? "void fs_main(VOut %s) {\n" : "float4 fs_main(VOut %s) : SV_Target {\n", pix ? "vin0" : "vin");
+    /* VanaCore's water takes its triangle's number too, for the triangles debug view (emit_fs_tail) */
+    const int wtri = k->water && !k->prog && !vk->prog && !vk->rhw && !depth_only(vk);
+    sb_printf(b, depth_only(vk) ? "void fs_main(VOut %s) {\n" : "float4 fs_main(VOut %s%s) : SV_Target {\n", pix ? "vin0" : "vin",
+        wtri ? ", uint wprim : SV_PrimitiveID" : "");
     if (pix)
     {
         sb_printf(b, "  VOut vin = vin0;\n  float3 nm_N = float3(0.0, 0.0, 0.0);\n%s  {\n  float3 N = vin.n * (rsqrt(max(dot(vin.n, vin.n), 1e-20)) * %s);\n"
@@ -746,6 +748,18 @@ static void emit_fs_tail(Sb* b, const GfxFsKey* k, const GfxVsKey* vk, const cha
         emit_pool(b, col);
     if (k->hfog && !k->prog && !vk->prog && !vk->rhw) /* after the pool, as the composite lays its fog after it */
         emit_hfog(b, col, k->hfog);
+    /* VanaCore's water's triangles debug view (d3d8_water_tris.h: texture matrix 2's byte 15): 1 each triangle a flat colour of its
+     * own by its number, shaded by its face's slope, opaque and unfogged; 2 its edges (the wireframe drawn over it) */
+    if (wfog)
+        sb_printf(b,
+            "  { float wtri = u.texm[2][3][3];\n"
+            "    if (wtri > 1.5) return float4(0.02, 0.02, 0.02, 1.0);\n"
+            "    if (wtri > 0.5) {\n"
+            "      uint wh = wprim * 2654435761u; wh ^= wh >> 15; wh *= 2246822519u; wh ^= wh >> 13;\n"
+            "      float3 wc = 0.3 + 0.7 * float3(float(wh & 255u), float((wh >> 8) & 255u), float((wh >> 16) & 255u)) / 255.0;\n"
+            "      float3 wn = cross(ddx(vin.wp), ddy(vin.wp));\n"
+            "      float wl = dot(wn, wn) > 1e-20 ? abs(normalize(wn).y) : 1.0;\n"
+            "      return float4(wc * (0.4 + 0.6 * wl), 1.0); } }\n");
     sb_printf(b, "  return %s;\n}\n", col);
 }
 

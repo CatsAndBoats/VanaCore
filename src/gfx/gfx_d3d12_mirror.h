@@ -39,6 +39,16 @@ static void mirror_blend(D3D12_RENDER_TARGET_BLEND_DESC* c)
     c->SrcBlendAlpha = c->DestBlendAlpha = D3D12_BLEND_ZERO;
 }
 
+/* ... and an effect's, drawn again with its own blend for the reflections (gfx_d3d12_rtfx.h): the alpha it leaves is how much of
+ * the pixel it covers - all of its own for one blended over the world (onto 1 - its alpha), none for one that adds light - where
+ * D3D8's one blend for colour and alpha left its alpha squared */
+static void mirror_cover(D3D12_RENDER_TARGET_BLEND_DESC* c)
+{
+    const int over = c->DestBlend == D3D12_BLEND_INV_SRC_ALPHA;
+    c->SrcBlendAlpha = over ? D3D12_BLEND_ONE : D3D12_BLEND_ZERO, c->DestBlendAlpha = over ? D3D12_BLEND_INV_SRC_ALPHA : D3D12_BLEND_ONE;
+    c->BlendOpAlpha = D3D12_BLEND_OP_ADD;
+}
+
 static void mirror_release(void)
 {
     gfx_tex_destroy(g_mir.color), gfx_tex_destroy(g_mir.depth);

@@ -2185,7 +2185,8 @@ json::Value lua(const json::Value& args)
 
 json::Value screenshot_tool(const json::Value& args)
 {
-    const bool overlays = arg_bool(args, "overlays", true);
+    const bool ui = arg_bool(args, "ui", true); // false: the 3D scene before the game's interface, VanaCore's drawing out too
+    const bool overlays = ui && arg_bool(args, "overlays", true);
     const UINT max_width = static_cast<UINT>(arg_int(args, "max_width", 1280, 160, 3840));
     const bool jpeg = lower(arg_string(args, "format", "jpeg")) != "png";
     struct Shot {
@@ -2214,7 +2215,7 @@ json::Value screenshot_tool(const json::Value& args)
         s->error = std::move(error);
         s->done = true;
         SetEvent(s->event);
-    });
+    }, ui);
     const bool arrived = WaitForSingleObject(shot->event, 5000) == WAIT_OBJECT_0;
     CloseHandle(shot->event);
     const std::lock_guard lock(shot->lock);
@@ -2238,8 +2239,9 @@ json::Value screenshot_tool(const json::Value& args)
     image["mimeType"] = jpeg ? "image/jpeg" : "image/png";
     json::Value& caption = result["content"].push(json::Value::make_object());
     caption["type"] = "text";
-    caption["text"] = strf("The game's screen: %ux%u, shown at %ux%u%s", shot->width, shot->height, out_width, out_height,
-                             overlays ? ", with VanaCore's drawing" : ", without VanaCore's drawing");
+    caption["text"] = strf("%s: %ux%u, shown at %ux%u%s", ui ? "The game's screen" : "The 3D scene before the game's interface",
+                             shot->width, shot->height, out_width, out_height,
+                             !ui ? "" : overlays ? ", with VanaCore's drawing" : ", without VanaCore's drawing");
     result["isError"] = false;
     return result;
 }
@@ -2413,8 +2415,10 @@ const std::vector<Tool>& all_tools()
           {"addon", "string", "a loaded addon to run it in (default mcp, VanaCore's own state for this)"},
           {"depth", "integer", "how deep to show returned tables (default 2)"}},
          &lua, false},
-        {"screenshot", "Screenshot", "The game's screen, as a picture.",
-         {{"overlays", "boolean", "with VanaCore's own drawing (addons' text, windows), default true"},
+        {"screenshot", "Screenshot", "The game's screen, as a picture. ui false: the 3D scene alone, as the frame shows it (effects, upscaler, "
+         "colour grade) just before the game draws its interface, so no chat log, menu or name covers it (renderer d3d12 or d3d11).",
+         {{"ui", "boolean", "with the game's interface, default true; false leaves VanaCore's drawing out too, and fails with no 3D scene"},
+          {"overlays", "boolean", "with VanaCore's own drawing (addons' text, windows), default true"},
           {"max_width", "integer", "scaled to at most this wide (default 1280)"},
           {"format", "string", "default jpeg", false, "jpeg|png"}},
          &screenshot_tool, true},

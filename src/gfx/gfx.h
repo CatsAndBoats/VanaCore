@@ -509,6 +509,14 @@ void gfx_scene_world_depth(GfxTex* depth);
  * the target itself. The back end keeps the two (made again at another size or format); w and h are the target's size. 0 when
  * there is nothing to copy (no device, a target not drawn with a depth of its own size): the water is then drawn without them. */
 int gfx_scene_snapshot(GfxTex* color, GfxTex** colour_copy, GfxTex** depth_copy, uint32_t* w, uint32_t* h);
+/* A screenshot of the scene without the game's interface (gfx_scene_shot.h; the MCP server's screenshot tool with ui false).
+ * gfx_scene_shot_want(1) asks for one: the back end copies the next frame's scene as the frame shows it - the game's own effects
+ * in it, made larger by the upscaler, graded - just before the game's interface goes into it or over it (the names over heads,
+ * then its windows on the back buffer); a frame without a scene takes none, and it stays asked for until gfx_scene_shot_want(0).
+ * gfx_scene_shot gives the copy: its size and D3D format (0 while none has been taken), and with pixels its rows in D3D's layout
+ * (as gfx_tex_read; waits for the GPU), after which it's let go. */
+void gfx_scene_shot_want(int on);
+int gfx_scene_shot(uint32_t* w, uint32_t* h, uint32_t* d3dfmt, void* pixels, uint32_t pitch);
 /* The world mirrored in a level of water, for VanaCore's water pass (d3d8_water_mirror.h): this frame's opaque world draws, as
  * the back end keeps them for the sun's maps (its casters), drawn again from the scene's camera mirrored about the level plane
  * y = level (the world's up is -y) into a target `scale` times the scene's viewport each way: what stands above the level alone

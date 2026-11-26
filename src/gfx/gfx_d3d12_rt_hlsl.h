@@ -26,17 +26,18 @@
     "  if (tx == 0u) return float4(0.5, 0.5, 0.5, 1.0);\n" \
     "  uint sl = g_rtv.Load(96u + (tx - 1u) * 4u);\n" \
     "  if (sl == 0u) return float4(0.5, 0.5, 0.5, 1.0);\n" \
-    "  return tx2[NonUniformResourceIndex(sl)].SampleLevel(smp[fsi[0].x], uv - floor(uv), lod);\n" \
+    "  return rt_tex(sl, uv - floor(uv), lod);\n" \
     "}\n" \
     /* the nearest hit along the ray, children taken nearest first, a found hit shortening the ray so the far boxes are skipped; the \
-     * first triangle met is not the nearest, and a far wall's colour showed through a near one */ \
+     * first triangle met is not the nearest, and a far wall's colour showed through a near one. With `first`, any hit at all ends it \
+     * (a ray toward the sun, which only asks whether something stands in the way) */ \
     "float box_t(float4 n0, float4 n1, float3 o, float3 inv, float tmin, float tm) {\n" \
     "  float3 ta = (n0.xyz - o) * inv, tc = (n1.xyz - o) * inv;\n" \
     "  float3 tn = min(ta, tc), tf = max(ta, tc);\n" \
     "  float te = max(max(tn.x, tn.y), max(tn.z, tmin)), tl = min(min(tf.x, tf.y), min(tf.z, tm));\n" \
     "  return te <= tl ? te : 1e30;\n" \
     "}\n" \
-    "float bvh_trace(float3 o, float3 d, float tmin, float tmax, uint tb, uint ab, out uint ht, out float2 hb) {\n" \
+    "float bvh_trace(float3 o, float3 d, float tmin, float tmax, uint tb, uint ab, bool first, out uint ht, out float2 hb) {\n" \
     "  ht = 0u; hb = float2(0.0, 0.0);\n" \
     "  float3 inv = 1.0 / (d + float3(d.x == 0.0 ? 1e-8 : 0.0, d.y == 0.0 ? 1e-8 : 0.0, d.z == 0.0 ? 1e-8 : 0.0));\n" \
     "  uint stack[32];\n" \
@@ -63,12 +64,16 @@
     "            float t = dot(e2, qv) * idt;\n" \
     "            if (uu >= 0.0 && vv >= 0.0 && uu + vv <= 1.0 && t > tmin && t < tm) {\n" \
     "              /* (a cut-out's clear texel is no surface: the ray goes on) */\n" \
+    /* (only a cut-out mesh's, bit 16, at the game's cut: the game draws every other mesh solid whatever its texture's alpha holds - \
+     * Bastok Markets' stone and wood are clear over nine texels in ten, a mask for the decals blended over them - and a cut by it \
+     * left holes in every wall) */ \
     "              if (ab != 0u && (g_bvh.Load(ab + (a + k) * 40u + 36u) & 0x10000u) != 0u) {\n" \
     "                float3 vcx;\n" \
     "                if (tri_tex(ab, a + k, float2(uu, vv), 0.0, vcx).a < 0.185) continue;\n" \
     "              }\n" \
     "              best = t; tm = t;\n" \
     "              ht = a + k; hb = float2(uu, vv);\n" \
+    "              if (first) return t;\n" \
     "            }\n" \
     "          }\n" \
     "        }\n" \
@@ -124,7 +129,7 @@
     "      uint ht; float2 hb;\n" \
     /* (the meshes' tree starts the ray off the floor it leaves: ground laid over ground, a path or a drain's rim a hand above the \
      * pavement, is a surface the ray meets at once from beneath, a dark band that isn't there) */ \
-    "      float th = bvh_trace(ow, dw, rti.x == 2u ? max(0.03 * dist + 0.05, 0.4) : 0.03 * dist + 0.05, rtmax, rti.y, rti.x == 2u ? rti.z : 0u, ht, hb);\n" \
+    "      float th = bvh_trace(ow, dw, rti.x == 2u ? max(0.03 * dist + 0.05, 0.4) : 0.03 * dist + 0.05, rtmax, rti.y, rti.x == 2u ? rti.z : 0u, false, ht, hb);\n" \
     /* (the meshes' tree has the zone and no one in it: where the screen found a surface nearer than the tree's, a player, a \
      * monster, a thing that moves, the screen's is shown) */ \
     /* (only a character: the screen's ray often finds the floor itself a hand away at a low angle, which is no one standing there, \
@@ -141,27 +146,63 @@
     "        if (rti.x == 2u) {\n" \
     "          float3 vc;\n" \
     "          float3 tc = tri_tex(rti.z, ht, hb, min(1.5 + log2(1.0 + th * 0.05) * 1.5, 6.0), vc).rgb;\n" \
-    /* the light on it: the day's, from the zone's fog colour, not the floor's own brightness (a dark floor in a passage made every \
-     * wall in its reflection dark, sunlit or not) */ \
-    "          float lit = u.fogc.a > 0.0 ? saturate(dot(u.fogc.rgb, LUMA) * 1.6) : saturate(lm);\n" \
-    "          rtc = tc * saturate(vc * 2.0) * (0.3 + 1.3 * lit);\n" \
+    /* the light on it as the game lights the zone's own draws: its vertex colour by the scene's ambient light (the frame's word 23, \
+     * 10 bits a channel of 0 to 2) and the sun's by the triangle's facing (its edges, turned to the ray), then its texture, twice \
+     * over. A guess at it from the fog's colour was half as bright again as the screen's picture of the same wall in the shade */ \
+    "          uint tq = rti.y + ht * 36u;\n" \
+    "          float3 nw = cross(asfloat(g_bvh.Load3(tq + 12u)), asfloat(g_bvh.Load3(tq + 24u)));\n" \
+    "          float3 nv = float3(dot(m0.xyz, nw), dot(m1.xyz, nw), dot(m2.xyz, nw));\n" \
+    "          nv *= rsqrt(max(dot(nv, nv), 1e-12));\n" \
+    "          if (dot(nv, Rt) > 0.0) nv = -nv;\n" \
+    "          uint aw = g_rtv.Load(92u);\n" \
+    "          float3 amb = float3(float(aw & 1023u), float((aw >> 10) & 1023u), float((aw >> 20) & 1023u)) * (1.0 / 511.0);\n" \
+    "          float ndl = u.sun.w > 0.0 ? saturate(dot(nv, u.sun.xyz)) : 0.0;\n" \
+    "          rtc = tc * saturate(vc * (amb + u.suncol.rgb * ndl)) * 2.0;\n" \
+    /* the tree's colour has no sun shadow, occlusion, colour grade or the game's own lighting (they are made in later passes): where \
+     * the screen shows the very point the tree found (taken to the screen, the screen's depth there the same), the screen's pixel has \
+     * them all, so it is taken, easing out toward the picture's edges to the tree's */ \
+    /* (eased in, not switched: by how near the screen's depth there is to the point's, how squarely the surface faces the camera - \
+     * a wall seen edge-on matches by chance, a pixel on and one off, the screen's bright stone and the tree's darker colour in a \
+     * patchwork of blocks - and how far in from the picture's edges) */ \
+    "          float3 Hv = P + Rt * th, hq = to_px(Hv), scol = rtc;\n" \
+    "          float sbw = 0.0;\n" \
+    "          if (hq.z > 0.1 && in_view(hq.xy)) {\n" \
+    "            float tol = 0.02 * hq.z + 0.15;\n" \
+    "            float dm = 1.0 - smoothstep(tol, 2.0 * tol, abs(dist_at(hq.xy) - hq.z));\n" \
+    "            float fc = smoothstep(0.2, 0.45, dot(nv, -normalize(Hv)));\n" \
+    "            float2 se = (hq.xy - u.vp.xy) / u.vp.zw;\n" \
+    "            float sfd = smoothstep(0.0, 0.2, min(se.x, 1.0 - se.x)) * smoothstep(0.0, 0.2, min(se.y, 1.0 - se.y));\n" \
+    "            sbw = dm * fc * sfd;\n" \
+    "            scol = tap(1, hq.xy / u.size.xy).rgb;\n" \
+    "          }\n" \
+    /* the sun's shadow on what the screen doesn't show: the screen's picture has the shadows laid over it (fx_comp, by the sun's \
+     * maps), and a wall the tree alone finds had none - sunlit in a courtyard that lies in shade, twice and more as bright as the \
+     * same stone beside it on the screen. A second ray, from the point toward the sun through the same tree, any hit ending it; \
+     * then as the maps' shadow is laid: sun_min in the shade, a surface turned from the sun by sun_face, at the shadows' strength */ \
+    "          if (sbw < 0.98 && u.smap.x > 0.0 && u.sunsh.w > 0.0) {\n" \
+    "            float nls = dot(nv, u.sunsh.xyz);\n" \
+    "            float sm = lerp(1.0 - 0.6 * u.smap2.y, 1.0, smoothstep(-0.3, 0.25, nls));\n" \
+    "            if (nls > 0.0) {\n" \
+    "              float3 sdw = u.sunsh.x * m0.xyz + u.sunsh.y * m1.xyz + u.sunsh.z * m2.xyz;\n" \
+    "              uint st; float2 stb;\n" \
+    "              if (bvh_trace(ow + dw * th, sdw, 0.08 + 0.003 * th, 400.0, rti.y, rti.z, true, st, stb) > 0.0) sm = min(sm, u.smap2.z);\n" \
+    "            }\n" \
+    "            rtc *= max(lerp(1.0, sm, u.smap.x), 0.15);\n" \
+    "          }\n" \
     /* the zone's fog over what is far, as the world has it */ \
     "          rtc = lerp(rtc, u.fogc.rgb, u.fogc.a > 0.0 ? min(1.0 - exp(-u.fogc.a * th), u.fogp.y) : 0.0);\n" \
-    /* the tree's colour has no sun shadow, occlusion or the game's own lighting (they are made in later passes): where the screen \
-     * found the same surface (its hit as far along as the tree's), the screen's pixel has them all, so it is taken, easing out toward \
-     * the picture's edges to the tree's */ \
-    "          if (h.w > 0.5 && h.w < 1.5 && abs(tt - th) < 0.15 * th + 0.4) {\n" \
-    "            float2 se = (h.xy - u.vp.xy) / u.vp.zw;\n" \
-    "            float sfd = smoothstep(0.0, 0.1, min(se.x, 1.0 - se.x)) * smoothstep(0.0, 0.1, min(se.y, 1.0 - se.y));\n" \
-    "            rtc = lerp(rtc, tap(1, h.xy / u.size.xy).rgb, 0.9 * sfd);\n" \
-    "          }\n" \
+    "          rtc = lerp(rtc, scol, sbw);\n" \
     "        }\n" \
     "      } else if (rti.x == 2u && th <= 0.0 && rti.w == 1u && !(h.w > 0.5 && h.w < 1.5)) {\n" \
     /* a ray that leaves the zone with the screen having nothing for it: the sky, which the tree hasn't: its colour as the sky pass \
      * has it (one texel, input 11: the lowest sky in the view's top, held while none is in view) */ \
     "        rthit = true;\n" \
-    "        rtw = smoothstep(0.0, 0.3, dot(Rt, upn));\n" \
-    "        rtc = texel(11, int2(0, 0)).rgb;\n" \
+    /* (the colour is the sky's near the horizon, where the view's top shows it: darker and a touch bluer toward the top of the sky a \
+     * ray going up finds, and less of it - seen from above, the whole floor took the dusk's pink at full strength) */ \
+    "        float el = saturate(dot(Rt, upn));\n" \
+    "        rtw = smoothstep(0.0, 0.3, el) * lerp(1.0, 0.45, el);\n" \
+    "        float3 sk = texel(11, int2(0, 0)).rgb;\n" \
+    "        rtc = lerp(sk, dot(sk, LUMA) * float3(0.75, 0.85, 1.1), 0.5 * el) * lerp(1.0, 0.6, el);\n" \
     "      }\n" \
     "    }\n" \
     "  }\n" \
@@ -195,12 +236,22 @@
     "  }\n" \
     ""
 
-/* fx_refl: the game's effects, mirrored about the player's level (gfx_d3d12_rtfx.h: input 8, at its own size, by u.rtx.y), added by
- * the reflection's weight on the floors at that level (u.rtx.z: the level along u.up from the camera) */
+/* fx_zlate (after the game's last effect, before its interface): the game's effects, mirrored about the player's level
+ * (gfx_d3d12_rtfx.h: input 3, half the scene's size), laid by the reflections' weight (input 4, their layer's alpha) on the floors
+ * at that level. For this pass alone u.rtx is the level's plane in view space (mfx_late_in): xyz this frame's up times the effects'
+ * strength (0: none), w the level along it from the camera. Not u.up, which is eased over frames: while the camera pitched it
+ * trailed by degrees, a floor 15 yalms off measured two yalms off the level, and the effects left the reflections until it caught
+ * up. An effect that adds light is added; one blended over the world (a home point's crystal) left its cover in the mirror's
+ * alpha, and takes that share of the pixel. Laid this late, the same frame's: in the next frame's reflections, they trailed the
+ * camera */
 #define RT_FX_HLSL \
     "#ifdef ZL_LATE\n" \
-    "    if (u.rtx.y > 0.0 && L.a > 0.0) {\n" \
-    "      float lvl = 1.0 - smoothstep(0.4, 1.2, abs(dot(view_pos(float2(px) + 0.5, z), u.up.xyz) - u.rtx.z));\n" \
-    "      L.rgb += tap(8, (u.vp.xy + i.uv * u.vp.zw) / size_of(1)).rgb * L.a * u.rtx.y * lvl;\n" \
-    "    }\n" \
+    "  float mst = length(u.rtx.xyz);\n" \
+    "  if (mst > 0.001 && z != 0.0) {\n" \
+    "    float lvl = 1.0 - smoothstep(0.4, 1.2, abs(dot(view_pos(i.pos.xy, z), u.rtx.xyz / mst) - u.rtx.w));\n" \
+    "    float4 mf = tap(3, (u.vp.xy + i.uv * u.vp.zw) / size_of(2));\n" \
+    "    float mk = saturate(tap(4, i.uv).a) * min(mst, 1.0) * lvl;\n" \
+    "    r += mf.rgb * mk;\n" \
+    "    w = 1.0 - (1.0 - w) * (1.0 - saturate(mf.a) * mk);\n" \
+    "  }\n" \
     "#endif\n"

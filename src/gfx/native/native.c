@@ -789,7 +789,7 @@ void vanacore_gfx_set_water(const VanaWater* in)
     WaterSettings s = { in->enabled, in->waves, in->speed, in->size, in->reflection, in->glint, in->brightness, in->colour,
         in->shallowness, in->turbulence, in->direction, in->glint_size, in->has_tint, in->tint, in->detect, in->view, in->pass,
         in->clarity, in->refraction, in->shore, in->foam, in->ripples, in->ripple_size, in->log, in->probe, in->horizon, in->falls, in->caustics, in->relief, in->shadows, in->sea,
-        in->mirror, in->mirror_scale, in->mirror_reach, in->mirror_waves };
+        in->mirror, in->mirror_scale, in->mirror_reach, in->mirror_waves, in->tris };
     d3d8_set_water(&s);
 }
 void vanacore_gfx_set_water_zones_off(const uint16_t* zones, unsigned n) { d3d8_set_water_zones_off(zones, n); }
@@ -884,6 +884,8 @@ void vanacore_gfx_set_mover(int slot, float ax, float ay, float scale) { d3d8_se
 int vanacore_gfx_mover_box(int slot, float* box) { return d3d8_mover_box(slot, box); }
 
 int vanacore_gfx_ui_layer(uint32_t* w, uint32_t* h, void* pixels, uint32_t pitch) { return d3d8_ui_layer(w, h, pixels, pitch); }
+void vanacore_gfx_scene_shot_want(int on) { gfx_scene_shot_want(on); }
+int vanacore_gfx_scene_shot(uint32_t* w, uint32_t* h, uint32_t* d3dfmt, void* pixels, uint32_t pitch) { return gfx_scene_shot(w, h, d3dfmt, pixels, pitch); }
 
 void vanacore_gfx_raise_take(int x, int y, int w, int h) { d3d8_raise_take(x, y, w, h); }
 void vanacore_gfx_raise_put(void) { d3d8_raise_put(); }

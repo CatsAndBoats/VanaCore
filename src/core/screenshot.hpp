@@ -22,10 +22,13 @@ void request(int overlays = -1);
 void open_folder();
 
 // The next frame's picture for code instead of a file (the MCP server's screenshot tool): `done` is called
-// on the game's thread with 24-bit BGR rows, top row first, `stride` bytes apart, or false and why.
+// on the game's thread with 24-bit BGR rows, top row first, `stride` bytes apart, or false and why. `ui` false: the 3D scene
+// alone, as the frame shows it (effects, upscaler and colour grade in it) before the game draws its interface - no chat log,
+// menus, windows or names over heads, and none of VanaCore's drawing whatever `overlays` says (renderer=d3d12 or d3d11; a
+// frame or two later than the screen's, and false when no scene is drawn within 3 seconds).
 using Captured = std::function<void(bool ok, unsigned width, unsigned height, unsigned stride, std::vector<unsigned char> bgr,
                                     std::string error)>;
-void capture(bool overlays, Captured done);
+void capture(bool overlays, Captured done, bool ui = true);
 
 // vanacore.ini changed: [screenshots] overlays again.
 void reload(const wchar_t* ini);

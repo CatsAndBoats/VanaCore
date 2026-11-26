@@ -46,6 +46,9 @@
     X(void, scene_world_depth, (GfxTex * depth), (depth))                                                              \
     X(int, scene_snapshot, (GfxTex * color, GfxTex * *colour_copy, GfxTex * *depth_copy, uint32_t * w, uint32_t * h),    \
         (color, colour_copy, depth_copy, w, h))                                                                        \
+    X(void, scene_shot_want, (int on), (on))                                                                           \
+    X(int, scene_shot, (uint32_t * w, uint32_t * h, uint32_t * d3dfmt, void* pixels, uint32_t pitch),                  \
+        (w, h, d3dfmt, pixels, pitch))                                                                                 \
     X(GfxTex*, scene_mirror, (const GfxTex* color, const GfxScene* s, float level, float scale, float reach),          \
         (color, s, level, scale, reach))                                                                               \
     X(void, scene_floors, (GfxTex * id, GfxTex * depth, int state), (id, depth, state))                                \

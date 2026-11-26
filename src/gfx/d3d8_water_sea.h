@@ -123,7 +123,7 @@ static void water_horizon_pass(const GfxScene* s, int copies, GfxTex* colour_cop
         }
     }
     d.pipe.blend = 1, d.pipe.src = 5, d.pipe.dst = 6, d.pipe.op = 1; /* SRCALPHA, INVSRCALPHA, ADD */
-    gfx_draw(&d);
+    water_tris_draw(&d);
     if (full)
         g_sea.full = g_scene.frame;
     if (g_water_set.log && !g_sea.said)

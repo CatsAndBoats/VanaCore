@@ -5952,7 +5952,10 @@ static void draw_packet(uint32_t prim, uint32_t count, uint32_t start, uint32_t 
     glow_watch(d);
     if (!glow_draw(d))
         return;
-    gfx_draw(d);
+    if (d->fs.water && g_water_mode == 1) /* VanaCore's water drawn in its place, or after the scene (water_keep): the triangles view */
+        water_tris_draw(d);
+    else
+        gfx_draw(d);
     chatfont_laid(d);
     tips_gradient(d, prim, n, up_data, up_stride); /* [client] tips.rarity.gradient: over an item's details' background */
 }

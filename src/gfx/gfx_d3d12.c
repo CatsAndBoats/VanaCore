@@ -561,7 +561,7 @@ typedef struct FxSettings
     float refl_lift;
     /* ... and ray-traced reflections where the screen has none (Direct3D 12): 0 off, 1 on. The ray goes on through a tree of the
      * zone's collision the shader walks (gfx_d3d12_rt.h, rtbvh.c) */
-    float refl_rt, refl_rt_res, refl_rt_blur, refl_rt_fx;
+    float refl_rt, refl_rt_res, refl_rt_blur, refl_rt_fx, refl_rt_fx_level;
     /* the colour grade's zones: midtones and whites (-1..1), soft highlights (0..1: a shoulder in place of the hard clip) and a
      * tint on the lights (-1 cool .. 1 warm); and clarity (local contrast, 0 off). The grade is laid last (grade_last), after
      * every effect; clarity, sharpen and smooth go off with it (grade 0) */
@@ -3081,7 +3081,7 @@ static void mfx_key(PipeKey* k, const GfxDraw* d), mfx_viewport(float* x, float*
 static char g_pipe_failed; /* PIPE_FAILED: a pipeline that failed to build, at an address no pipeline has ((void*)1 before) */
 #define PIPE_FAILED ((void*)&g_pipe_failed)
 #define PIPE_MAGIC 0x31443344u /* "D3D1" */
-static int mirror_wanted(void); static void mirror_blend(D3D12_RENDER_TARGET_BLEND_DESC* c); /* gfx_d3d12_mirror.h: the water's */
+static int mirror_wanted(void); static void mirror_blend(D3D12_RENDER_TARGET_BLEND_DESC* c), mirror_cover(D3D12_RENDER_TARGET_BLEND_DESC* c); /* gfx_d3d12_mirror.h: the water's */
 
 typedef struct PipeEntry
 {
@@ -3351,8 +3351,8 @@ static ID3D12PipelineState* build_pipeline(const PipeKey* k, const uint32_t* vs,
             c->SrcBlendAlpha = D3D12_BLEND_ONE, c->DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA, c->BlendOpAlpha = D3D12_BLEND_OP_ADD;
 #endif
     }
-    if (shadow == GFX_VS_MIRROR && !k->pipe.blend) /* the colour as drawn and the alpha 0 (an effect drawn again keeps its blend) */
-        mirror_blend(c);
+    if (shadow == GFX_VS_MIRROR) /* the colour as drawn and the alpha 0; an effect drawn again keeps its blend, its alpha its cover */
+        k->pipe.blend ? mirror_cover(c) : mirror_blend(c);
     pd.SampleMask = UINT_MAX;
     /* D3D's front faces are clockwise on screen; CULL_CCW (the default) culls the back ones */
     pd.RasterizerState.FillMode = k->fill == 2 ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
@@ -4527,7 +4527,7 @@ static void draw_encode(const GfxDraw* d)
         rec->has_clip0 = !rec->mfx && rec->fixed && (uint8_t)gfx_draw_clip0(d, rec->clip0);
         rec->snapped = !rec->mfx && (uint8_t)snap_note(d, rec); /* (the game's own sway of a tree the pass has: its copy in its place) */
 #ifdef VANACORE
-        if (d->ninst > 1) /* a batch's: each of its other pieces a caster of its own, as if drawn alone */
+        if (d->ninst > 1 && !rec->mfx) /* a batch's: each of its other pieces a caster of its own, as if drawn alone */
             batch_casters((GfxDraw*)d, (uint32_t)(rec - g_casters), need);
 #endif
     }
@@ -5036,7 +5036,7 @@ static const char FX_HLSL_1[] =
     "  float4 smapm;  // its texel in world units, depth bias, penumbra, slope\n"
     "  float4 smapm2; // its depth units, 1 when it is there; z where the sharp map's fade starts (sun_handoff)\n"
     "  float4 toon4;  // the lines on VanaCore's grass (toon3.z): share of toon.x (0 none), width, threshold, fade\n"
-    "  float4 rtx;    // the ray-traced reflections: x the blur's radius in texels of their layer (0 none), y the effects' strength, z their level (u.up's distance)\n"
+    "  float4 rtx;    // the ray-traced reflections: x the blur's radius in texels of their layer (0 none), in fx_zlate the effects' level's plane\n"
     "};\n"
     "cbuffer CU : register(b0) { FxU u; };\n"
     "cbuffer FB : register(b1) { uint4 fti[2]; uint4 fsi[2]; };\n"
@@ -5062,6 +5062,9 @@ static const char FX_HLSL_1[] =
     "float4 tapl(uint k, float2 uv, float lv) { return tx2[slot(k)].SampleLevel(smp[fsi[0].x], uv, lv); }\n"
     "float4 texel(uint k, int2 p) { return tx2[slot(k)].Load(int3(p, 0)); }\n"
     "float2 size_of(uint k) { uint w, h; tx2[slot(k)].GetDimensions(w, h); return float2(w, h); }\n"
+    /* (a texture by its heap slot, the ray-traced reflections' tri_tex: here, among the helpers Direct3D 11 swaps for its own - it
+     * refuses the whole source for a table of Direct3D 12's left outside them, and had no scene effects at all) */
+    "float4 rt_tex(uint sl, float2 uv, float lod) { return tx2[NonUniformResourceIndex(sl)].SampleLevel(smp[fsi[0].x], uv, lod); }\n"
     "int2 fdir() { return int2(asint(fsi[0].y), asint(fsi[0].z)); }\n"
     /* view-space z of a depth value (clip w = z * P23, so z is negative in front of a right-handed
      * camera); 0 for the far plane (the sky, cleared depth) */
@@ -6432,6 +6435,7 @@ static const char FX_HLSL_1[] =
     "  float3 r = zone_lines_w(float3(0.0, 0.0, 0.0), i.pos.xy, z, w);\n"
     "  if (u.spc.x > 0.0) r += sparkles(i.pos.xy, z);\n"
     "  if (u.gmc.x > 0.0) r += ground_marks(i.pos.xy, z);\n"
+    RT_FX_HLSL /* (gfx_d3d12_rt_hlsl.h: the game's effects mirrored into the reflections, refl_rt_fx) */
     "  return float4(r, w);\n"
     "}\n"
     /* VanaCore's reflections and bounce light over the finished composite (screen space), each a layer of its own at the
@@ -6691,6 +6695,9 @@ static const char FX_HLSL_2[] =
     "  if ((rw >> 2) != 0) {\n"
     "    int t = int(texel(7, q).r * 15.9375 + 0.5) - 1;\n"
     "    float fz = view_z(texel(8, q).r);\n"
+    /* (y 2: the layer nearer than the picture - a piece of collision the game draws nothing for, a planter's box taller than the
+     * planter, hid the floor behind it in the layer, a bare patch in the reflections: its neighbours say what it is, fx_ssr) */
+    "    if (fz != 0.0 && (zq - fz) * u.hand.x > 0.07 + 0.014 * dq) return float2(0.0, 2.0);\n"
     "    if (fz != 0.0 && (fz - zq) * u.hand.x > 0.07 + 0.014 * dq) occ = 1.0;\n"
     "    if (t < 0 || ((rw >> 2) & (1 << t)) == 0) return float2(0.0, occ);\n"
     "    ok *= 1.0 - smoothstep(0.04 + 0.008 * dq, 0.07 + 0.014 * dq, abs(fz - zq));\n"
@@ -6705,8 +6712,8 @@ static const char FX_HLSL_2[] =
     "  float rr_ = fr * float(n % 3 + 1) * (1.0 / 3.0);\n"
     "  float2 q = clamp(floor(px + float2(cos(ang), sin(ang)) * rr_), u.vp.xy, u.vp.xy + u.vp.zw - 1.0);\n"
     "  float2 fo = floor_ok(int2(q), rw);\n"
-    "  float zq = view_z(texel(0, int2(q)).r);\n"
-    "  if (zq != 0.0 && dot(view_pos(q + 0.5, zq) - P, u.up.xyz) > hup) fo.y = 1.0;\n"
+    "  float zq = view_z(texel(0, int2(q)).r), dh = zq != 0.0 ? dot(view_pos(q + 0.5, zq) - P, u.up.xyz) : 0.0;\n"
+    "  if (fo.y > 1.5 || dh > abs(hup) || (hup < 0.0 && dh < hup)) fo = float2(0.0, 1.0);\n" /* (hup under 0: nor a tap below the pixel's level) */
     "  return fo;\n"
     "}\n"
     /* the reflections' layer, at the occlusion's size (u.size.zw): the reflected colour times its weight, plus the sun's glint
@@ -6749,14 +6756,16 @@ static const char FX_HLSL_2[] =
      * level) */
     "  float mw = 1.0;\n"
     "  if (!chr && (rw >> 2) != 0) {\n"
-    "    float a = floor_ok(int2(px), rw).x;\n"
-    "    if (a <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
-    "    float fr = 0.04 * u.vp.w;\n"
-    "    float sum = a, cnt = 1.0;\n"
-    "    float hup = 0.2 + 0.01 * dist;\n"
+    /* (a pixel the layer hides, floor_ok's y 2, is what the floor at its own level round it is: a wider ring, its taps at that level alone) */
+    "    float2 fc = floor_ok(int2(px), rw);\n"
+    "    float a = fc.x; bool hid = fc.y > 1.5;\n"
+    "    if (a <= 0.0 && !hid) return float4(0.0, 0.0, 0.0, 0.0);\n"
+    "    float fr = (hid ? 0.08 : 0.04) * u.vp.w;\n"
+    "    float sum = hid ? 0.0 : a, cnt = hid ? 0.0 : 1.0;\n"
+    "    float hup = (0.2 + 0.01 * dist) * (hid ? -1.0 : 1.0);\n"
     /* the outer ring first (n 2, 5, 8, 11): where the pixel and those four are all floor (or not counted), the share is 1 and
      * the other eight taps, most of the floor's interior, are not taken; a pixel with anything else near it takes all twelve */
-    "    bool inside = a >= 0.999;\n"
+    "    bool inside = !hid && a >= 0.999;\n"
     "    [unroll] for (int m = 0; m < 4; ++m) {\n"
     "      float2 fo = ring_tap(px, P, hup, rw, fr, m * 3 + 2);\n"
     "      sum += fo.x * (1.0 - fo.y); cnt += 1.0 - fo.y;\n"
@@ -6768,7 +6777,7 @@ static const char FX_HLSL_2[] =
     "        sum += fo.x * (1.0 - fo.y); cnt += 1.0 - fo.y;\n"
     "      }\n"
     "    }\n"
-    "    mw = smoothstep(0.5, 0.95, sum / cnt);\n"
+    "    mw = cnt > 0.0 ? smoothstep(0.5, 0.95, sum / cnt) : 0.0;\n"
     "    if (mw <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
     "    flat_ *= mw;\n"
     "  }\n"
@@ -7149,7 +7158,6 @@ static const char FX_HLSL_2[] =
     "  float3 o = c.rgb;\n"
     "  if (u.refl.x > 0.0) {\n"
     "    float4 L = lay_at(2, 4, i.uv, dist);\n"
-    RT_FX_HLSL /* (gfx_d3d12_rt_hlsl.h: the game's effects mirrored, refl_rt_fx) */
     /* Render visual 12: the reflections' layer as laid over (its colour, twice), 13 its weight, 14 the layer's texel as fx_ssr
      * left it (the floor test's parts) */
     "    int dv = int(u.grade.w);\n"
@@ -7924,6 +7932,7 @@ typedef struct FxU
         toon4[4], /* the lines on VanaCore's grass (outline_grass): share of the lines' strength, width, threshold, fade */
         rtx[4];   /* the ray-traced reflections (refl_rt_blur): x the blur's radius in texels of their layer */
 } FxU;
+static void mfx_late_in(int32_t* in, FxU* u); /* (gfx_d3d12_rtfx.h) */
 
 /* the sun's shadow map: depth, read through its SRV */
 typedef struct SunMap
@@ -8300,7 +8309,7 @@ static const struct
     { "refl_rt", offsetof(FxSettings, refl_rt), 2.0f },
     { "refl_rt_res", offsetof(FxSettings, refl_rt_res), 0.5f },
     { "refl_rt_blur", offsetof(FxSettings, refl_rt_blur), 0.0f },
-    { "refl_rt_fx", offsetof(FxSettings, refl_rt_fx), 0.0f },
+    { "refl_rt_fx", offsetof(FxSettings, refl_rt_fx), 0.0f }, { "refl_rt_fx_level", offsetof(FxSettings, refl_rt_fx_level), 0.0f },
     { "gi", offsetof(FxSettings, gi), 0.0f },
     { "gi_radius", offsetof(FxSettings, gi_radius), 5.0f },
     { "gi_quality", offsetof(FxSettings, gi_quality), 1.09f },
@@ -11001,9 +11010,10 @@ static void zl_run(void)
     gpu_part(GP_REFL);
     tex_state(depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     tex_state(color, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    const int32_t in[3] = { scene, halo, depth->srv };
+    int32_t in[5] = { scene, halo, depth->srv, -1, -1 };
+    mfx_late_in(in, u); /* the game's effects mirrored, laid on the reflections now they're all drawn (gfx_d3d12_rtfx.h) */
     const float vp[4] = { u->vp[0], u->vp[1], u->vp[2], u->vp[3] };
-    fx_draw(target_view(color, 0, 0), color->w, color->h, g_fx.by_fmt[g_zl.fmt].zlate, vp, u, in, 3, 0, 0);
+    fx_draw(target_view(color, 0, 0), color->w, color->h, g_fx.by_fmt[g_zl.fmt].zlate, vp, u, in, 5, 0, 0);
     color->scene = 0; /* its chain is behind (scene_mips) */
     gpu_scope(scope_was);
     gpu_part(part_was);
@@ -12736,12 +12746,16 @@ static void dlss_replay(void)
     g_nheld = 0, g_held_len = 0;
 }
 
+#define SHOT_UP g_dlss
+#include "gfx_scene_shot.h" /* gfx_scene_shot: the scene before the interface, for a screenshot without it */
+
 /* Before each draw: the noted scene through DLSS once it's all drawn - at the first draw reading it (the composite
  * onto the back buffer); the interface drawn into it before then held, and drawn over DLSS's output (at its size)
  * after. 1 when dlss_draw_over draws this draw, 2 when it's held, 0 to draw it as usual. A 3D draw into the scene's target
  * after DLSS ran ends its output's use (the scene read as it is from then). */
 static int dlss_on_draw(const GfxDraw* d)
 {
+    shot_on_draw(d);
     if (g_dlss.pend_serial == g_serial && g_dlss.pend_color)
     {
         if (g_rt == g_dlss.pend_color && d->overlay && dlss_hold(d))
@@ -12771,6 +12785,7 @@ static int dlss_on_draw(const GfxDraw* d)
                 g_el.post_serial = 0;
                 el_run(NULL, NULL);
             }
+            shot_after_run();
             if (g_nheld)
                 gpu_part(GP_REPLAY);
             g_dlss_replay_depth = g_dlss.out_serial == g_serial ? dlss_depth_up() : NULL;
@@ -12942,27 +12957,7 @@ static int mo_camera(const GfxDraw* d, float m[16])
     return 1;
 }
 
-/* a vertex at clip-space a now and b the frame before a quarter of the screen or more apart: not the same draw found (two alike
- * that swapped places in the frame's order), whatever moved */
-static int mo_far_clip(const float* a, const float* b)
-{
-    if (a[3] <= 1e-5f || b[3] <= 1e-5f)
-        return 0; /* behind the camera, either: nothing to tell by */
-    const float dx = a[0] / a[3] - b[0] / b[3], dy = a[1] / a[3] - b[1] / b[3];
-    return dx * dx + dy * dy > 0.25f;
-}
-
-/* ... a vertex at p now (through now_m) and at q the frame before (through was_m) */
-static int mo_far(const float* p, const float* q, const float* now_m, const float* was_m)
-{
-    float a[4], b[4];
-    for (int j = 0; j < 4; ++j)
-    {
-        a[j] = p[0] * now_m[j] + p[1] * now_m[4 + j] + p[2] * now_m[8 + j] + now_m[12 + j];
-        b[j] = q[0] * was_m[j] + q[1] * was_m[4 + j] + q[2] * was_m[8 + j] + was_m[12 + j];
-    }
-    return mo_far_clip(a, b);
-}
+#include "gfx_d3d12_mo_fill.h" /* mo_fills_screen, mo_far_clip, mo_far */
 
 /* room for `floats` more in frame c's arena: 0 when there's none to be had */
 static int mo_room(int c, uint32_t floats)
@@ -13284,10 +13279,10 @@ static void mo_draw(const GfxDraw* d)
         return;
     /* with frame generation, an effect's lone sprite (one quad) keeps the motion of the scene behind it: its pixels are mostly
      * that scene, and frame generation moved it with the sprite - the wall round a twinkling mote torn into blocks, flickering
-     * as the mote's alpha crossed the motion's threshold each frame (Ru'Lude's motes). Its optical flow follows them itself.
-     * An effect's model (more than a quad) keeps its own, down to fg_fx_motion's alpha: given the wall's, a home point's
-     * crystal came out twice, a step apart, in every made frame */
-    const int fg_model = fx && fg_wanted() && d->count > 2 && g_fxs.fg_fx_motion > 0.0f;
+     * as the mote's alpha crossed the motion's threshold each frame (Ru'Lude's motes); its optical flow follows them. A model
+     * (more than a quad) keeps its own down to fg_fx_motion's alpha (with the wall's, a home point's crystal came out twice, a
+     * step apart, in every made frame), but not one round the camera or over half the screen (mo_fills_screen) */
+    const int fg_model = fx && fg_wanted() && d->count > 2 && g_fxs.fg_fx_motion > 0.0f && !mo_fills_screen(d);
     if (fx && fg_wanted() && !fg_model)
         return;
     if (g_fxs.dlss_motion == 0.0f && !fg_model && (fx || g_fxs.dlss_motion_chars == 0.0f))
@@ -15641,6 +15636,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
     BATCH_SETTLE(); /* the zone's draws kept, before the scene is taken */
     mo_flush(1); /* the moving things' redraws, against the world's finished depth */
     occl_scene(color, s); /* the zone's pieces against the world's finished depth, effects or not ([graphics] occl) */
+    shot_scene(color, s);
     dlss = g_dlss.quality >= 0 && !dlss_gave_up();
     gathers = dlss && !fsr1_wanted();
     aa = g_fxs.aa != 0.0f && !gathers; /* DLSS smooths edges itself; FSR 1 wants them smoothed first */
@@ -16033,7 +16029,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
              * what the zone draws after it covered them: kept aside, the compose given none (it has no code for them,
              * ZL_LATE: without the late pass's pipeline there are no lines). The sparkles go with them (u.spc, left as
              * it is: the compose has no code for them either), and the rings on the ground (u.gmc) */
-            zl_late = (u.zlc[0] > 0.0f || u.spc[0] > 0.0f || u.gmc[0] > 0.0f) && g_fx.by_fmt[fmt].zlate;
+            zl_late = (u.zlc[0] > 0.0f || u.spc[0] > 0.0f || u.gmc[0] > 0.0f || mfx_wanted()) && g_fx.by_fmt[fmt].zlate;
             if (zl_late)
             {
                 memcpy(zl_zlc, u.zlc, sizeof zl_zlc), memcpy(zl_zlcol, u.zlcol, sizeof zl_zlcol);
@@ -16357,7 +16353,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
                     }
 #endif
                     /* the sky's colour, one texel from this frame's scene, as input 11 where the ray-traced reflections want it */
-                    rt_bind(l, s->view, rt_sky_input(ssr_in, &ssr_n)); /* ... and the ray-traced reflections' tree and the frame's words (refl_rt) */
+                    rt_bind(l, s, rt_sky_input(ssr_in, &ssr_n)); /* ... and the ray-traced reflections' tree and the frame's words (refl_rt) */
                     fx_pass(&g_fx.rl, FX_SSR, &u, ssr_in, ssr_n, 0, 0);
                 }
                 if (gi)
@@ -17137,6 +17133,7 @@ int gfx_shutdown(void)
     g_el.color = g_el.depth = NULL;
     gfx_tex_destroy(g_fx.wdepth), g_fx.wdepth = NULL, g_fx.wdepth_of = g_fx.wdepth_glow = NULL, g_fx.wdepth_serial = 0;
     gfx_tex_destroy(g_snap_color), gfx_tex_destroy(g_snap_depth), g_snap_color = g_snap_depth = NULL;
+    shot_release();
     mirror_release();
     mfx_release();
     g_fx.glow_kept_serial = 0;
