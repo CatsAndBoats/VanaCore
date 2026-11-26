@@ -72,6 +72,9 @@ void on_frame();
 // True once the command line is hooked (commands can be typed).
 bool ready();
 
+// The chat log's row spacing in the UI's units ([client] chat.lineheight; 16, the game's, until it's applied)
+int line_height();
+
 // For menulog.cpp: the selection menu's window VanaCore keeps ([client] menu.rows; null before one opens; kept after the
 // menu closes), the rows it last gave a menu, the setting, and how long ago that window was last drawn as one (ms)
 void menu_state(const void*& window, int& rows, int& setting, unsigned long long& since_ms);

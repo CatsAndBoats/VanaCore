@@ -2881,6 +2881,11 @@ bool ready()
     return g_parse != nullptr;
 }
 
+int line_height()
+{
+    return g_line_height;
+}
+
 void preview(const std::string& key, double value)
 {
     const auto within = [value](double low, double high) { return value < low ? low : value > high ? high : value; };

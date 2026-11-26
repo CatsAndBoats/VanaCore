@@ -207,7 +207,6 @@ constexpr std::ptrdiff_t kLinkButton = 0x14, kLinkDrawn = 0x18;
 using ButtonPlace = void(__thiscall*)(void* window, short* rect, int button, int pressed, int nudge);
 constexpr char kLogOpened[] = "83 EC 08 53 56 57 8B F1 E8 ?? ?? ?? ?? 66 8B 46 58 33 DB C6 46 60 01 89 5E 64 89 5E 20";
 constexpr std::ptrdiff_t kLogRows = 0x58, kLogRowsShown = 0x1C, kLogHeight = 0x5C;
-constexpr int kLogRowUnits = 16;
 constexpr std::ptrdiff_t kWinOwner = 0xC, kOwnerWindow = 8;
 constexpr std::ptrdiff_t kTitleRect = 0x14, kTitleText = 0x9C, kTitleTextAgain = 0xFC, kTitleRoom = 0x104;
 using WindowRect = void(__thiscall*)(void* window, short* rect);
@@ -665,14 +664,17 @@ char* log_handler(const Window& w, char* window)
 }
 
 // The chat log resized to `height`: its rows and height as its open works them out for that height, a row more or fewer
-// for each 16 units (a part row left out), from what the game made it with (w.game_rows, w.game_h)
+// for each row's units (a part row left out), from what the game made it with (w.game_rows, w.game_h). A row is 16 units,
+// or chat.lineheight's (the open's rows are by it then too): by 16, 20 px rows came 4 short of the window, a gap over the
+// first line (seen 2026-11-26: made 1136 tall with 56 rows, resized to 876 it kept 39, where 43 fit)
 void log_resized(const Window& w, char* window, int height)
 {
     char* handler = log_handler(w, window);
     if (handler == nullptr || w.game_rows <= 0)
         return;
     const int grown = height - w.game_h;
-    const int rows = std::max(1, w.game_rows + (grown >= 0 ? grown / kLogRowUnits : -((-grown + kLogRowUnits - 1) / kLogRowUnits)));
+    const int unit = std::max(1, chat::line_height()); // the game's 16, or chat.lineheight's (its rows then are too)
+    const int rows = std::max(1, w.game_rows + (grown >= 0 ? grown / unit : -((-grown + unit - 1) / unit)));
     at<int>(handler, kLogRows) = rows;
     at<int>(handler, kLogRowsShown) = rows;
     at<int>(handler, kLogHeight) = height;
