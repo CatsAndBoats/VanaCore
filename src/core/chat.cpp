@@ -2515,6 +2515,14 @@ void install()
     g_expand_site = expand != 0 ? expand + 12 : 0;
     if (g_expand_site == 0)
         log::write(L"Chat: FFXI's expanded log rows weren't found in FFXiMain.dll: expanded, its top rows go above it with [client] chat.lineheight");
+    // the expanded log's line selector: drawn (... sub dx,[esi+58h]; push ebp; lea ecx,[eax+3]; push edi; [shl edx,4]) and
+    // from the mouse (movsx eax,[esi+1Ah]; sub eax,[esp+1Ch]; [cdq ... sar ecx,4]; sub eax,ecx; cmp eax,1; mov [esi+1Ch],eax)
+    const std::uintptr_t selector = scan::find(game, "66 8B 56 1C 66 8B 46 14 66 2B 56 58 55 8D 48 03 57 C1 E2 04 66 03 56 1A 66 89 4C 24 18 66 8B 4E 18 6A 01 83 EA 0F 66 2B C8 66 89 54 24 1E 8B 54 24 1C 8D 44 11 F0 66 89 44 24 20 8B 4C 24 1E 83 C1 10");
+    g_selector_draw = selector != 0 ? selector + 17 : 0;
+    const std::uintptr_t pick = scan::find(game, "0F BF 46 1A 2B 44 24 1C 99 83 E2 0F 03 C2 8B C8 8B 46 58 C1 F9 04 2B C1 83 F8 01 89 46 1C");
+    g_selector_mouse = pick != 0 ? pick + 8 : 0;
+    if (g_selector_draw == 0 || g_selector_mouse == 0)
+        log::write(L"Chat: FFXI's log line selector wasn't found in FFXiMain.dll: with [client] chat.lineheight it steps 16 pixels");
 
     // the chat's layout (mov eax,[UI right/bottom]; push esi; push edi; mov edi,[UI left/top] ... its width at +0x32; the
     // resize call at +0x5a), and Config log settings' calls of it, after `mov ecx,[log 1]` and `mov ecx,[log 2]`

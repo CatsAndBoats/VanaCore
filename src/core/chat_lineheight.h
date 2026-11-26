@@ -48,6 +48,47 @@ __declspec(naked) void expanded_rows()
     }
 }
 
+// The expanded log's line selector (its +0x1C, row 1 the top, the rows at +0x58), in the same 16 pixel rows: drawn at
+// (selector - rows) << 4 over the bottom (`shl edx,4` at 0x101378A9), and taken from the mouse as rows - (bottom - y) / 16
+// (`cdq; and edx,0Fh; add eax,edx; mov ecx,eax; mov eax,[esi+58h]; sar ecx,4` at 0x10137870). By 20 px rows it stepped 16
+// and fell between lines a few rows up (reported 2026-11-26). The draw's `shl edx,4` becomes `imul edx,edx,L` (3 bytes too)
+// and the mouse's division a call to this, ecx = eax / L (edx is the game's again after it: it's loaded anew).
+// The selected line's box (and the arrow at its top) is 16 tall from 15 over the row's bottom (`sub edx,0Fh` at
+// 0x101378BB, `add ecx,10h` at 0x101378D7): by 20 px rows it sat 5 px low, clipping the line's top (2026-11-26). They
+// become L - 1 and L.
+std::uintptr_t g_selector_draw = 0, g_selector_mouse = 0;
+constexpr std::uintptr_t kSelectorTop = 37 - 17, kSelectorHeight = 65 - 17; // the immediates, from g_selector_draw
+constexpr std::uint8_t kSelectorDrawGame[3] = {0xC1, 0xE2, 0x04};
+constexpr std::uint8_t kSelectorMouseGame[14] = {0x99, 0x83, 0xE2, 0x0F, 0x03, 0xC2, 0x8B, 0xC8, 0x8B, 0x46, 0x58, 0xC1, 0xF9, 0x04};
+__declspec(naked) void selector_row()
+{
+    __asm {
+        mov ecx, g_line_height
+        cdq
+        idiv ecx
+        mov ecx, eax            ; rows up from the bottom
+        ret
+    }
+}
+
+void apply_selector(int height)
+{
+    const bool game = height == kLineHeightDefault;
+    if (g_selector_draw != 0) {
+        const std::uint8_t imul[3] = {0x6B, 0xD2, static_cast<std::uint8_t>(height)}; // imul edx,edx,height
+        write_code(g_selector_draw, game ? kSelectorDrawGame : imul, 3);
+        const std::uint8_t top = static_cast<std::uint8_t>(height - 1), tall = static_cast<std::uint8_t>(height);
+        write_code(g_selector_draw + kSelectorTop, &top, 1);
+        write_code(g_selector_draw + kSelectorHeight, &tall, 1);
+    }
+    if (g_selector_mouse != 0) {
+        std::uint8_t call[14] = {0xE8, 0, 0, 0, 0, 0x8B, 0x46, 0x58, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; // call; mov eax,[esi+58h]
+        const std::int32_t rel = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(&selector_row) - (g_selector_mouse + 5));
+        std::memcpy(call + 1, &rel, 4);
+        write_code(g_selector_mouse, game ? kSelectorMouseGame : call, 14);
+    }
+}
+
 void apply_line_height(int height)
 {
     if (!g_line_found || height == g_line_height)
@@ -77,5 +118,6 @@ void apply_line_height(int height)
         std::memcpy(call + 1, &rel, 4);
         write_code(g_expand_site, height == kLineHeightDefault ? kExpandGame : call, 6);
     }
+    apply_selector(height);
     log::write(L"Chat: row spacing %d px ([client] chat.lineheight)", height);
 }
