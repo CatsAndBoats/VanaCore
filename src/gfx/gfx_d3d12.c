@@ -7695,7 +7695,7 @@ static const char FX_HLSL_2[] =
     /* the sky's colour, one texel (fog_color=sky): the average of the lowest sky pixel in each of 24 columns across the
      * top of the view (inputs: the scene, its depth, the last frame's colour), eased over the frames; held when there is
      * too little sky in view (looking down), and a = 0 till there has been some */
-    "float4 fx_skycol(FO i) : SV_Target {\n"
+    SKY_MAP_HLSL "float4 fx_skycol(FO i) : SV_Target {\n  if (u.rtx.w > 0.5) return sky_map(i);\n" /* (the sky map: gfx_d3d12_rt_hlsl.h) */
     "  float3 acc = float3(0.0, 0.0, 0.0);\n"
     "  float n = 0.0;\n"
     "  for (int x = 0; x < 24; ++x) {\n"
@@ -16260,7 +16260,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
 #endif
 #ifdef VANACORE
             /* the sky's colour, one texel: for the height fog (fog_color=sky) and the ray-traced reflections (gfx_d3d12_rt.h) */
-            sky_colour_pass(&u, depth->srv, comp_in);
+            sky_colour_pass(&u, depth->srv, comp_in, s);
 #endif
             tex_state(color, D3D12_RESOURCE_STATE_RENDER_TARGET);
             gpu_part(GP_COMP);
@@ -17146,7 +17146,7 @@ int gfx_shutdown(void)
     FxTex* fx[] = { &g_fx.src, &g_fx.ao0, &g_fx.ao1, &g_fx.b1a, &g_fx.b1b, &g_fx.b2a, &g_fx.b2b, &g_fx.ra, &g_fx.rb, &g_fx.sm,
         &g_fx.rl, &g_fx.cmask, &g_fx.amask[0], &g_fx.amask[1], &g_fx.gi, &g_fx.gic, &g_fx.lz[0], &g_fx.lz[1], &g_fx.lz[2], &g_fx.lz[3], &g_fx.glow[0], &g_fx.glow[1],
         &g_fx.glow_kept, &g_fx.cl[0], &g_fx.cl[1], &g_fx.nrl[0], &g_fx.nrl[1], &g_fx.nrl[2], &g_fx.nrm[0], &g_fx.nrm[1], &g_fx.pp,
-        &g_fx.up1[0], &g_fx.up1[1], &g_fx.sky[0], &g_fx.sky[1], &g_fx.meas, &g_fx.d0, &g_fx.d1,
+        &g_fx.up1[0], &g_fx.up1[1], &g_fx.sky[0], &g_fx.sky[1], &g_skymap[0], &g_skymap[1], &g_fx.meas, &g_fx.d0, &g_fx.d1,
         &g_fx.foc[0], &g_fx.foc[1], &g_fx.hist[0], &g_fx.hist[1], &g_fx.gih[0], &g_fx.gih[1], &g_nd, &g_nh, &g_mo.t, &g_mo.m, &g_bd.t[0], &g_bd.t[1], &g_bd.t[2], &g_bd.t[3], &g_bd.t[4] };
     for (size_t i = 0; i < sizeof fx / sizeof fx[0]; ++i)
         fx_tex_drop(fx[i]);

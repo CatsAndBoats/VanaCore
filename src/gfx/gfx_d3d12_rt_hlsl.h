@@ -3,6 +3,38 @@
  * fx_ssr's use of them, after the screen's own ray. Kept apart for the length of gfx_d3d12.c. */
 #pragma once
 
+/* The sky as a map for the ray-traced reflections (gfx_d3d12_rt.h sky_map_pass): SKYMAP_W x SKYMAP_H texels, the world's
+ * directions above the horizon (azimuth across from -pi, the zenith at the top row, the horizon at the bottom), and one column
+ * more at x = SKYMAP_W: this frame's one sky colour (fx_skycol's). Each texel takes the screen's sky in its direction while the
+ * picture shows it, and keeps it (alpha 1, seen) when the camera turns away; one never seen is the one colour (alpha 0), and a
+ * seen one eases toward it very slowly, so a sky that changes while it's out of view doesn't stay as it was for ever. A ray
+ * that leaves the zone reads it (fx_ssr's input 11, u.rtx.z 1 while it's made): looking down from a stair, the sky over the
+ * floor is above the picture, which had only the one colour for it, a flat grey under an overcast evening */
+#define SKYMAP_W 256
+#define SKYMAP_H 64
+#define SKYMAP_WS "256"
+#define SKYMAP_HS "64"
+#define SKY_MAP_HLSL \
+    "float4 sky_map(FO i) {\n" \
+    "  int2 t = int2(i.pos.xy);\n" \
+    "  float4 now = texel(3, int2(0, 0));\n" \
+    "  if (t.x >= " SKYMAP_WS ") return float4(now.rgb, 1.0);\n" \
+    "  float4 prev = texel(2, t);\n" \
+    "  float seen = prev.a;\n" \
+    "  float3 c = seen > 0.0 ? lerp(prev.rgb, now.rgb, 0.0005) : now.rgb;\n" \
+    "  float az = (float(t.x) + 0.5) * (6.2831853 / " SKYMAP_WS ".0) - 3.1415927;\n" \
+    "  float a = (1.0 - (float(t.y) + 0.5) / " SKYMAP_HS ".0) * 1.5707963;\n" \
+    "  float3 dw = float3(cos(a) * cos(az), -sin(a), cos(a) * sin(az));\n" \
+    "  float3 dv = float3(dot(u.rtx.xyz, dw), dot(u.rbf.xyz, dw), dot(u.bloom.xyz, dw));\n" \
+    "  float3 q = to_px(dv * 1e4);\n" \
+    "  if (q.z > 0.1 && in_view(q.xy) && view_z(texel(1, int2(q.xy)).r) == 0.0) {\n" \
+    "    float3 sc = texel(0, int2(q.xy)).rgb;\n" \
+    "    c = seen > 0.0 ? lerp(c, sc, 0.2) : sc;\n" \
+    "    seen = 1.0;\n" \
+    "  }\n" \
+    "  return float4(c, seen);\n" \
+    "}\n"
+
 #define RT_TRACE_HLSL \
     /* a floor's own colour where it reflects (fx_refl, a its reflection's weight), by how wet it is (u.refl.y, half the strength, refl): wet stone \
      * is darker and its colour deeper. Dry to half way it is as drawn. With the reflection sharper the wetter (the blur, fx_ssr's \
@@ -334,9 +366,18 @@
      * ray going straight up, so from stairs or a hill, the higher the player, the less sky in the floor, Whitegate 2026-11-27) */ \
     "        float el = saturate(dot(Rt, upn));\n" \
     "        rtw = smoothstep(0.0, 0.1, el);\n" \
-    "        float3 sk = texel(11, int2(0, 0)).rgb;\n" \
+    "        bool smap = u.rtx.z > 0.5;\n" \
+    "        float3 sk = texel(11, int2(smap ? " SKYMAP_WS " : 0, 0)).rgb;\n" \
     "        rtd = (rtf & 1u) != 0u ? float3(1.0, 0.0, 1.0) : float3(0.0, 0.3, 1.0);\n" \
     "        rtc = lerp(sk, dot(sk, LUMA) * float3(0.75, 0.85, 1.1), 0.5 * el) * lerp(1.0, 0.85, el);\n" \
+    /* the sky map in the ray's direction (the world's, y down), where it has seen the sky (SKY_MAP_HLSL) */ \
+    "        if (smap) {\n" \
+    "          float3 dn = normalize(dw);\n" \
+    "          float sa = asin(saturate(-dn.y)), saz = atan2(dn.z, dn.x);\n" \
+    "          float2 st = float2(clamp((saz + 3.1415927) * (" SKYMAP_WS ".0 / 6.2831853), 0.5, " SKYMAP_WS ".0 - 0.5), clamp((1.0 - sa / 1.5707963) * " SKYMAP_HS ".0, 0.5, " SKYMAP_HS ".0 - 0.5));\n" \
+    "          float4 sm = tap(11, st / size_of(11));\n" \
+    "          rtc = lerp(rtc, sm.rgb, saturate(sm.a));\n" \
+    "        }\n" \
     /* ... and the sky itself where the screen shows it that way (the sky is as far as it gets: the ray's direction from the \
      * camera), its clouds and its colour there, easing to the one colour toward the picture's edges: that one colour alone \
      * read as no sky at all under an overcast evening, Whitegate 2026-11-27 */ \

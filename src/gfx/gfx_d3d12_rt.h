@@ -93,13 +93,43 @@ static void rt_bind(ID3D12GraphicsCommandList* l, const GfxScene* s, int sky_ok)
     ID3D12GraphicsCommandList_SetGraphicsRootShaderResourceView(l, ROOT_RTV, a.gpu);
 }
 
+/* The sky map (gfx_d3d12_rt_hlsl.h SKY_MAP_HLSL), two kept in turn (this frame's, read by the reflections, and the last): made by
+ * sky_map_pass, read by fx_ssr as input 11 while g_skymap_ok (u.rtx.z) */
+static FxTex g_skymap[2];
+static int g_skymap_i, g_skymap_ok;
+
+/* this frame's sky map from the last and the scene (inputs: the scene, its depth, the last map, this frame's one sky colour, as
+ * fx_skycol's), by fx_skycol's pipeline with u.rtx.w 1 and the world's directions taken to the view's by the view's rotation in
+ * u.rtx, u.rbf and u.bloom (a copy of the frame's uniforms: those are the pass's own) */
+static void sky_map_pass(const FxU* u, int32_t depth_srv, const FxTex* sky, const GfxScene* s)
+{
+    if (!s || !fx_tex(&g_skymap[0], DXGI_FORMAT_R16G16B16A16_FLOAT, SKYMAP_W + 1, SKYMAP_H) ||
+        !fx_tex(&g_skymap[1], DXGI_FORMAT_R16G16B16A16_FLOAT, SKYMAP_W + 1, SKYMAP_H))
+        return;
+    FxTex* last = &g_skymap[g_skymap_i];
+    FxTex* map = &g_skymap[g_skymap_i ^ 1];
+    g_skymap_i ^= 1;
+    fx_state(last, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    fx_state(map, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    FxU mu = *u;
+    const float* v = s->view;
+    mu.rtx[0] = v[0], mu.rtx[1] = v[4], mu.rtx[2] = v[8], mu.rtx[3] = 1.0f;
+    mu.rbf[0] = v[1], mu.rbf[1] = v[5], mu.rbf[2] = v[9], mu.rbf[3] = 0.0f;
+    mu.bloom[0] = v[2], mu.bloom[1] = v[6], mu.bloom[2] = v[10], mu.bloom[3] = 0.0f;
+    const float vp[4] = { 0, 0, (float)(SKYMAP_W + 1), (float)SKYMAP_H };
+    const int32_t in[4] = { g_fx.src.srv, depth_srv, last->srv, sky->srv };
+    fx_draw(heap_cpu(&g_rtv, map->rtv), SKYMAP_W + 1, SKYMAP_H, g_fx.skycol_pso, vp, &mu, in, 4, 0, 0);
+    fx_state(map, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    g_skymap_ok = 1;
+}
+
 /* The sky's colour, one texel from this frame's scene (and the last frame's, to ease from), for the height fog (fog_color=sky: the
- * composite's eighth input) and the ray-traced reflections' sky (fx_ssr's input 11, rt_sky_input) */
-static void sky_colour_pass(FxU* u, int32_t depth_srv, int32_t* comp_in)
+ * composite's eighth input) and the ray-traced reflections' sky (fx_ssr's input 11, rt_sky_input); with them, the sky map too */
+static void sky_colour_pass(FxU* u, int32_t depth_srv, int32_t* comp_in, const GfxScene* s)
 {
     const int fogsky = g_fxs.fog_mode == 1.0f && g_fxs.fog > 0.0f;
     const int rtsky = g_fxs.refl_rt >= 2.0f && g_fxs.refl > 0.0f;
-    g_rt_sky = 0;
+    g_rt_sky = 0, g_skymap_ok = 0, u->rtx[2] = 0.0f;
     if (!(fogsky || rtsky) || !g_fx.skycol_pso || !fx_tex(&g_fx.sky[0], DXGI_FORMAT_R16G16B16A16_FLOAT, 1, 1) || !fx_tex(&g_fx.sky[1], DXGI_FORMAT_R16G16B16A16_FLOAT, 1, 1))
         return;
     FxTex* last_sky = &g_fx.sky[g_fx.sky_i];
@@ -116,6 +146,11 @@ static void sky_colour_pass(FxU* u, int32_t depth_srv, int32_t* comp_in)
     if (fogsky)
         comp_in[7] = sky->srv, u->grade2[3] = 1.0f;
     g_rt_sky = rtsky;
+    if (rtsky)
+    {
+        sky_map_pass(u, depth_srv, sky, s);
+        u->rtx[2] = g_skymap_ok ? 1.0f : 0.0f;
+    }
 }
 
 /* fx_ssr's input 11: the sky's colour, where the ray-traced reflections want it and sky_colour_pass made it this frame (1); its
@@ -128,7 +163,7 @@ static int rt_sky_input(int32_t* ssr_in, int* ssr_n)
     fx_state(sky, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     if (ssr_in[10] < 0)
         ssr_in[10] = sky->srv;
-    ssr_in[11] = sky->srv, *ssr_n = 12;
+    ssr_in[11] = g_skymap_ok ? g_skymap[g_skymap_i].srv : sky->srv, *ssr_n = 12; /* (the sky map, its one colour at x SKYMAP_W) */
     return 1;
 }
 
