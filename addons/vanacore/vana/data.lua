@@ -120,6 +120,7 @@ local function trimmed(row) row.format = function (v) return (string.format('%.2
 local function shown_as(row, a, b)
     b = b or 0
     local kept = { kind = 'slider', section = row.section, key = row.key, step = 0.0001 } -- (what M.write formats and writes)
+    row.to_kept = function (value) return (value - b) / a end -- (a shown value in the key's units: reset_rows' strength_kept)
     row.get = function ()
         local value = tonumber(vana.config.get(row.section, row.key) or '')
         if value == nil then
@@ -7380,7 +7381,12 @@ local function reset_rows(rows, switches)
         if not enabled or (tonumber(vana.config.get(row.section, row.key) or '') or 0) <= 0 then
             return false
         end
-        vana.config.set(row.section, row.key, tostring(row.default > 0 and row.default or head.on))
+        -- (the slider's default is a shown one: Strength's 5 is refl 1.0. Written as it was, refl 5 showed as 25, held at 10)
+        local value = head.on
+        if row.default > 0 then
+            value = row.to_kept and row.to_kept(row.default) or row.default
+        end
+        vana.config.set(row.section, row.key, tostring(value))
         return true
     end
     for _, row in ipairs(rows) do
