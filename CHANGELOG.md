@@ -1,6 +1,23 @@
 # Changelog
 
-What's new in each VanaCore release. A release's notes on GitHub are its section here (`## 0.9.10
+What's new in each VanaCore release. A release's notes on GitHub are its section here (`## 0.9.11
+
+### Changed
+- mcp 1.2: sym(name) and vcall(name, signature, ...): VanaCore.Core.dll's symbols from the .map beside the loaded DLL, refused unless the .map's timestamp is the loaded DLL's, at the base it's loaded at; C names with or without the leading _, C++ by a mangled name's start (one match only). An address carried over from another build called into some other function and took the game down
+- Reflections: the bed under deep water takes none. floor_ok took the deep water's floor (kind 9, at its surface) over a river's drawn bed as collision hiding the floor, and the bed borrowed its neighbours' answer from a ring 8% of the screen across: from afar the ring reached the stone banks and the bed under East Sarutabaruta's river took their sky, milky water; zoomed in, none
+- Water: a pond's flood stops at a fall. East Sarutabaruta's upper river flooded the river below its fall at its own height, 4-5 yalms over the game's water, and a 22,000-cell flood hung 8-13 yalms over the rivers north of it: the deep water's floor (terrain 9) counts only within FILL_SURFACE (1 yalm) under the level, a cell is made water from a neighbour only if its floor is no more than FILL_STEP (2.5) under the neighbour's, a flood's cell with a point over ground more than FILL_SHELF_DOWN (1.25) or another water's surface more than FILL_STEP under the level is none (the stair of water hanging beside the G-8 fall), shelves lie no deeper than FILL_SHELF_DOWN, and a flood's shelves reach FLOOD_SHELF (2) cells, not 8 (a bank's top a hand under the level chained water down it past the lip)
+- /exec and /include: scripts in subfolders (/exec folder/script runs scripts\folder\script.txt), as Windower has them; each part checked, so no '..', drive or leading slash gets outside scripts\
+- Ray-traced reflections: characters reflected from the feet up, not cut off at the knees
+- Build Installer: AzureSignTool unquoted in Inno's sign command (pwsh passed the quotes to ISCC escaped: "Failed to execute Sign Tool command")
+
+### Fixed
+- Folders: addons\ashita, addons\windower, plugins\ashita and plugins\windower made at start if they aren't there, each with a README.txt saying what goes in it (written when the folder has none), so a new install shows where things go (folders.cpp; plugins.cpp no longer makes the plugin folders itself)
+- Login: xiloader 3.0 (LandSandBoat from 2026-11-05), the lobby's data and view connections over TLS. VanaCore reports 3.0.0 first and, refused for another version it speaks (the server's message names it: "requires version 2.1.x"), logs in again once with that, the lobby plain: the version is checked before the password, so the refusal isn't a failed login. [server] loginversion= reports that version only. The data link is TLS end to end; the game's view connection goes to a relay on this machine (connect() redirected) that carries it to the server over TLS, as xiloader 3.0's does (loader_lobby.h). The launcher's Schannel client is shared (vanacore/tls.hpp: chunked writes, read what's there, no time limit after the handshake, the Windows 7 TLS 1.2 retry). The data link's packets are framed by their fixed sizes (5-byte requests, the 0x148 character list), as LandSandBoat writes them at 2.1 and since. GameLogin::lobby_tls, BootInfo 7
+
+### Misc
+- README: the Retail section's installer download is a button (assets/download_retail.png)
+
+## 0.9.10
 
 ### New
 - VanaCore App (app/): a C++ GUI in two signed files, VanaCoreApp.exe (the splash, the update check to come, then loads the DLL; changed rarely, as a new signed exe starts its reputation over) and VanaCoreApp.dll (the views and logic, updated freely), as the CatsEyeXI launcher's bootstrap and App.dll split. Its own solution (app/VanaCoreApp.sln, x86, the CRT linked in), a plain C interface between them with a version the exe checks (shared/app_api.h), each file's own version (shared/version.h), and the .vcaddon card's look (shared/ui.cpp). The first view: Play (VanaCore.exe --retail beside it) and Close
