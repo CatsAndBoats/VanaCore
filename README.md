@@ -25,6 +25,12 @@ the **/vana** window.
 VanaCore is fully open source under the [GPL v3](LICENSE): free to use, study, change and share, as long as what you
 share stays open source too.
 
+## Retail
+
+> In active testing
+
+[Download the latest installer](https://github.com/CatsAndBoats/VanaCore/releases/latest/download/VanaCoreInstaller.exe)
+
 ## Core Features
 
 - **Modern graphics:** Direct3D 12 or 11 in place of the game's Direct3D 8, with sun shadows, ambient occlusion,
