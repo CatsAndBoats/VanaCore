@@ -2,28 +2,26 @@
 
 #include <windows.h>
 
-#include <bcrypt.h>
-#include <softpub.h>
-#include <wincrypt.h>
-#include <winhttp.h>
-#include <wintrust.h>
-
 #include <cstdint>
 #include <vector>
 
 #include "app_api.h"
 #include "json.h"
+#include "net.h"
 #include "version.h"
 
-#pragma comment(lib, "bcrypt.lib")
-#pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "version.lib")
-#pragma comment(lib, "winhttp.lib")
-#pragma comment(lib, "wintrust.lib")
 
 namespace vcapp {
 
 namespace {
+
+using net::Http;
+using net::sha256_hex;
+using net::signature_valid;
+using net::signer_of;
+using net::wide;
+using net::write_file;
 
 constexpr wchar_t kReleases[] = L"https://api.github.com/repos/" VCAPP_GITHUB_REPO L"/releases?per_page=50";
 constexpr std::size_t kMostJson = 8u << 20, kMostDll = 64u << 20;
@@ -85,193 +83,13 @@ bool file_version(const std::wstring& path, Version& v)
     return true;
 }
 
-std::wstring wide(const std::string& s)
-{
-    std::wstring w(s.size(), L'\0');
-    w.resize(static_cast<std::size_t>(MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), static_cast<int>(w.size()))));
-    return w;
-}
-
-// ---- HTTPS (WinHTTP: Windows' own, nothing to ship)
-
-struct Handle {
-    HINTERNET h = nullptr;
-    explicit Handle(HINTERNET handle = nullptr) : h(handle) {}
-    ~Handle()
-    {
-        if (h != nullptr)
-            WinHttpCloseHandle(h);
-    }
-    Handle(const Handle&) = delete;
-    Handle& operator=(const Handle&) = delete;
-    explicit operator bool() const { return h != nullptr; }
-};
-
-class Http {
-public:
-    Http()
-    {
-        const wchar_t* agent = L"VanaCoreApp/" L"" VCAPP_EXE_VERSION_STR;
-        // the system's proxy settings (Windows 8.1 on), else WinHTTP's own
-        session_.h = WinHttpOpen(agent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-        if (!session_)
-            session_.h = WinHttpOpen(agent, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-        if (!session_)
-            return;
-        WinHttpSetTimeouts(session_.h, 5000, 5000, 8000, 15000); // resolve, connect, send, each read
-        DWORD tls = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | 0x00002000; // 1.2 and 1.3 (Windows 7 has 1.2 only off by default)
-        if (!WinHttpSetOption(session_.h, WINHTTP_OPTION_SECURE_PROTOCOLS, &tls, sizeof tls)) {
-            tls = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
-            WinHttpSetOption(session_.h, WINHTTP_OPTION_SECURE_PROTOCOLS, &tls, sizeof tls);
-        }
-    }
-
-    // `url` (https only) into `body`, following redirects (GitHub's downloads go to its storage); false on any failure,
-    // past `most` bytes, or when `going` says stop. `going(got, total)`: total 0 when it isn't known.
-    bool get(const std::wstring& url, const wchar_t* accept, std::size_t most, std::string& body,
-             const std::function<bool(std::size_t, std::size_t)>& going)
-    {
-        body.clear();
-        if (!session_)
-            return false;
-        wchar_t host[256] = {}, path[2048] = {}, extra[2048] = {};
-        URL_COMPONENTS uc{sizeof uc};
-        uc.lpszHostName = host, uc.dwHostNameLength = 256;
-        uc.lpszUrlPath = path, uc.dwUrlPathLength = 2048;
-        uc.lpszExtraInfo = extra, uc.dwExtraInfoLength = 2048;
-        if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc) || uc.nScheme != INTERNET_SCHEME_HTTPS)
-            return false;
-        Handle connect(WinHttpConnect(session_.h, host, uc.nPort, 0));
-        const std::wstring target = std::wstring(path) + extra;
-        Handle request(connect ? WinHttpOpenRequest(connect.h, L"GET", target.c_str(), nullptr, WINHTTP_NO_REFERER,
-                                                    WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
-                               : nullptr);
-        if (!request)
-            return false;
-        const std::wstring headers = std::wstring(L"Accept: ") + accept + L"\r\nX-GitHub-Api-Version: 2022-11-28\r\n";
-        if (!WinHttpSendRequest(request.h, headers.c_str(), static_cast<DWORD>(-1L), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
-            !WinHttpReceiveResponse(request.h, nullptr))
-            return false;
-        DWORD status = 0, size = sizeof status;
-        WinHttpQueryHeaders(request.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
-                            WINHTTP_NO_HEADER_INDEX);
-        if (status != 200)
-            return false;
-        DWORD total = 0;
-        size = sizeof total;
-        if (!WinHttpQueryHeaders(request.h, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &total,
-                                 &size, WINHTTP_NO_HEADER_INDEX))
-            total = 0;
-        if (total > most)
-            return false;
-        char buffer[64 * 1024];
-        while (true) {
-            DWORD read = 0;
-            if (!WinHttpReadData(request.h, buffer, sizeof buffer, &read))
-                return false;
-            if (read == 0)
-                return total == 0 || body.size() == total;
-            body.append(buffer, read);
-            if (body.size() > most || (going && !going(body.size(), total)))
-                return false;
-        }
-    }
-
-private:
-    Handle session_;
-};
-
 // ---- Checks
-
-std::string sha256_hex(const std::string& data)
-{
-    BCRYPT_ALG_HANDLE alg = nullptr;
-    BCRYPT_HASH_HANDLE hash = nullptr;
-    unsigned char digest[32] = {};
-    std::string hex;
-    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) == 0 &&
-        BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0 &&
-        BCryptHashData(hash, reinterpret_cast<PUCHAR>(const_cast<char*>(data.data())), static_cast<ULONG>(data.size()), 0) == 0 &&
-        BCryptFinishHash(hash, digest, sizeof digest, 0) == 0) {
-        static const char kHex[] = "0123456789abcdef";
-        for (unsigned char b : digest)
-            hex += kHex[b >> 4], hex += kHex[b & 15];
-    }
-    if (hash != nullptr)
-        BCryptDestroyHash(hash);
-    if (alg != nullptr)
-        BCryptCloseAlgorithmProvider(alg, 0);
-    return hex;
-}
-
-// The file's Authenticode signature holds (no revocation check: it'd need the network, and a long wait when it's down)
-bool signature_valid(const std::wstring& path)
-{
-    WINTRUST_FILE_INFO file{sizeof file};
-    file.pcwszFilePath = path.c_str();
-    WINTRUST_DATA data{sizeof data};
-    data.dwUIChoice = WTD_UI_NONE;
-    data.fdwRevocationChecks = WTD_REVOKE_NONE;
-    data.dwUnionChoice = WTD_CHOICE_FILE;
-    data.pFile = &file;
-    data.dwStateAction = WTD_STATEACTION_VERIFY;
-    data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL;
-    GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-    const LONG result = WinVerifyTrust(static_cast<HWND>(INVALID_HANDLE_VALUE), &action, &data);
-    data.dwStateAction = WTD_STATEACTION_CLOSE;
-    WinVerifyTrust(static_cast<HWND>(INVALID_HANDLE_VALUE), &action, &data);
-    return result == ERROR_SUCCESS;
-}
-
-// Who signed the file (its certificate's name), "" when it isn't signed
-std::wstring signer_of(const std::wstring& path)
-{
-    HCERTSTORE store = nullptr;
-    HCRYPTMSG message = nullptr;
-    DWORD encoding = 0, content = 0, format = 0;
-    if (!CryptQueryObject(CERT_QUERY_OBJECT_FILE, path.c_str(), CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED, CERT_QUERY_FORMAT_FLAG_BINARY, 0,
-                          &encoding, &content, &format, &store, &message, nullptr))
-        return {};
-    std::wstring name;
-    DWORD size = 0;
-    if (CryptMsgGetParam(message, CMSG_SIGNER_INFO_PARAM, 0, nullptr, &size) && size > 0) {
-        std::vector<BYTE> buffer(size);
-        if (CryptMsgGetParam(message, CMSG_SIGNER_INFO_PARAM, 0, buffer.data(), &size)) {
-            const auto* signer = reinterpret_cast<const CMSG_SIGNER_INFO*>(buffer.data());
-            CERT_INFO info{};
-            info.Issuer = signer->Issuer;
-            info.SerialNumber = signer->SerialNumber;
-            if (PCCERT_CONTEXT cert = CertFindCertificateInStore(store, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, CERT_FIND_SUBJECT_CERT,
-                                                                 &info, nullptr)) {
-                wchar_t text[512] = {};
-                CertGetNameStringW(cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr, text, 512);
-                name = text;
-                CertFreeCertificateContext(cert);
-            }
-        }
-    }
-    CryptMsgClose(message);
-    CertCloseStore(store, 0);
-    return name;
-}
 
 std::wstring self_path()
 {
     wchar_t path[MAX_PATH * 2] = {};
     GetModuleFileNameW(nullptr, path, MAX_PATH * 2);
     return path;
-}
-
-bool write_file(const std::wstring& path, const std::string& data)
-{
-    const HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE)
-        return false;
-    DWORD written = 0;
-    const bool ok = WriteFile(file, data.data(), static_cast<DWORD>(data.size()), &written, nullptr) && written == data.size() &&
-                    FlushFileBuffers(file);
-    CloseHandle(file);
-    return ok;
 }
 
 // The newest published App release (not a draft or pre-release, tagged app-v<version>) and its version
@@ -319,7 +137,7 @@ std::wstring update_dll(const std::wstring& dir, const UpdateUi& ui)
     const std::wstring dll = dir + L"\\VanaCoreApp.dll";
     Version mine;
     const bool have = file_version(dll, mine); // none (or no DLL at all): any release is newer, and puts one there
-    Http http;
+    Http http(L"VanaCoreApp/" L"" VCAPP_EXE_VERSION_STR);
     const auto going = [&](std::size_t, std::size_t) { return !ui.cancelled(); };
     // (VANACOREAPP_RELEASES: another releases list, for testing against a fork; what it gives must still pass every check)
     wchar_t other[1024] = {};

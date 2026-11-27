@@ -6,6 +6,9 @@
 
 #include <windows.h>
 
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -119,6 +122,21 @@ private:
     void pick(int index);
     float t_of(int hit) const;
 
+    // home_update.cpp: VanaCore updated where the installer put it (its newest release's VanaCoreInstaller.exe, run silently)
+    struct Update {
+        enum Stage { kNone, kChecking, kDownloading, kInstalling, kDone, kFailed };
+        std::mutex mutex;
+        Stage stage = kNone;
+        std::wstring version, note; // the release's version, what went wrong
+        std::atomic<float> progress{0};
+        bool applied = false; // (kDone: the head's version read again)
+    };
+    void check_update();
+    bool draw_update(float w, float h, float mid);
+    bool updating() const;
+    void updated();
+    void reload_version();
+
     // home_profiles.cpp: the profiles, the Profiles and Errors pages
     void load_profiles();
     void save_profiles();
@@ -142,6 +160,7 @@ private:
     std::wstring game_;                // VanaCore.exe beside the app, "" when it isn't there
     std::wstring vanacore_;            // its version (VanaCore.Core.dll's ProductVersion), "" when it has none
     std::wstring error_;               // what went wrong starting it (the Errors tab says)
+    std::shared_ptr<Update> update_ = std::make_shared<Update>(); // (shared with its threads, which may outlive the window)
     Install install_;
     std::wstring ffxi_date_; // FFXiMain.dll's date, "" without it
     std::wstring pivot_root_;

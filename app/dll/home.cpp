@@ -62,12 +62,17 @@ Home::Home(const VanaCoreAppHost& host) : host_(host), dir_(host.dir), app_ini_(
 {
     if (GetFileAttributesW((dir_ + L"\\VanaCore.exe").c_str()) != INVALID_FILE_ATTRIBUTES)
         game_ = dir_ + L"\\VanaCore.exe";
-    vanacore_ = product_version(dir_ + L"\\VanaCore.Core.dll");
+    reload_version();
     load_profiles(); // (its file: ini_)
     detect();
     load_pivot();
     if (!errors().empty())
         tab_ = kErrors;
+}
+
+void Home::reload_version()
+{
+    vanacore_ = product_version(dir_ + L"\\VanaCore.Core.dll");
 }
 
 bool Home::can_play() const
@@ -143,6 +148,8 @@ void Home::render()
 void Home::draw_footer()
 {
     const float mid = kH - kBar / 2;
+    if (draw_update(kW, kH, mid)) // (VanaCore being updated: its line and bar in their place, home_update.cpp)
+        return;
     std::wstring name = profiles_[profile_].name;
     for (wchar_t& c : name)
         c = static_cast<wchar_t>(towupper(c));
@@ -306,7 +313,7 @@ void Home::press(int hit)
         menu_ = !menu_;
         render();
     } else if (hit == kPlay) {
-        if (!can_play())
+        if (!can_play() || updating())
             return;
         error_.clear();
         if (play()) {
@@ -439,6 +446,7 @@ LRESULT Home::handle(UINT message, WPARAM wparam, LPARAM lparam)
         }
         break;
     case ui::kRedraw:
+        updated(); // (VanaCore just updated: the head's version)
         render();
         return 0;
     case WM_DPICHANGED:
@@ -493,6 +501,7 @@ int Home::run()
     SetWindowPos(window, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     SetForegroundWindow(window);
     host_.splash_close(); // the app's up: the splash goes
+    check_update();
     MSG message;
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         TranslateMessage(&message);
