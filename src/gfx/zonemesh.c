@@ -206,8 +206,9 @@ static void zm_rt_tree(const VanaZoneMesh* m)
         memcpy(v, m->pos, (size_t)ns * 36u);
     for (size_t i = 0; i < (size_t)nc * 3u; ++i)
         memcpy(v + (size_t)ns * 9u + i * 3u, &m->cut[i * 5u], 12u);
-    /* the words of each: from what the core handed over (uv, col, tex, cut_col), else a grey no texture's */
-    const int have = m->uv && m->col && m->tex && m->cut_col;
+    /* the words of each: from what the core handed over (uv, col, tex, cut_col), else a grey no texture's (cut_col only where
+     * there are cut-outs: Aht Urhgan Whitegate has none, and its whole tree was grey, untextured, 2026-11-27) */
+    const int have = m->uv && m->col && m->tex && (nc == 0 || m->cut_col);
     float* uvw = (float*)(void*)pay;
     double csum[3] = { 0, 0, 0 };
     uint32_t cn = 0;

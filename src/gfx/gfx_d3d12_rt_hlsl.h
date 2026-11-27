@@ -329,13 +329,14 @@
     /* a ray that leaves the zone with the screen having nothing for it: the sky, which the tree hasn't: its colour as the sky pass \
      * has it (one texel, input 11: the lowest sky in the view's top, held while none is in view) */ \
     "        rthit = true;\n" \
-    /* (the colour is the sky's near the horizon, where the view's top shows it: darker and a touch bluer toward the top of the sky a \
-     * ray going up finds, and less of it - seen from above, the whole floor took the dusk's pink at full strength) */ \
+    /* (the colour is the sky's near the horizon, where the view's top shows it: a touch bluer and darker toward the top of the sky \
+     * a ray going up finds - seen from above, the whole floor took the dusk's pink. Not less of it: it was cut to a quarter for a \
+     * ray going straight up, so from stairs or a hill, the higher the player, the less sky in the floor, Whitegate 2026-11-27) */ \
     "        float el = saturate(dot(Rt, upn));\n" \
-    "        rtw = smoothstep(0.0, 0.3, el) * lerp(1.0, 0.45, el);\n" \
+    "        rtw = smoothstep(0.0, 0.1, el);\n" \
     "        float3 sk = texel(11, int2(0, 0)).rgb;\n" \
     "        rtd = (rtf & 1u) != 0u ? float3(1.0, 0.0, 1.0) : float3(0.0, 0.3, 1.0);\n" \
-    "        rtc = lerp(sk, dot(sk, LUMA) * float3(0.75, 0.85, 1.1), 0.5 * el) * lerp(1.0, 0.6, el);\n" \
+    "        rtc = lerp(sk, dot(sk, LUMA) * float3(0.75, 0.85, 1.1), 0.5 * el) * lerp(1.0, 0.85, el);\n" \
     "      }\n" \
     "    }\n" \
     "  }\n" \

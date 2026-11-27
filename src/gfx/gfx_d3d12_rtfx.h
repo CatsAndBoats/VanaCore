@@ -2,12 +2,12 @@
  * mirror_casters, ROOT_SUN). The game's effects in the ray-traced reflections ([graphics.effects] refl_rt_fx): a spell, a hike
  * point's glow, a lamp's flare are no surface - blended over the finished picture, no depth, in neither the screen's depth nor the
  * zone's tree - so no ray from the floor finds them. Each effect that adds light (3D, blended ONE + ADD, not the interface: as
- * el_emit takes them), and each unlit model blended over the world (a home point's crystal), is drawn again as it comes, from the camera mirrored about the level the player stands on (the water's
+ * el_emit takes them), and each unlit model blended over the world (a home point's crystal), is drawn again as it comes, from the camera mirrored about the level most of the view looks onto (mfx_level; the water's
  * mirror's matrix, GFX_VS_MIRROR: what lies under that level is cut off), into a target of half the scene's size each way, tested
  * against the world mirrored the same way: the frame's casters drawn into its depth first (mirror_casters), so what stands in front
  * of an effect in the mirror hides it. (Drawn without that depth, a lantern's glow quad, set half into the wall it hangs on, came
  * out whole: a row of orange squares down the floor, 2026-11-26.) The reflections' composite (fx_refl, input 8) adds it the next
- * frame, by each pixel's reflection weight, on the floors at the player's level (mfx_refl_in): the effects come after the
+ * frame, by each pixel's reflection weight, on the floors at that level (mfx_refl_in): the effects come after the
  * reflections are worked out (the effects' compose runs at the first of them); laid by fx_zlate once the game has drawn its last. */
 #pragma once
 
@@ -195,8 +195,95 @@ static int mfx_targets(uint32_t w, uint32_t h, uint32_t depth_fmt)
     return g_mfx.t && g_mfx.d && g_mfx.t->srv >= 0;
 }
 
-/* After they're laid: this frame's begun - the mirror about the level the player stands on, its targets cleared and the world's
- * casters drawn into its depth (their colour cleared again: only the effects are read) */
+/* The level the effects are mirrored about (the world's y, down): the floor most of the view looks onto, not the player's feet.
+ * By the feet, a player up a stair or a hill had the floor below lose its home point crystal's and lanterns' reflections: they
+ * stood under the level, which cuts them off, on floors fx_zlate leaves out as not at it (Aht Urhgan Whitegate, 2026-11-27). A
+ * grid of rays from the camera across the view, each stepped through the zone's collision floors (grass_floor_near) to the first
+ * it meets; the level that most of them meet (within half a yalm) wins, kept until another has half as many again, so it doesn't
+ * flip at every edge. Worked out every MFX_LEVEL_EVERY frames; the feet where no ray meets a floor or the floors aren't known */
+#define MFX_LEVEL_COLS 8
+#define MFX_LEVEL_ROWS 6
+#define MFX_LEVEL_EVERY 6u
+#define MFX_LEVEL_STEP 0.5f
+static struct
+{
+    uint64_t serial; /* the frame it was worked out in (0 never) */
+    float level;     /* that level, while known */
+    int known;
+} g_mfl;
+
+/* the first of the zone's floors the ray from o along d (the world, unit length) meets within MFX_REACH, its y into *y */
+static int mfx_ray_floor(const float o[3], const float d[3], float* y)
+{
+    for (float t = MFX_LEVEL_STEP; t < MFX_REACH; t += MFX_LEVEL_STEP)
+    {
+        const float p[3] = { o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t };
+        float dy;
+        if (grass_floor_near(p, MFX_LEVEL_STEP * 1.2f, &dy) >= 0)
+        {
+            *y = p[1] + dy;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* how many of the n levels in h lie within half a yalm of v */
+static int mfx_level_count(const float* h, int n, float v)
+{
+    int c = 0;
+    for (int i = 0; i < n; ++i)
+        c += fabsf(h[i] - v) <= 0.5f;
+    return c;
+}
+
+static float mfx_level(const GfxScene* s)
+{
+    const float feet = s->focus[1];
+    if (g_mfl.serial && g_serial >= g_mfl.serial && g_serial - g_mfl.serial < MFX_LEVEL_EVERY)
+        return g_mfl.known ? g_mfl.level : feet;
+    g_mfl.serial = g_serial ? g_serial : 1;
+    float inv[16], h[MFX_LEVEL_COLS * MFX_LEVEL_ROWS];
+    const float* p = s->proj;
+    if (!mat_inverse(inv, s->view) || p[0] == 0.0f || p[5] == 0.0f || p[11] == 0.0f)
+        return g_mfl.known = 0, feet;
+    /* a view ray through (x, y) on the screen: its view z the side the projection's w is positive on */
+    const float zf = p[11] > 0.0f ? 1.0f : -1.0f, w = fabsf(p[11]);
+    int n = 0;
+    for (int r = 0; r < MFX_LEVEL_ROWS; ++r)
+        for (int c = 0; c < MFX_LEVEL_COLS; ++c)
+        {
+            const float x = -0.875f + 1.75f * (float)c / (MFX_LEVEL_COLS - 1), y = -0.9f + 1.4f * (float)r / (MFX_LEVEL_ROWS - 1);
+            const float vx = (x * w - zf * p[8] - p[12]) / p[0], vy = (y * w - zf * p[9] - p[13]) / p[5];
+            float d[3];
+            for (int k = 0; k < 3; ++k)
+                d[k] = vx * inv[k] + vy * inv[4 + k] + zf * inv[8 + k];
+            const float l = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+            /* (down the world's y: a ray going up meets no floor's top) */
+            if (!(l > 1e-6f) || d[1] / l < 0.02f)
+                continue;
+            for (int k = 0; k < 3; ++k)
+                d[k] /= l;
+            n += mfx_ray_floor(inv + 12, d, &h[n]);
+        }
+    int best = 0;
+    float at = feet;
+    for (int i = 0; i < n; ++i)
+    {
+        const int c = mfx_level_count(h, n, h[i]);
+        if (c > best)
+            best = c, at = h[i];
+    }
+    if (!best)
+        return g_mfl.known = 0, feet;
+    if (!g_mfl.known || 2 * best > 3 * mfx_level_count(h, n, g_mfl.level))
+        g_mfl.level = at;
+    g_mfl.known = 1;
+    return g_mfl.level;
+}
+
+/* After they're laid: this frame's begun - the mirror about the level most of the view looks onto (mfx_level), its targets
+ * cleared and the world's casters drawn into its depth (their colour cleared again: only the effects are read) */
 static void mfx_begin(GfxTex* color, const GfxScene* s)
 {
     g_mfx.serial = 0;
@@ -207,7 +294,7 @@ static void mfx_begin(GfxTex* color, const GfxScene* s)
         return;
     }
     float clip_world[16], cam[3];
-    const float level = s->focus[1] - g_fxs.refl_rt_fx_level; /* (refl_rt_fx_level raises it: the world's y counts down) */
+    const float level = mfx_level(s) - g_fxs.refl_rt_fx_level; /* (refl_rt_fx_level raises it: the world's y counts down) */
     /* (the world's up is -y: the camera above the level) */
     if (s->focus[3] == 0.0f || !mirror_matrix(g_mfx.m, clip_world, cam, s, level) || !(level - cam[1] > 0.05f))
         return;
@@ -286,7 +373,7 @@ static void mfx_viewport(float* x, float* y, float* w, float* h)
 
 /* The level the effects are mirrored about as a plane in view space (g_mfx.plane, fx_zlate's u.rtx: mfx_late_in), which lays them
  * only on floors at that level, where the mirror is theirs: this frame's up (the view's own, as rt_bind's: u->up is eased and trails
- * a camera that pitches) times the effects' strength, and the player's feet along it from the camera */
+ * a camera that pitches) times the effects' strength, and that level (mfx_level) along it from the camera */
 static void mfx_refl_in(int ssr, int32_t* refl_in, int* refl_n, const FxU* u, const GfxScene* s)
 {
     (void)refl_in;
@@ -298,7 +385,7 @@ static void mfx_refl_in(int ssr, int32_t* refl_in, int* refl_n, const FxU* u, co
     for (int k = 0; k < 3; ++k)
     {
         up[k] = l > 1e-6f ? up[k] / l : 0.0f;
-        fv[k] = s->focus[0] * s->view[k] + (s->focus[1] - g_fxs.refl_rt_fx_level) * s->view[4 + k] + s->focus[2] * s->view[8 + k] + s->view[12 + k];
+        fv[k] = s->focus[0] * s->view[k] + (mfx_level(s) - g_fxs.refl_rt_fx_level) * s->view[4 + k] + s->focus[2] * s->view[8 + k] + s->view[12 + k];
     }
     for (int k = 0; k < 3; ++k)
         g_mfx.plane[k] = up[k] * (st > 0.0f ? st + u->rtx[0] : 0.0f); /* (and the blur's radius, a whole number: fx_zlate blurs them as the layer is) */
