@@ -6777,7 +6777,7 @@ static const char FX_HLSL_2[] =
     "        sum += fo.x * (1.0 - fo.y); cnt += 1.0 - fo.y;\n"
     "      }\n"
     "    }\n"
-    "    mw = cnt > 0.0 ? smoothstep(0.5, 0.95, sum / cnt) : 0.0;\n"
+    "    mw = (cnt > 0.0 ? smoothstep(0.5, 0.95, sum / cnt) : 0.0) * (1.0 - narrow_top(px, P, dist));\n"
     "    if (mw <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
     "    flat_ *= mw;\n"
     "  }\n"
@@ -8299,7 +8299,7 @@ static const struct
     { "dlss_reactive", offsetof(FxSettings, dlss_reactive), 0.8f },
     { "dlss_reactive_moving", offsetof(FxSettings, dlss_reactive_moving), 0.5f },
     { "refl", offsetof(FxSettings, refl), 0.0f },
-    { "refl_wet", offsetof(FxSettings, refl_wet), 0.5f },
+    { "refl_wet", offsetof(FxSettings, refl_wet), 0.5f }, /* (read and not used: how wet is half of refl since 2026-11-27) */
     { "refl_rough", offsetof(FxSettings, refl_rough), 0.3f },
     { "refl_dist", offsetof(FxSettings, refl_dist), 100.0f },
     { "refl_quality", offsetof(FxSettings, refl_quality), 3.0f },
@@ -15714,7 +15714,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         if ((int)g_fxs.debug == 26 && grass_rings_shown()) /* Render visual 26: the rings' colours kept, their edge band shaded */
             u.grade[3] += 0.5f, grass_rings_view(s->view, s->focus, u.plight, u.plight2); /* (GRASS_RINGS_HLSL) */
         /* reflections and bounce light: a pass of their own after the composite */
-        u.refl[0] = g_fxs.refl, u.refl[1] = fminf(fmaxf(g_fxs.refl_wet, 0.0f), 1.0f), u.refl[2] = fminf(fmaxf(g_fxs.refl_rough, 0.0f), 1.0f);
+        u.refl[0] = g_fxs.refl, u.refl[1] = fminf(fmaxf(g_fxs.refl * 0.5f, 0.0f), 1.0f) /* (how wet: with the strength, refl_wet no more) */, u.refl[2] = fminf(fmaxf(g_fxs.refl_rough, 0.0f), 1.0f);
         u.refl[3] = fmaxf(g_fxs.refl_dist, 1.0f);
         u.elight2[1] = fminf(fmaxf(g_fxs.refl_bump, 0.0f), 2.0f); /* (elight2.x is the light's, set where it runs) */
         /* quality: low, medium, high, ultra, max - the reflections' (refl_quality) by the level; the bounce light's (gi_quality,
@@ -15737,7 +15737,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         const uint32_t gw = (uint32_t)ceilf(vw / gdiv), gh = (uint32_t)ceilf(vh / gdiv);
         u.bounce[0] = (float)gw, u.bounce[1] = (float)gh;
         u.refl2[0] = REFL_STEPS[rq];
-        u.rtx[0] = g_fxs.refl_rt >= 2.0f ? floorf(fminf(fmaxf(g_fxs.refl_rt_blur, 0.0f) + 8.0f * fmaxf(1.0f - 2.0f * g_fxs.refl_wet, 0.0f), 24.0f) + 0.5f) : 0.0f; /* (drier, softer) */
+        u.rtx[0] = g_fxs.refl_rt >= 2.0f ? floorf(fminf(fmaxf(g_fxs.refl_rt_blur, 0.0f) + 8.0f * fmaxf(1.0f - 2.0f * u.refl[1], 0.0f), 24.0f) + 0.5f) : 0.0f; /* (drier, softer) */
         u.refl2[1] = g_fxs.refl_sun, u.refl2[2] = g_fxs.gi;
         /* ... the reflections' pattern turning from frame to frame only where DLSS gathers the frames (else it would shimmer);
          * the bounce light's turns with its temporal pass's (u.hist.y) unless held still (gi_still) */

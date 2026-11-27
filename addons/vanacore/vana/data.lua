@@ -2209,8 +2209,7 @@ TIPS.rows = {
         .. 'Higher is smoother and steadier but trails behind things that move.\n'
         .. 'Lower is crisper and grainier. 0 shades each frame on its own.',
     -- Reflections
-    ['graphics.effects.refl'] = 'How strong reflections are on floors and flat ground, 1 to 10.',
-    ['graphics.effects.refl_wet'] = 'How wet the ground looks, 0 to 10. Dry is soft and reflects only at low angles. Wet is darker, sharper and mirrors from above.',
+    ['graphics.effects.refl'] = 'How strong and how wet reflections look, 1 to 10. Low is a soft sheen seen at low angles. High is a dark, sharp mirror.',
     ['graphics.effects.refl_rough'] = 'How blurry the reflections are, 0 to 10.',
     ['graphics.effects.refl_dist'] = 'How far away reflections are drawn, in world units.',
     ['graphics.effects.refl_rt'] = 'How reflections are found.\n'
@@ -4633,13 +4632,12 @@ local TABS = {
                     end
                     return row
                 end)(),
-                -- Strength 1 to 10 as 0.2 to 2.0 in vanacore.ini (shown = kept * 5), Wetness and Roughness 0 to 10 as 0 to 1.0 (* 10), Surface
+                -- Strength 1 to 10 as 0.2 to 2.0 in vanacore.ini (shown = kept * 5), Roughness 0 to 10 as 0 to 1.0 (* 10), Surface
                 -- Depth 0 to 10 as 0 to 2.0 (the 6.5 is its 1.3 default), Lift 1 to 10 as 0 to 0.5 (shown = kept * 18 + 1)
                 trimmed(shown_as(slider('Strength', FX, 'refl', 5, 1, 10, 1, '%d'), 5)),
                 -- the ray's steps (16 to 128) and the blur's taps: more is cleaner and costs more
                 -- (4 is an ini edit, as the occlusion's)
                 choice('Quality', FX, 'refl_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
-                trimmed(shown_as(slider('Wetness', FX, 'refl_wet', 5, 0, 10, 1, '%d'), 10)),
                 trimmed(shown_as(slider('Roughness', FX, 'refl_rough', 3, 0, 10, 1, '%d'), 10)),
                 -- the floor's picture read as a height tilts the reflection's normal (fx_ssr); 0 is a flat mirror
                 trimmed(shown_as(slider('Surface Depth', FX, 'refl_bump', 6.5, 0, 10, 1, '%d'), 5)),
@@ -8028,7 +8026,7 @@ M.DEBUG_VIEW = needs_dx(choice('Debug view', FX, 'debug', '0', {
     { '3', 'Bloom' }, { '8', 'Bounce light' }, { '7', 'Depth of field' }, { '2', 'Fog' }, { '9', 'Glow effects' }, { '4', 'God rays' },
     { '6', 'Ink lines' }, { '1', 'Occlusion' },
     { header = 'Rain & Water' },
-    { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '17', 'Reflections' }, { '33', 'Ray-traced reflections' }, { '11', 'Water' }, { '34', 'Water triangles' },
+    { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '14', 'Reflection mask' }, { '17', 'Reflections' }, { '33', 'Ray-traced reflections' }, { '11', 'Water' }, { '34', 'Water triangles' },
     { header = 'Rings' },
     { '32', 'Rain rings' }, { '15', 'Shadow rings' },
     { header = 'Shadows' },

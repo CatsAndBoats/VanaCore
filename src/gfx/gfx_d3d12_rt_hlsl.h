@@ -4,9 +4,10 @@
 #pragma once
 
 #define RT_TRACE_HLSL \
-    /* a floor's own colour where it reflects (fx_refl, a its reflection's weight), by how wet it is (refl_wet, u.refl.y): wet stone \
+    /* a floor's own colour where it reflects (fx_refl, a its reflection's weight), by how wet it is (u.refl.y, half the strength, refl): wet stone \
      * is darker and its colour deeper. Dry to half way it is as drawn. With the reflection sharper the wetter (the blur, fx_ssr's \
-     * rough_ and u.rtx.x), wetness is a look of its own: it was a second strength, more of the same reflection */ \
+     * rough_ and u.rtx.x), the strength is one look from a dry sheen to a wet mirror: wetness (refl_wet) was a setting of its own, \
+     * and couldn't be told from the strength */ \
     "float3 wet_floor(float3 c, float a) {\n" \
     "  float k = smoothstep(0.3, 1.0, u.refl.y) * smoothstep(0.0, 0.2, a);\n" \
     "  float l = dot(c, LUMA);\n" \
@@ -17,13 +18,37 @@
      * darker on one side alone, is not. fx_ssr takes it off the weight before the blur (its amt), and with the ray-traced \
      * reflections' blur on (u.rtx.x) the grooves and tile edges went soft with the reflection, Surface Depth doing nothing under \
      * a wide blur: there it is left to this, 1 without the blur */ \
+    /* (looked for a pixel either side and three: a groove a few pixels wide is no darker than the pixel next to it, and by that \
+     * one alone nothing showed at 1600 lines. Up to nine tenths off at refl_bump 2, the slider's top: at six it couldn't be told \
+     * from none under a wide blur) */ \
+    "float relief_dip(int2 px, float lc, int s) {\n" \
+    "  float lr = dot(texel(1, px + int2(s, 0)).rgb, LUMA), ll = dot(texel(1, px - int2(s, 0)).rgb, LUMA);\n" \
+    "  float lu = dot(texel(1, px - int2(0, s)).rgb, LUMA), ld = dot(texel(1, px + int2(0, s)).rgb, LUMA);\n" \
+    "  return (max(min(lr, ll), min(lu, ld)) - lc) / max(0.25 * (lr + ll + lu + ld), 0.04);\n" \
+    "}\n" \
+    /* 1 on the top of something narrow that stands up from the ground (fx_ssr's floor mask): the picture a little over half a \
+     * yalm either side of the pixel, across some direction, lower than it on both. A low wall's top, a rail's, a crate's lid is \
+     * floor in the zone's collision, stone as often as not, and took a reflection - a strip of sky along the top of a wall. A \
+     * platform's edge is lower on one side only, a stair's tread lower on one and higher on the other */ \
+    "float narrow_top(float2 px, float3 P, float dist) {\n" \
+    "  float rp = 0.65 * u.proj.y * 0.5 * u.vp.w / max(dist, 0.5);\n" \
+    "  if (rp < 2.0) return 0.0;\n" \
+    "  float nt = 0.0;\n" \
+    "  [unroll] for (int k = 0; k < 4; ++k) {\n" \
+    "    float2 dd = float2(cos(float(k) * 0.7853982), sin(float(k) * 0.7853982)) * rp;\n" \
+    "    float2 q1 = clamp(px + dd, u.vp.xy, u.vp.xy + u.vp.zw - 1.0), q2 = clamp(px - dd, u.vp.xy, u.vp.xy + u.vp.zw - 1.0);\n" \
+    "    float z1 = view_z(texel(0, int2(q1)).r), z2 = view_z(texel(0, int2(q2)).r);\n" \
+    "    float h1 = z1 != 0.0 ? dot(view_pos(q1, z1) - P, u.up.xyz) : -1e3, h2 = z2 != 0.0 ? dot(view_pos(q2, z2) - P, u.up.xyz) : -1e3;\n" \
+    "    if (h1 < -0.3 && h2 < -0.3) nt = 1.0;\n" \
+    "  }\n" \
+    "  return nt;\n" \
+    "}\n" \
     "float refl_relief(int2 px, float3 c, float dist) {\n" \
-    "  float bump = saturate(u.elight2.y) * (1.0 - smoothstep(25.0, 70.0, dist));\n" \
+    "  float bump = min(u.elight2.y, 2.0) * 0.45 * (1.0 - smoothstep(25.0, 70.0, dist));\n" \
     "  if (u.rtx.x < 0.5 || bump <= 0.0) return 1.0;\n" \
-    "  float lc = dot(c, LUMA), lr = dot(texel(1, px + int2(1, 0)).rgb, LUMA), ll = dot(texel(1, px - int2(1, 0)).rgb, LUMA);\n" \
-    "  float lu = dot(texel(1, px - int2(0, 1)).rgb, LUMA), ld = dot(texel(1, px + int2(0, 1)).rgb, LUMA);\n" \
-    "  float m = max(0.25 * (lr + ll + lu + ld), 0.04);\n" \
-    "  return 1.0 - bump * 0.6 * saturate(2.0 * (max(min(lr, ll), min(lu, ld)) - lc) / m);\n" \
+    "  int s = max(int(u.vp.w / 1080.0 + 0.5), 1);\n" \
+    "  float lc = dot(c, LUMA);\n" \
+    "  return 1.0 - bump * saturate(3.0 * max(relief_dip(px, lc, s), relief_dip(px, lc, 3 * s)));\n" \
     "}\n" \
     /* the zone's collision as a tree (rtbvh.h; Direct3D 12 only): its nodes, 32 bytes each, then its triangles, 36; the frame's \
      * words beside it. bvh_trace finds the nearest hit; with the meshes' tree, tri_tex its colour */ \
@@ -32,6 +57,7 @@
     "ByteAddressBuffer g_rtv : register(t1, space3);\n" \
     /* what the last walk met, for Render visual 33: 1 it ran out of steps, 2 two surfaces at one place, 4 its stack was full */ \
     "static uint g_rtf = 0u;\n" \
+    "static float4 g_rts = float4(0.0, 0.0, 0.0, 0.0);\n" \
     /* the meshes' tree's own words for a triangle (ab: where they start, zonemesh.c: 10 words each): the three corners' uv (6), the \
      * three vertex colours (3: 0xAARRGGBB), and the texture (bits 0 to 15: its index + 1 in the frame words' list from byte 96, 0 \
      * none; bit 16: cut out by its alpha). The colour of the surface a ray found: vc the vertex colour there */ \
@@ -88,6 +114,10 @@
     "            float vv = dot(d, qv) * idt;\n" \
     "            float t = dot(e2, qv) * idt;\n" \
     "            if (uu >= 0.0 && vv >= 0.0 && uu + vv <= 1.0 && t > tmin && t < tm) {\n" \
+    /* (g_rts: the ground lying level within its w of the ray's start is passed by - ground laid over ground, a path or a drain's \
+     * rim a hand above the pavement, met at once from beneath. Only what lies level: the ray used to start that far along \
+     * instead, and beside a wall it started past the wall, found the sky, and left a pale blue strip along the wall's foot) */ \
+    "              if (t < g_rts.w) { float3 gn = cross(e1, e2); if (abs(dot(gn, g_rts.xyz)) > 0.7 * length(gn)) continue; }\n" \
     /* (two surfaces at one place - a tile's triangle stored twice, a far copy laid over the near one - each a hair nearer than the \
      * other from one ray to the next: the one first in the tree is taken, always. By which was nearer, the two traded places with \
      * every small move of the ray, pixel to pixel and frame to frame, and that part of the reflection flickered. tm stays a hair \
@@ -161,7 +191,9 @@
     "      uint ht; float2 hb;\n" \
     /* (the meshes' tree starts the ray off the floor it leaves: ground laid over ground, a path or a drain's rim a hand above the \
      * pavement, is a surface the ray meets at once from beneath, a dark band that isn't there) */ \
-    "      float th = bvh_trace(ow, dw, rti.x == 2u ? max(0.03 * dist + 0.05, 0.4) : 0.03 * dist + 0.05, rtmax, rti.y, rti.x == 2u ? rti.z : 0u, false, ht, hb);\n" \
+    "      g_rts = float4(upn.x * m0.xyz + upn.y * m1.xyz + upn.z * m2.xyz, rti.x == 2u ? max(0.03 * dist + 0.05, 0.4) : 0.0);\n" \
+    "      float th = bvh_trace(ow, dw, rti.x == 2u ? 0.02 : 0.03 * dist + 0.05, rtmax, rti.y, rti.x == 2u ? rti.z : 0u, false, ht, hb);\n" \
+    "      g_rts.w = 0.0;\n" \
     "      uint rtf = g_rtf;\n" \
     /* (the meshes' tree has the zone and no one in it: where the screen found a surface nearer than the tree's, a player, a \
      * monster, a thing that moves, the screen's is shown) */ \
@@ -293,20 +325,41 @@
 
 /* fx_zlate (after the game's last effect, before its interface): the game's effects, mirrored about the player's level
  * (gfx_d3d12_rtfx.h: input 3, half the scene's size), laid by the reflections' weight (input 4, their layer's alpha) on the floors
- * at that level. For this pass alone u.rtx is the level's plane in view space (mfx_late_in): xyz this frame's up times the effects'
- * strength (0: none), w the level along it from the camera. Not u.up, which is eased over frames: while the camera pitched it
+ * at that level. For this pass alone u.rtx is the level's plane in view space (mfx_late_in): xyz this frame's up, its length the
+ * effects' strength (0: none) and the blur's radius, w the level along it from the camera. Not u.up, which is eased over frames: while the camera pitched it
  * trailed by degrees, a floor 15 yalms off measured two yalms off the level, and the effects left the reflections until it caught
  * up. An effect that adds light is added; one blended over the world (a home point's crystal) left its cover in the mirror's
  * alpha, and takes that share of the pixel. Laid this late, the same frame's: in the next frame's reflections, they trailed the
- * camera */
+ * camera. And blurred as the reflections are (refl_rt_blur, RT_BLUR_HLSL's Gaussian, its radius in the layer's texels): the
+ * plane's length is that radius plus the strength (0 to 1, so the radius is the whole part less one) - laid sharp, a crystal's
+ * reflection stood crisp in a floor whose every other reflection was a soft blur */
 #define RT_FX_HLSL \
     "#ifdef ZL_LATE\n" \
-    "  float mst = length(u.rtx.xyz);\n" \
-    "  if (mst > 0.001 && z != 0.0) {\n" \
-    "    float lvl = 1.0 - smoothstep(0.4, 1.2, abs(dot(view_pos(i.pos.xy, z), u.rtx.xyz / mst) - u.rtx.w));\n" \
-    "    float4 mf = tap(3, (u.vp.xy + i.uv * u.vp.zw) / size_of(2));\n" \
-    "    float mk = saturate(tap(4, i.uv).a) * min(mst, 1.0) * lvl;\n" \
-    "    r += mf.rgb * mk;\n" \
-    "    w = 1.0 - (1.0 - w) * (1.0 - saturate(mf.a) * mk);\n" \
+    "  float mln = length(u.rtx.xyz);\n" \
+    "  if (mln > 0.001 && z != 0.0) {\n" \
+    "    float mbl = ceil(mln) - 1.0, mst = mln - mbl;\n" \
+    "    float lvl = 1.0 - smoothstep(0.4, 1.2, abs(dot(view_pos(i.pos.xy, z), u.rtx.xyz / mln) - u.rtx.w));\n" \
+    "    float mk = saturate(tap(4, i.uv).a) * mst * lvl;\n" \
+    "    if (mk > 0.001) {\n" \
+    "      float2 mu = (u.vp.xy + i.uv * u.vp.zw) / size_of(2);\n" \
+    "      float4 mf = tap(3, mu);\n" \
+    "      if (mbl > 0.5) {\n" \
+    "        float2 mt = u.vp.zw / (size_of(2) * size_of(4));\n" \
+    "        float stp = max(1.0, mbl * 0.25), inv = -2.0 / (mbl * mbl), bw_ = 0.0;\n" \
+    "        int nr = mbl < 4.0 ? int(ceil(mbl)) : 4;\n" \
+    "        float2 jit = mbl < 4.0 ? float2(0.0, 0.0) : (float2(frac(sin(dot(i.pos.xy, float2(12.9898, 78.233))) * 43758.5453), frac(sin(dot(i.pos.xy, float2(39.3468, 11.135))) * 24634.6345)) - 0.5) * stp;\n" \
+    "        mf = float4(0.0, 0.0, 0.0, 0.0);\n" \
+    "        [loop] for (int oy = -nr; oy <= nr; ++oy) {\n" \
+    "          [loop] for (int ox = -nr; ox <= nr; ++ox) {\n" \
+    "            float2 off = float2(ox, oy) * stp + jit;\n" \
+    "            float gw = exp(dot(off, off) * inv);\n" \
+    "            mf += tap(3, mu + off * mt) * gw; bw_ += gw;\n" \
+    "          }\n" \
+    "        }\n" \
+    "        mf /= bw_;\n" \
+    "      }\n" \
+    "      r += mf.rgb * mk;\n" \
+    "      w = 1.0 - (1.0 - w) * (1.0 - saturate(mf.a) * mk);\n" \
+    "    }\n" \
     "  }\n" \
     "#endif\n"

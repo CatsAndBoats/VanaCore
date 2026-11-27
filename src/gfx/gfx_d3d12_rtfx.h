@@ -23,7 +23,7 @@ static struct
     float m[16];     /* the draws' clip space into the mirror (mirror_matrix) */
     float sx, sy;    /* the target's size over the scene's: a draw's viewport by it (viewport_for) */
     uint32_t n;      /* effects drawn into it */
-    float plane[4];  /* the level in view space, for fx_zlate (mfx_refl_in): this frame's up times the effects' strength, the level along it */
+    float plane[4];  /* the level in view space, for fx_zlate (mfx_refl_in): this frame's up, as long as the strength plus the blur's radius; the level along it */
 } g_mfx;
 
 /* the models drawn before the scene ends, kept to be drawn into the mirror (mfx_rec_new, mfx_replay) */
@@ -289,7 +289,7 @@ static void mfx_viewport(float* x, float* y, float* w, float* h)
  * a camera that pitches) times the effects' strength, and the player's feet along it from the camera */
 static void mfx_refl_in(int ssr, int32_t* refl_in, int* refl_n, FxU* u, const GfxScene* s)
 {
-    (void)refl_in, (void)refl_n, (void)u;
+    (void)refl_in, (void)refl_n;
     const float st = ssr && mfx_wanted() ? fminf(g_fxs.refl_rt_fx, 1.0f) : 0.0f;
     const float sign = s->view[5] < 0.0f ? -1.0f : 1.0f;
     float up[3] = { s->view[4] * sign, s->view[5] * sign, s->view[6] * sign }, fv[3];
@@ -300,7 +300,7 @@ static void mfx_refl_in(int ssr, int32_t* refl_in, int* refl_n, FxU* u, const Gf
         fv[k] = s->focus[0] * s->view[k] + (s->focus[1] - g_fxs.refl_rt_fx_level) * s->view[4 + k] + s->focus[2] * s->view[8 + k] + s->view[12 + k];
     }
     for (int k = 0; k < 3; ++k)
-        g_mfx.plane[k] = up[k] * st;
+        g_mfx.plane[k] = up[k] * (st > 0.0f ? st + u->rtx[0] : 0.0f); /* (and the blur's radius, a whole number: fx_zlate blurs them as the layer is) */
     g_mfx.plane[3] = fv[0] * up[0] + fv[1] * up[1] + fv[2] * up[2];
 }
 

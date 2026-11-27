@@ -45,12 +45,10 @@
     <ClCompile Include="home.cpp" />
     <ClCompile Include="home_pages.cpp" />
     <ClCompile Include="home_profiles.cpp" />
-    <ClCompile Include="install.cpp" />
     <ClCompile Include="..\shared\ui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="home.h" />
-    <ClInclude Include="install.h" />
     <ClInclude Include="..\shared\app_api.h" />
     <ClInclude Include="..\shared\ui.h" />
     <ClInclude Include="..\shared\version.h" />
