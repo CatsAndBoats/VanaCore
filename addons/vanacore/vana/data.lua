@@ -4303,8 +4303,8 @@ local TABS = {
             local night = { dark = effect_sub('Dark night', 'night', 0, 0.5), bright = effect_sub('Bright night', 'night_bright', 0, 1) }
             night.dark.show_if = function () return false end
             night.bright.show_if = night.dark.show_if
-            night.sliders = { slider('Darkness', FX, 'night', 0, 0, 1, 0.05), slider('Moonlight colour', FX, 'night_moon', 0, 0, 1, 0.05),
-                              slider('Moon strength', FX, 'night_bright', 0, 0, 3, 0.05),
+            night.sliders = { slider('Darkness', FX, 'night', 0.5, 0, 1, 0.05), slider('Moonlight colour', FX, 'night_moon', 0, 0, 1, 0.05),
+                              slider('Moon strength', FX, 'night_bright', 1, 0, 3, 0.05),
                               slider('General lighting', FX, 'night_bright_ambient', 0, 0, 3, 0.05) }
             night.pick = function () -- 1 Off, 2 Dark, 3 Bright (both on, from a hand-edited ini: Dark)
                 return night.dark.switch.get() and 2 or night.bright.switch.get() and 3 or 1
@@ -4595,7 +4595,7 @@ local TABS = {
                 -- Strength lights the pool at night with Dark night on only (it gives back the light Dark night took: gfx_shared.c
                 -- gfx_player_light); by day the world round it goes darker (Darken around); at night without Dark night, nothing
                 effect_sub('Player light', 'player_light', 0, 1),
-                slider('Strength', FX, 'player_light', 0, 0, 2, 0.05),
+                slider('Strength', FX, 'player_light', 1, 0, 2, 0.05),
                 slider('Radius', FX, 'player_light_radius', 8, 3, 20, 0.5, '%.1f'),
                 slider('Warm colour', FX, 'player_light_warm', 0.5, 0, 1, 0.05),
                 slider('Darken around by day', FX, 'player_light_day', 0.5, 0, 1, 0.05),
@@ -4712,7 +4712,7 @@ local TABS = {
                                                            { '3', 'Anything built' } }),
                 effect('Bounce Lighting', 'gi', 0, 0.5),
                 note('Light picked up from lit surfaces nearby: colour on what is beside them, fill in the corners. DirectX 12.'),
-                slider('Strength', FX, 'gi', 0, 0, 2, 0.05),
+                slider('Strength', FX, 'gi', 0.5, 0, 2, 0.05),
                 slider('Radius', FX, 'gi_radius', 5, 0.5, 12, 0.5, '%.1f'),
                 -- its samples a pixel (6 to 40; 4 to 14 a frame where the temporal pass gathers them) and its layer's size: more is
                 -- less grainy and costs more. Twelve places, Performance to Quality, kept as gi_quality 0 to 4 (a place is 4/11 of
@@ -5063,7 +5063,7 @@ local TABS = {
                 slider('Sharpening', FX, 'sharpen', 0.3, 0, 1, 0.05),
                 slider('Smoothing', FX, 'smooth', 0, 0, 1, 0.05),
                 effect('Ink Lines', 'outline', 0, 1),
-                slider('Darkness', FX, 'outline', 0, 0, 1, 0.05),
+                slider('Darkness', FX, 'outline', 1, 0, 1, 0.05),
                 slider('Line width', FX, 'outline_width', 1, 0.5, 4, 0.25),
                 needs_dx12(slider('Character line width', FX, 'outline_width_chars', 0, 0, 4, 0.25)),
                 slider('Edge sensitivity', FX, 'outline_depth', 0.1, 0.01, 0.5, 0.01),
@@ -5079,10 +5079,10 @@ local TABS = {
                 grass_lines(slider('Grass edge sensitivity', FX, 'outline_depth_grass', 0, 0, 0.5, 0.01), 'Same', '%.2f'),
                 grass_lines(slider('Grass lines fade by', FX, 'outline_fade_grass', 0, 0, 200, 5, '%d'), 'Same', '%d'),
                 effect('Brightness Bands', 'bands', 0, 4),
-                slider('Bands', FX, 'bands', 0, 0, 8, 1, '%d'),
+                slider('Bands', FX, 'bands', 4, 0, 8, 1, '%d'),
                 slider('Band softness', FX, 'band_soft', 0.15, 0, 1, 0.05),
                 effect('Depth of Field', 'dof', 0, 12),
-                slider('Blur', FX, 'dof', 0, 0, 40, 1, '%d'),
+                slider('Blur', FX, 'dof', 12, 0, 40, 1, '%d'),
                 slider('Sharp zone', FX, 'dof_range', 0.5, 0, 3, 0.05),
                 slider('Blur builds over', FX, 'dof_far', 3, 0.2, 10, 0.1, '%.1f'),
                 slider('Blur in front', FX, 'dof_near', 0, 0, 1, 0.05),
@@ -7364,7 +7364,9 @@ local function reset_rows(rows, switches)
         end
     end
     -- an effect off by default (its strength's default 0: reflections, the cel look) has its strength's slider set to the
-    -- slider's own default, not taken out: taken out, it was 0 again and the effect went off with it
+    -- slider's own default, not taken out: taken out, it was 0 again and the effect went off with it. That default is the
+    -- effect's `on` (Reflections' Strength 5, Depth of Field's Blur 12), so the slider's own reset writes the same: at 0, it
+    -- turned the effect off where the panel's Reset kept it on (2026-11-27)
     local off_by_default = {}
     for _, row in ipairs(rows) do
         if row.effect and row.default <= 0 then
@@ -7417,7 +7419,14 @@ local function reset_rows(rows, switches)
                         vana.config.set(row.section, row.key .. '.enabled', '0')
                     end
                 end
-            elseif not strength_kept(row) then
+            elseif strength_kept(row) then
+                -- (an effect's strength that's on: its slider's default, as its own reset writes it)
+            elseif row.set ~= nil and row.to_kept == nil and row.default ~= nil and M.put_back ~= nil then
+                -- a setting kept its own way (DLSS's and FSR's Quality, Resolution, Scenery detail, Bounce Lighting's
+                -- Detail: other keys with it, its own units): its own reset's path (vana.lua M.put_back), so the panel's Reset
+                -- leaves what pressing each one's would. Only its key taken out, DLSS's dlss.scale stayed and set Quality
+                M.put_back(row)
+            else
                 vana.config.set(row.section, row.key, nil)
             end
             live = live or LIVE_GRAPHICS[row.section] or false
