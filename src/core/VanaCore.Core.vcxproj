@@ -516,6 +516,7 @@ exit /b 0</Command>
     <ClInclude Include="plugin_fault.hpp" />
     <ClInclude Include="plugin_memory.hpp" />
     <ClInclude Include="folders.hpp" />
+    <ClInclude Include="folders_make.h" />
     <ClInclude Include="plugins.hpp" />
     <ClInclude Include="pluginapi.hpp" />
     <ClInclude Include="registry.hpp" />

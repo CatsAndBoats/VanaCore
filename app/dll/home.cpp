@@ -11,6 +11,7 @@
 #pragma comment(lib, "version.lib") // (VanaCore.Core.dll's version: GetFileVersionInfoW)
 
 #include "version.h"
+#include "../../src/core/folders_make.h" // (VanaCore's own: the same folders and READMEs it makes at start)
 
 namespace vcapp {
 
@@ -63,6 +64,8 @@ Home::Home(const VanaCoreAppHost& host) : host_(host), dir_(host.dir), app_ini_(
     if (GetFileAttributesW((dir_ + L"\\VanaCore.exe").c_str()) != INVALID_FILE_ATTRIBUTES)
         game_ = dir_ + L"\\VanaCore.exe";
     reload_version();
+    if (!game_.empty()) // VanaCore's addon and plugin folders, each with its README, where they aren't there
+        vanacore::folders::make(dir_, [](const std::wstring&) {});
     load_profiles(); // (its file: ini_)
     detect();
     load_pivot();
