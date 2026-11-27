@@ -50,6 +50,12 @@ bool parse(const std::wstring& text, unsigned (&v)[3])
     return true;
 }
 
+bool parse_ok(const std::wstring& text)
+{
+    unsigned v[3] = {};
+    return parse(text, v);
+}
+
 bool newer(const std::wstring& release, const std::wstring& installed)
 {
     unsigned a[3] = {}, b[3] = {};
@@ -149,7 +155,7 @@ void Home::check_update()
             return set(Update::kNone); // (offline, GitHub down: nothing said)
         const std::wstring tag = net::wide(json_string(body, "tag_name", 0));
         if (!newer(tag, installed))
-            return set(Update::kNone);
+            return set(parse_ok(tag) ? Update::kCurrent : Update::kNone);
         std::wstring url;
         for (std::size_t at = 0;;) {
             const std::string u = json_string(body, "browser_download_url", at, &at);
@@ -209,7 +215,7 @@ void Home::check_update()
 }
 
 // The update's line and bar in the glass bar while it runs (true: the footer's profile and START hidden); after it, a line
-// under them when there's something to say
+// under them only when it failed (done: the head's UP TO DATE pill)
 bool Home::draw_update(float w, float h, float mid)
 {
     std::wstring line;
@@ -220,7 +226,6 @@ bool Home::draw_update(float w, float h, float mid)
         line = stage == Update::kChecking      ? L"Checking for updates\x2026"
                : stage == Update::kDownloading ? L"Downloading VanaCore " + update_->version + L"\x2026"
                : stage == Update::kInstalling  ? L"Installing VanaCore " + update_->version + L"\x2026"
-               : stage == Update::kDone        ? L"Updated to VanaCore " + update_->version
                                                : update_->note;
     }
     const bool busy = stage == Update::kChecking || stage == Update::kDownloading || stage == Update::kInstalling;
@@ -236,6 +241,12 @@ bool Home::draw_update(float w, float h, float mid)
         canvas_.text_centred(line, ui::Font::Small, w / 2, h - 12,
                              ui::rgb(stage == Update::kFailed ? ui::pal::rose : kUpdateColour));
     return false;
+}
+
+bool Home::up_to_date() const
+{
+    std::lock_guard<std::mutex> lock(update_->mutex);
+    return update_->stage == Update::kCurrent || update_->stage == Update::kDone;
 }
 
 bool Home::updating() const

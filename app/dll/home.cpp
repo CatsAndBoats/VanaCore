@@ -121,6 +121,14 @@ void Home::render()
         const std::wstring version = L"v" + vanacore_, dash = L"  -  ";
         canvas_.text(version, ui::Font::Small, bx, sy, ui::rgb(kVersionColour));
         bx += canvas_.text_width(version, ui::Font::Small);
+        if (up_to_date()) { // (home_update.cpp found nothing newer, or just updated it): a green pill beside the version
+            const std::wstring pill = L"UP TO DATE";
+            const float pw = canvas_.text_width(pill, ui::Font::Label) + 16, ph = 18, px = bx + 8;
+            canvas_.fill(px, sy - ph / 2, pw, ph, ph / 2, ui::rgb(ui::pal::teal, 0.18f));
+            canvas_.outline(px, sy - ph / 2, pw, ph, ph / 2, ui::rgb(ui::pal::teal, 0.6f));
+            canvas_.text_centred(pill, ui::Font::Label, px + pw / 2, sy, ui::rgb(ui::pal::teal));
+            bx = px + pw - 4;
+        }
         canvas_.text(dash, ui::Font::Small, bx, sy, ui::rgb(ui::pal::dim));
         bx += canvas_.text_width(dash, ui::Font::Small);
     }

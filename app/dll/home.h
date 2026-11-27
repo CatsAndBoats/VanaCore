@@ -124,7 +124,7 @@ private:
 
     // home_update.cpp: VanaCore updated where the installer put it (its newest release's VanaCoreInstaller.exe, run silently)
     struct Update {
-        enum Stage { kNone, kChecking, kDownloading, kInstalling, kDone, kFailed };
+        enum Stage { kNone, kChecking, kCurrent, kDownloading, kInstalling, kDone, kFailed }; // (kCurrent: nothing newer)
         std::mutex mutex;
         Stage stage = kNone;
         std::wstring version, note; // the release's version, what went wrong
@@ -134,6 +134,7 @@ private:
     void check_update();
     bool draw_update(float w, float h, float mid);
     bool updating() const;
+    bool up_to_date() const;
     void updated();
     void reload_version();
 
