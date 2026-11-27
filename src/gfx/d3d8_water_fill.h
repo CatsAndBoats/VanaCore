@@ -8,8 +8,21 @@
  * or more under the level, appended to b's water. Not a sea's sheets, nor ones too big to grid */
 #define FILL_REACH 8
 #define FLOOD_REACH 96 /* cells a pond is flooded out to from its layer, at most */
+#define FLOOD_SHELF 2  /* the shelves' passes after a flood (bake_fill's sheet takes FILL_REACH): a bank's top a hand under the
+                        * river's level, beside a fall, chained 8 yalms of water down it past the lip where the game has none
+                        * (East Sarutabaruta, G-8); a flood's own shelves hug its water */
 #define FILL_POND_DOWN 16.0f /* how far from a pond's level its water's floors are looked for (fill_wet): no farther than its
                               * deepest bed needs, so a pool isn't flooded on over water lying a fall's height under its lip */
+#define FILL_SURFACE 1.0f /* the deep water's own floor (terrain 9) is the pond's surface only within this under its level: one
+                           * farther under is another water's, below a fall (East Sarutabaruta's upper river flooded the whole
+                           * river below its fall at its own height, 4 to 5 yalms over the game's water, the banks under it) */
+#define FILL_STEP 2.5f /* a cell is made water from a neighbour only if its floor lies no more than this under the neighbour's:
+                        * a fall's lip ends the flood (a shallow river's bed lies a fall's height under the bed above it) */
+#define FILL_SHELF_DOWN 1.25f /* a bank's shelf (fill_wet, not strict) lies no deeper than this under the level: beside a fall the
+                               * banks fall away under the river above, and its shelves' passes laid 8 yalms of its water over them,
+                               * a stair of cells hanging over the bank (East Sarutabaruta, G-8) */
+#define FILL_UNSEEN 1e30f /* a cell's floor not looked for yet (fl) */
+#define FILL_NOFLOOR 1e29f /* ... looked for, none within reach */
 static const float FILL_PT[5][2] = { { 0.5f, 0.5f }, { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f } }; /* a cell's middle, corners */
 #define FILL_MOST 262144u /* cells, at most */
 /* a cell: 0 open, 1 the sheet's, 2+k filled in pass k, and these */
@@ -21,11 +34,13 @@ typedef struct FillGrid
 {
     uint8_t* m;
     float* dp;       /* each made cell's depth */
+    float* fl;       /* each cell's floor (fill_floor): how far under the level the nearest one at its points is, the least */
     float x0, z0, y; /* its first cell's corner in the world, and the level */
     uint32_t nx, nz;
     float tag; /* added to its cells' depths: BAKE_FILL_TAG for a sheet's holes (bake_fill), 0 for a flooded pond's */
     int pond;  /* a pond's surface flooded (bake_flood): its sheet's cells water whatever the collision has under them, the pond's
                 * out from them where its water floors are at the level or under it, every cell BAKE_DEEP deep */
+    int flood; /* bake_flood's (either kind): a cell with a point over what lies well under the level is none (fill_wet) */
 } FillGrid;
 
 /* The ponds' cells flooded this zone (bake_flood), so that four layers round one pond flood it once: x, z (a cell's corner, whole
@@ -87,12 +102,50 @@ static int fill_grid(const WaterBake* b, float y, uint32_t reach, FillGrid* g)
     g->nx = (uint32_t)(b->hi[0] - g->x0) + reach + 2, g->nz = (uint32_t)(b->hi[2] - g->z0) + reach + 2;
     if ((uint64_t)g->nx * g->nz > FILL_MOST)
         return 0;
-    g->m = (uint8_t*)calloc((size_t)g->nx * g->nz, 1);
-    g->dp = (float*)calloc((size_t)g->nx * g->nz, sizeof(float));
-    if (g->m && g->dp)
+    const size_t n = (size_t)g->nx * g->nz;
+    g->m = (uint8_t*)calloc(n, 1);
+    g->dp = (float*)calloc(n, sizeof(float));
+    g->fl = (float*)malloc(n * sizeof(float));
+    if (g->m && g->dp && g->fl)
+    {
+        for (size_t i = 0; i < n; ++i)
+            g->fl[i] = FILL_UNSEEN;
         return 1;
-    free(g->m), free(g->dp);
+    }
+    free(g->m), free(g->dp), free(g->fl);
     return 0;
+}
+
+static void fill_free(FillGrid* g)
+{
+    free(g->m), free(g->dp), free(g->fl);
+}
+
+/* the cell's floor: of the nearest floors to the level at its middle and corners, how far under it the highest lies (FILL_NOFLOOR
+ * with none within reach); looked for once */
+static float fill_floor(FillGrid* g, uint32_t ix, uint32_t iz)
+{
+    float* f = &g->fl[(size_t)iz * g->nx + ix];
+    if (*f == FILL_UNSEEN)
+    {
+        float least = FILL_NOFLOOR;
+        for (int k = 0; k < 5; ++k)
+        {
+            float p[3] = { g->x0 + (float)ix + FILL_PT[k][0], g->y, g->z0 + (float)iz + FILL_PT[k][1] }, d;
+            if (grass_floor_near(p, g->pond ? FILL_POND_DOWN : 12.0f, &d) >= 0)
+                least = fminf(least, d);
+        }
+        *f = least;
+    }
+    return *f;
+}
+
+/* the cell (ix, iz) may be made water from its neighbour j (the cell's index in m): its floor not FILL_STEP or more under the
+ * neighbour's (either without a floor: may) */
+static int fill_step(FillGrid* g, uint32_t ix, uint32_t iz, size_t j)
+{
+    const float a = fill_floor(g, ix, iz), b = fill_floor(g, (uint32_t)(j % g->nx), (uint32_t)(j / g->nx));
+    return a >= FILL_NOFLOOR || b >= FILL_NOFLOOR || a - b <= FILL_STEP;
 }
 
 /* the points of each cell (FILL_PT's bits) b's triangles cover */
@@ -134,9 +187,14 @@ static float fill_wet(const FillGrid* g, uint32_t ix, uint32_t iz, int strict)
         /* (a pond's floors looked for deeper: Lake Mechieume's bed lies 13 yalms down in places, past the 12 the rest ask
          * within, and its deepest water was square holes in the lake) */
         const int tk = grass_floor_near(p, g->pond ? FILL_POND_DOWN : 12.0f, &d);
-        const int w = g->pond  ? (tk == 8 || tk == 9) && d >= -BAKE_LEVEL
-                      : strict ? (tk == 9 && d >= -1.0f) || (tk == 8 && d >= 0.1f)
-                               : (tk == 9 && fabsf(d) <= 1.0f) || (tk >= 0 && tk != 9 && d >= 0.1f);
+        /* a flood's cell hanging over the ground beside a fall, or over the river below it: a point of it over ground deeper than
+         * a shelf, or another water's surface a fall's height down. Any one wet point made the cell water, and the cells along
+         * the lip and down the banks beside it were a stair of water in the air (East Sarutabaruta, G-8) */
+        if (g->flood && tk >= 0 && tk != 8 && d > (tk == 9 ? FILL_STEP : FILL_SHELF_DOWN))
+            return 0.0f;
+        const int w = g->pond  ? (tk == 8 && d >= -BAKE_LEVEL) || (tk == 9 && d >= -BAKE_LEVEL && d <= FILL_SURFACE)
+                      : strict ? (tk == 9 && d >= -1.0f && d <= FILL_SURFACE) || (tk == 8 && d >= 0.1f)
+                               : (tk == 9 && fabsf(d) <= 1.0f) || (tk >= 0 && tk != 9 && d >= 0.1f && d <= FILL_SHELF_DOWN);
         if (w)
             ++wet, deep = fmaxf(deep, tk == 9 ? fmaxf(d, 1.0f) : d);
     }
@@ -202,10 +260,13 @@ static uint32_t fill_pass(FillGrid* g, int pass, int strict)
             uint8_t* c = &g->m[i];
             if (*c != 0 && *c != FILL_SEED && (strict || *c != FILL_NOT))
                 continue;
-            const uint8_t n4[4] = { c[-1], c[1], c[-(ptrdiff_t)g->nx], c[g->nx] };
+            const size_t j4[4] = { i - 1, i + 1, i - g->nx, i + g->nx };
             int next = strict && *c == FILL_SEED;
-            for (int k = 0; k < 4; ++k)
-                next |= (n4[k] >= 1 && n4[k] < 2 + pass) || n4[k] == FILL_TAKEN;
+            for (int k = 0; k < 4 && !next; ++k)
+            {
+                const uint8_t n = g->m[j4[k]];
+                next = ((n >= 1 && n < 2 + pass) || n == FILL_TAKEN) && fill_step(g, ix, iz, j4[k]);
+            }
             if (!next)
                 continue;
             const float dp = g->pond && *c == FILL_SEED ? BAKE_DEEP : fill_wet(g, ix, iz, strict);
@@ -235,7 +296,7 @@ static void bake_fill(WaterBake* b, float y)
     for (int pass = 0; pass < FILL_REACH; ++pass)
         filled += fill_pass(&g, pass, 0);
     fill_runs(b, &g, 1.0f);
-    free(g.m), free(g.dp);
+    fill_free(&g);
     if (g_water_set.log && filled)
         rt_log("[recomp] water: the sheet at %.1f (x %.0f..%.0f z %.0f..%.0f): %u cells of its holes and banks' shelves under its "
                "level made water\n", y, b->lo[0], b->hi[0], b->lo[2], b->hi[2], filled);
@@ -303,7 +364,7 @@ static void bake_flood(WaterBake* b, float y, int pond, int own)
     /* (not at a sea's level: VanaCore's sea plane is its water) */
     const int ok = !(g_sea.n >= SEA_LEAST && sea_zone() && fabsf(y - g_sea.y) <= 1.5f) && fill_grid(b, y, FLOOD_REACH + FILL_REACH, &g);
     if (ok)
-        fill_cover(b, &g), g.pond = pond;
+        fill_cover(b, &g), g.pond = pond, g.flood = 1;
     g_bake_nv = b->at, b->n = 0; /* the layer's triangles (the last in the pool) let go; the flood's cells take their place */
     if (!ok)
         return;
@@ -319,12 +380,12 @@ static void bake_flood(WaterBake* b, float y, int pond, int own)
     for (; pass < FLOOD_REACH && (n = fill_pass(&g, pass, 1)) != 0; ++pass)
         cells += n;
     const int cut = pass == FLOOD_REACH && n != 0; /* stopped by the reach with cells still being made: in open water */
-    for (int k = 0; k < FILL_REACH; ++k, ++pass)
+    for (int k = 0; k < FLOOD_SHELF; ++k, ++pass)
         shelf += fill_pass(&g, pass, 0);
     fill_runs(b, &g, own ? -1.0f : 1.0f);
     flood_note(b, &g);
     flood_pend(&g, cut, pond, own);
-    free(g.m), free(g.dp);
+    fill_free(&g);
     if (g_water_set.log)
         rt_log("[recomp] water: the %s at %.2f (drawn at %.1f %.1f %.1f) flooded %u cells of its pond and %u of its banks' shelves "
                "(%u quads), x %.0f..%.0f z %.0f..%.0f\n", pond ? "pond's sheet" : "additive layer", y, b->t[0], b->t[1], b->t[2], cells,
