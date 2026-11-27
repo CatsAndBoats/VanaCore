@@ -37,7 +37,7 @@ shows one as a string to copy (or saves a .json), Import takes either, with the 
 
 addon.name    = 'vana'
 addon.author  = 'Vekien'
-addon.version = '2.3'
+addon.version = '2.4'
 addon.desc    = "VanaCore's window: what's running, and its settings."
 
 local imgui = vana.imgui
@@ -523,8 +523,9 @@ local function load_settings()
         end
     end
     if ok and type(saved) == 'table' and type(saved.sub) == 'table' then
+        -- each page opens at the sub-tab it was last on, but Client: always at its VanaCore (its first) at a game's start
         for id, title in pairs(saved.sub) do
-            if type(id) == 'string' and type(title) == 'string' then
+            if type(id) == 'string' and type(title) == 'string' and id ~= 'client' then
                 st.sub[id] = title
             end
         end
