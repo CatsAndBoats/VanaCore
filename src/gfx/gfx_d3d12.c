@@ -6691,9 +6691,9 @@ static const char FX_HLSL_2[] =
     "  if ((rw >> 2) != 0) {\n"
     "    int t = int(texel(7, q).r * 15.9375 + 0.5) - 1;\n"
     "    float fz = view_z(texel(8, q).r);\n"
-    /* (y 2: the layer nearer than the picture - a piece of collision the game draws nothing for, a planter's box taller than the
-     * planter, hid the floor behind it in the layer, a bare patch in the reflections: its neighbours say what it is, fx_ssr) */
-    "    if (fz != 0.0 && (zq - fz) * u.hand.x > 0.07 + 0.014 * dq) return float2(0.0, 2.0);\n"
+    /* (y 2: the layer nearer than the picture - collision the game draws nothing for, a planter's box: its neighbours say what it is,
+     * fx_ssr. Not deep water (kind 9, its surface): the bed under it took the banks' reflection from afar, E. Sarutabaruta, y 0) */
+    "    if (fz != 0.0 && (zq - fz) * u.hand.x > 0.07 + 0.014 * dq) return float2(0.0, t == 9 ? 0.0 : 2.0);\n"
     "    if (fz != 0.0 && (fz - zq) * u.hand.x > 0.07 + 0.014 * dq) occ = 1.0;\n"
     "    if (t < 0 || ((rw >> 2) & (1 << t)) == 0) return float2(0.0, occ);\n"
     "    ok *= 1.0 - smoothstep(0.04 + 0.008 * dq, 0.07 + 0.014 * dq, abs(fz - zq));\n"
