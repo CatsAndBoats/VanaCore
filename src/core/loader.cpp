@@ -8,6 +8,7 @@
 #include <objbase.h>
 
 #include <vanacore/console.hpp>
+#include <vanacore/tls.hpp>
 
 #include <atomic>
 #include <cstdarg>
@@ -16,6 +17,7 @@
 #include <cstring>
 #include <ctime>
 #include <initializer_list>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -208,6 +210,7 @@ std::wstring head(const char* data, int size)
 }
 
 #include "loader_zonelink.h" // zonelink: the game's UDP with the map server, for the log
+#include "loader_lobby.h"    // the lobby's data link and view relay, plain or over TLS
 
 // PlayOnline looks the game's lobby up as ffxi00.pol.com: that's the server. Its profile server,
 // pp000.pol.com, is the stand-in on this machine (otherwise Square Enix's own, which never answers).
@@ -236,6 +239,11 @@ hostent* WINAPI get_host_by_name(const char* name)
 
 int WINAPI connect_traced(SOCKET socket, const sockaddr* to, int length)
 {
+    sockaddr_in relay{};
+    if (view_redirect(to, relay)) {
+        to = reinterpret_cast<const sockaddr*>(&relay);
+        length = sizeof(relay);
+    }
     const int result = g_connect(socket, to, length);
     const DWORD error = GetLastError();
     if (to != nullptr && to->sa_family == AF_INET && tracing())
@@ -277,7 +285,7 @@ int WINAPI recv_traced(SOCKET socket, char* data, int size, int flags)
         if (peer_of(socket, peer) && traced_peer(peer) && tracing())
             log::write(L"Lobby: from %hs, %d bytes: %ls", address_text(peer).c_str(), result,
                        result > 0 ? head(data, result).c_str() : L"(closed or failed)");
-    if (result > 0 && (flags & MSG_PEEK) == 0) {
+    if (result > 0 && (flags & MSG_PEEK) == 0 && !t_lobby_own) {
         zonelink::on_lobby_reply(data, result);
         on_world_list(data, result);
     }
@@ -321,7 +329,9 @@ int WINAPI send_lobby(SOCKET socket, const char* data, int size, int flags)
         return g_send(socket, data, size, flags);
     }
     const std::uint16_t port = known_peer ? ntohs(peer.sin_port) : 0;
-    const bool lobby = port == g_login.view_port || port == g_login.data_port;
+    // over TLS, the game's view connection is to the relay (and the relay's to the server carries TLS records)
+    const bool lobby = known_peer && !t_lobby_own &&
+                       (g_login.lobby_tls != 0 ? view_relayed(peer) : port == g_login.view_port || port == g_login.data_port);
     // each command's first, in the log
     static std::atomic<std::uint64_t> logged{0};
     const std::uint64_t bit = std::uint64_t{1} << (command & 63);
@@ -377,6 +387,10 @@ bool hook_winsock()
     const bool traced = connect_function != nullptr && recv_function != nullptr &&
                         imports::detour_auto(connect_function, &connect_traced, g_connect) &&
                         imports::detour_auto(recv_function, &recv_traced, g_recv);
+    if (!traced && g_login.lobby_tls != 0) {
+        report(L"couldn't patch winsock's connect and recv, which the lobby over TLS needs");
+        return false;
+    }
     log::write(L"Game start: winsock's send and gethostbyname patched (the lobby's server and session)%ls",
                traced ? L"; its connections are logged" : L"");
     if (!zonelink::install(ws2))
@@ -386,83 +400,84 @@ bool hook_winsock()
 
 // --- The lobby's data link: the server asks, the loader answers ---------------------------------
 
-bool send_all(SOCKET socket, const char* data, int size)
+// The answer to one of the server's packets on the data link (`got` bytes at `in`)
+void data_answer(const char* in, int got)
 {
-    while (size > 0) {
-        const int sent = ::send(socket, data, size, 0);
-        if (sent <= 0)
-            return false;
-        data += sent;
-        size -= sent;
+    if (got < 2)
+        return;
+    char out[28] = {};
+    switch (static_cast<unsigned char>(in[0])) {
+    case 0x01: // who's this: the account, and the server as the game knows it
+        out[0] = static_cast<char>(0xA1);
+        std::memcpy(out + 1, &g_login.account_id, 4);
+        std::memcpy(out + 5, &g_login.server_address, 4);
+        std::memcpy(out + 12, g_login.session_hash, sizeof(g_login.session_hash));
+        log::write(L"Lobby: sending the account");
+        data_send(out, static_cast<int>(sizeof(out)));
+        break;
+    case 0x02:
+    case 0x15: // the key: the session value (what servers before LandSandBoat #11736 key the zone with), and
+               // the counter's start, fixed
+        out[0] = static_cast<char>(0xA2);
+        std::memcpy(out + 1, g_session_value, sizeof(g_session_value));
+        out[17] = static_cast<char>(0x58);
+        out[18] = static_cast<char>(0xE0);
+        out[19] = static_cast<char>(0x5D);
+        out[20] = static_cast<char>(0xAD);
+        log::write(L"Lobby: sending the key (value %08X, LandSandBoat xi_connect's \"key value\" fingerprint)",
+                   key_fingerprint());
+        data_send(out, static_cast<int>(sizeof(out)));
+        break;
+    case 0x03: { // the characters: into polcore's slots, where the lobby lists them
+        char* slots = g_character_slots.load();
+        const int count = static_cast<unsigned char>(in[1]);
+        if (slots == nullptr) {
+            log::write(L"Lobby: %d characters arrived before PlayOnline was ready; not shown", count);
+            break;
+        }
+        int shown = 0;
+        for (int i = 0; i < count && 0x10 * (i + 1) + 8 <= got; ++i, ++shown) {
+            char* slot = slots + static_cast<size_t>(i) * kCharacterSlotSize;
+            const char* character = in + 0x10 * (i + 1);
+            slot[0x00] = 1;
+            slot[0x02] = 1;
+            slot[0x10] = static_cast<char>(i);
+            slot[0x11] = static_cast<char>(0x80);
+            slot[0x18] = 0x20;
+            slot[0x28] = 0x20;
+            std::memcpy(slot + 0x04, character + 4, 4); // character id
+            std::memcpy(slot + 0x08, character, 4);     // content id
+        }
+        log::write(L"Lobby: %d character%ls", shown, shown == 1 ? L"" : L"s");
+        break;
     }
-    return true;
+    default:
+        break;
+    }
 }
 
 DWORD WINAPI data_link(void*)
 {
-    char out[28] = {};
-    out[0] = static_cast<char>(0xFE); // the session, so the server can pair this link with the login
-    std::memcpy(out + 12, g_login.session_hash, sizeof(g_login.session_hash));
-    if (!send_all(g_data, out, static_cast<int>(sizeof(out)))) {
+    t_lobby_own = true;
+    char hello[28] = {};
+    hello[0] = static_cast<char>(0xFE); // the session, so the server can pair this link with the login
+    std::memcpy(hello + 12, g_login.session_hash, sizeof(g_login.session_hash));
+    if (!data_send(hello, static_cast<int>(sizeof(hello)))) {
         log::write(L"Lobby: couldn't open the data link (winsock error %d)", WSAGetLastError());
         return 0;
     }
-    char in[4096];
-    for (;;) {
-        const int got = recv(g_data, in, sizeof(in), 0);
-        if (got < 2)
-            break; // the server closed it (the lobby is done), or the game is closing
-        std::memset(out, 0, sizeof(out));
-        switch (static_cast<unsigned char>(in[0])) {
-        case 0x01: // who's this: the account, and the server as the game knows it
-            out[0] = static_cast<char>(0xA1);
-            std::memcpy(out + 1, &g_login.account_id, 4);
-            std::memcpy(out + 5, &g_login.server_address, 4);
-            std::memcpy(out + 12, g_login.session_hash, sizeof(g_login.session_hash));
-            log::write(L"Lobby: sending the account");
-            send_all(g_data, out, static_cast<int>(sizeof(out)));
-            break;
-        case 0x02:
-        case 0x15: // the key: the session value (what servers before LandSandBoat #11736 key the zone with), and
-                   // the counter's start, fixed
-            out[0] = static_cast<char>(0xA2);
-            std::memcpy(out + 1, g_session_value, sizeof(g_session_value));
-            out[17] = static_cast<char>(0x58);
-            out[18] = static_cast<char>(0xE0);
-            out[19] = static_cast<char>(0x5D);
-            out[20] = static_cast<char>(0xAD);
-            log::write(L"Lobby: sending the key (value %08X, LandSandBoat xi_connect's \"key value\" fingerprint)",
-                       key_fingerprint());
-            send_all(g_data, out, static_cast<int>(sizeof(out)));
-            break;
-        case 0x03: { // the characters: into polcore's slots, where the lobby lists them
-            char* slots = g_character_slots.load();
-            const int count = static_cast<unsigned char>(in[1]);
-            if (slots == nullptr) {
-                log::write(L"Lobby: %d characters arrived before PlayOnline was ready; not shown", count);
-                break;
-            }
-            int shown = 0;
-            for (int i = 0; i < count && 0x10 * (i + 1) + 8 <= got; ++i, ++shown) {
-                char* slot = slots + static_cast<size_t>(i) * kCharacterSlotSize;
-                const char* character = in + 0x10 * (i + 1);
-                slot[0x00] = 1;
-                slot[0x02] = 1;
-                slot[0x10] = static_cast<char>(i);
-                slot[0x11] = static_cast<char>(0x80);
-                slot[0x18] = 0x20;
-                slot[0x28] = 0x20;
-                std::memcpy(slot + 0x04, character + 4, 4); // character id
-                std::memcpy(slot + 0x08, character, 4);     // content id
-            }
-            log::write(L"Lobby: %d character%ls", shown, shown == 1 ? L"" : L"s");
-            break;
-        }
-        default:
-            break;
+    // the server's packets one at a time, however they arrive
+    std::string in;
+    while (data_receive(in)) {
+        while (!in.empty()) {
+            const size_t size = data_packet_size(in);
+            if (size == 0)
+                break; // the rest is on its way
+            data_answer(in.data(), static_cast<int>(size));
+            in.erase(0, size);
         }
     }
-    log::write(L"Lobby: data link closed");
+    log::write(L"Lobby: data link closed"); // the server closed it (the lobby is done), or the game is closing
     return 0;
 }
 
@@ -658,6 +673,7 @@ int run_game(const BootInfo& boot)
     in_addr server{};
     server.s_addr = g_login.server_address;
     InetNtopA(AF_INET, &server, g_server, sizeof(g_server));
+    g_server_host = boot.server[0] != L'\0' ? std::wstring(boot.server) : std::wstring(g_server, g_server + std::strlen(g_server));
     // The account's id isn't logged: a log is what a player sends for support
     log::write(L"Game start: on %hs (lobby %u and %u), PlayOnline region %u", g_server, g_login.view_port,
                g_login.data_port, g_login.language);
@@ -679,22 +695,13 @@ int run_game(const BootInfo& boot)
     }
 
     int result = kExitGameStartFailed;
-    HANDLE data_thread = nullptr, profile_thread = nullptr;
+    HANDLE data_thread = nullptr, profile_thread = nullptr, view_thread = nullptr;
     void* polcore = nullptr;
     void* game = nullptr;
     do {
-        // The lobby's data link, and the profile server's stand-in
-        g_data = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        sockaddr_in to{};
-        to.sin_family = AF_INET;
-        to.sin_port = htons(g_login.data_port);
-        to.sin_addr = server;
-        if (g_data == INVALID_SOCKET ||
-            connect(g_data, reinterpret_cast<const sockaddr*>(&to), sizeof(to)) == SOCKET_ERROR) {
-            report(L"couldn't connect to the lobby at %hs:%u (winsock error %d)", g_server, g_login.data_port,
-                   WSAGetLastError());
+        // The lobby's data link (and its view relay, over TLS), and the profile server's stand-in
+        if (!data_connect(server) || !view_relay_start(view_thread))
             break;
-        }
         const std::uint16_t profile_port = listen_locally(g_profile);
         if (profile_port == 0) {
             report(L"couldn't open PlayOnline's profile server on this machine (winsock error %d)", WSAGetLastError());
@@ -770,16 +777,24 @@ int run_game(const BootInfo& boot)
         static_cast<IUnknown*>(game)->Release();
     if (polcore != nullptr)
         static_cast<IUnknown*>(polcore)->Release();
-    // Closing the sockets ends both threads
-    if (g_data != INVALID_SOCKET)
-        closesocket(g_data);
+    // Closing the sockets ends the threads
+    data_close();
+    view_relay_close();
     if (g_profile != INVALID_SOCKET)
         closesocket(g_profile);
-    for (HANDLE thread : {data_thread, profile_thread})
+    bool data_ended = data_thread == nullptr;
+    for (HANDLE thread : {data_thread, profile_thread, view_thread})
         if (thread != nullptr) {
-            WaitForSingleObject(thread, 1000);
+            const bool ended = WaitForSingleObject(thread, 1000) == WAIT_OBJECT_0;
+            if (thread == data_thread)
+                data_ended = ended;
             CloseHandle(thread);
         }
+    // the data link's TLS only once its thread is done with it
+    if (data_ended)
+        g_data_tls.reset();
+    else
+        static_cast<void>(g_data_tls.release());
     CoUninitialize();
     WSACleanup();
     return result;

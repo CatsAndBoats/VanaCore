@@ -15,6 +15,7 @@ struct GameLogin {
     std::uint32_t language;         // PlayOnline's region: 0 Japanese (JP), 1 English (US), 2 European (EU)
     std::uint16_t data_port;        // the lobby's data port (54230)
     std::uint16_t view_port;        // the lobby's view port (54001)
+    std::uint32_t lobby_tls;        // 1: the data and view connections are TLS (xiloader 3.0's), else plain
 };
 
 // Passed from VanaCore.exe to VanaCore.Core.dll's VanaCoreInstall export. The launcher writes it
@@ -31,7 +32,7 @@ struct BootInfo {
     wchar_t server[256];      // the server's host (--server, else [server] server=); empty for retail
 };
 
-inline constexpr std::uint32_t kBootInfoVersion = 6;
+inline constexpr std::uint32_t kBootInfoVersion = 7;
 inline constexpr char kInstallExport[] = "VanaCoreInstall";
 
 // VanaCore.Core.dll's export that starts the game after VanaCore's own login (BootInfo::logged_in):

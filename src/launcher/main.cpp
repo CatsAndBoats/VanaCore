@@ -286,19 +286,23 @@ int log_in(int argc, wchar_t** argv, const vanacore::Settings& settings, vanacor
     std::uint32_t address = 0;
     if (!vanacore::login::resolve(server, address, error))
         return refuse(error, vanacore::kExitServerProblem);
-    // [server] loginversion: the version the login reports, for a server that wants another than VanaCore's
+    // [server] loginversion: the version the login reports, always (no other is tried); else VanaCore's, and the one a
+    // server that refuses it asks for
     vanacore::login::Version version = vanacore::login::kVersion;
+    bool negotiate = true;
     if (!settings.login_version.empty()) {
-        if (vanacore::login::parse_version(settings.login_version, version))
+        if (vanacore::login::parse_version(settings.login_version, version)) {
+            negotiate = false;
             say(stdout, L"Reporting login version " + settings.login_version + L" ([server] loginversion).", kGrey);
-        else
+        } else {
             say(stderr, L"VanaCore: [server] loginversion=" + settings.login_version +
                             L" isn't a version (2.0.1); reporting VanaCore's own.", kRed);
+        }
     }
     // The account isn't named: players send screenshots of this window, and logs, for support
     show(stdout, L"Logging in to " + server + L"...", kGrey);
     const vanacore::login::Result result =
-        vanacore::login::log_in(server, address, kAuthPort, user, password, version);
+        vanacore::login::log_in(server, address, kAuthPort, user, password, version, negotiate);
     SecureZeroMemory(password.data(), password.size() * sizeof(wchar_t));
     if (result.outcome != vanacore::login::Outcome::LoggedIn)
         return refuse(result.message, result.outcome == vanacore::login::Outcome::Refused
@@ -312,6 +316,9 @@ int log_in(int argc, wchar_t** argv, const vanacore::Settings& settings, vanacor
     login.language = language;
     login.data_port = kDataPort;
     login.view_port = kViewPort;
+    login.lobby_tls = vanacore::login::lobby_tls(result.version) ? 1 : 0;
+    note(L"Login as xiloader " + std::to_wstring(result.version[0]) + L"." + std::to_wstring(result.version[1]) + L"." +
+         std::to_wstring(result.version[2]) + (login.lobby_tls != 0 ? L": the lobby over TLS" : L": the lobby plain"));
     return 0;
 }
 

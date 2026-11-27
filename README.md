@@ -124,9 +124,9 @@ pol=C:\Games\MyServer\Game\PlayOnlineViewer
 ffxi=C:\Games\MyServer\Game\FINAL FANTASY XI
 
 [server]
-; the version VanaCore's login reports: only major.minor is checked. Match what your server's login wants
-; (VanaCore's own is 2.1.2; a LandSandBoat server from before 2026-02-12 wants 2.0.x)
-loginversion=2.0.1
+; the version VanaCore's login reports, and no other: only major.minor is checked. Left out, VanaCore
+; reports 3.0.0 and then whatever 2.x the server asks for; 3.x has the lobby over TLS, 2.x plain
+loginversion=2.1.2
 
 [graphics]
 renderer=d3d12
