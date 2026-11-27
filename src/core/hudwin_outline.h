@@ -23,6 +23,7 @@ bool outline(const char* id, double* moved_x, double* moved_y)
         return false;
     box.right = box.left + width;
     box.bottom = box.top + height;
+    scale_box(*w, box); // (<id>.scale: as big as it's drawn, about its anchor point)
     // move off and laid out over the chat (the Action menu's Magic and Abilities sub-menus...): it goes with the Interaction
     // Menu's box ("menus", chat.cpp) until it's dragged off, which its box shows (a chain link; amber as that's dragged)
     if (!w->move && w->over_chat)
@@ -33,8 +34,9 @@ bool outline(const char* id, double* moved_x, double* moved_y)
     // dragged: the window goes where the box is taken to (move on) at once
     if (drag.held) {
         w->move = true;
-        w->x = std::clamp(std::round((drag.left + w->anchor_x * width - area_left) * 10000.0 / area_w) / 100.0, 0.0, 100.0);
-        w->y = std::clamp(std::round((drag.top + w->anchor_y * height - area_top) * 10000.0 / area_h) / 100.0, 0.0, 100.0);
+        const double shown_w = box.right - box.left, shown_h = box.bottom - box.top; // (its anchor point in the box as drawn)
+        w->x = std::clamp(std::round((drag.left + w->anchor_x * shown_w - area_left) * 10000.0 / area_w) / 100.0, 0.0, 100.0);
+        w->y = std::clamp(std::round((drag.top + w->anchor_y * shown_h - area_top) * 10000.0 / area_h) / 100.0, 0.0, 100.0);
     }
     if (drag.released && moved_x != nullptr && moved_y != nullptr) {
         *moved_x = w->x;

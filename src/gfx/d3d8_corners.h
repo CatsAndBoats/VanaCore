@@ -354,7 +354,7 @@ void d3d8_window_drawing(int on)
 }
 
 /* Present: the next frame's windows and chat */
-static void wc_present(void) { g_wscope.depth = g_wscope.has = g_wscope.chats = 0; }
+static void wc_present(void) { g_wscope.depth = g_wscope.has = g_wscope.chats = 0, ws_present(); }
 
 /* window_alpha: a window's background (lo, hi) is in the corners' shape, if they're on there */
 static void wc_window(const GfxDraw* dr, const float lo[2], const float hi[2], int in_input, int in_chat)

@@ -113,6 +113,7 @@
     <ClInclude Include="d3d8_tips.h" />
     <ClInclude Include="d3d8_winimage.h" />
     <ClInclude Include="d3d8_corners.h" />
+    <ClInclude Include="d3d8_winscale.h" />
     <ClInclude Include="floors.h" />
     <ClInclude Include="rtbvh.h" />
     <ClInclude Include="zonemesh.h" />

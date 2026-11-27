@@ -25,6 +25,7 @@
 #include "partyrows.hpp"
 #include "scan.hpp"
 #include "statuswindow.hpp"
+#include "../gfx/vanacore_gfx.h"
 
 namespace vanacore::hudwin {
 namespace {
@@ -238,6 +239,7 @@ struct Window {
     double x = 0, y = 0;
     double width = 0; // a percent of the interface's width, 0 the game's
     double height = 0; // a percent of the interface's height, 0 the game's
+    double scale = 1;  // <id>.scale: drawn this many times its size, about its anchor point (hudwin_scale.h)
     bool frame = true; // <id>.background (kFrame; kFollow without kFrame: mainmenu.background)
     bool frame_logged = false;
     bool solid = false; // <id>.solid: without its frame, its buttons drawn solid (kFrame; kFollow without kFrame: mainmenu.solid)
@@ -1229,6 +1231,7 @@ void reload(const wchar_t* ini)
         w.y = number(id + L".y", w.default_y, 0, 100, ini);
         w.width = (w.can & kWidth) != 0 ? number(id + L".width", 0, 0, 100, ini) : 0;
         w.height = (w.can & kHeight) != 0 ? number(id + L".height", 0, 0, 100, ini) : 0;
+        w.scale = number(id + L".scale", 100, 50, 200, ini) / 100.0;
         w.frame = (w.can & kFrame) == 0 || GetPrivateProfileIntW(L"client", (id + L".background").c_str(), 1, ini) != 0;
         w.solid = (w.can & kFrame) != 0 && GetPrivateProfileIntW(L"client", (id + L".solid").c_str(), 0, ini) != 0;
         w.on_chat = (w.can & kChat) != 0 && GetPrivateProfileIntW(L"client", (L"chat." + id).c_str(), 0, ini) != 0;
@@ -1551,6 +1554,8 @@ void locate(const void* window, int& x, int& y)
 }
 
 #include "hudwin_up.h" // up: the HUD Manager's Open only
+
+#include "hudwin_scale.h" // <id>.scale: a window drawn bigger or smaller, the mouse's tests of it mapped back
 
 #include "hudwin_outline.h" // outline: a table window's box, Shift + drag moving it
 

@@ -350,6 +350,7 @@ exit /b 0</Command>
     <ClInclude Include="hudwin_windows.hpp" />
     <ClInclude Include="hudwin_up.h" />
     <ClInclude Include="hudwin_outline.h" />
+    <ClInclude Include="hudwin_scale.h" />
     <ClInclude Include="hudwin_under.h" />
     <ClInclude Include="hudwin_place.h" />
     <ClInclude Include="hudwin_comment.h" />

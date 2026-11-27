@@ -1847,6 +1847,35 @@ local function choice_shape(row)
 end
 
 -- a setting's control at the right of its row: toggle, choice, slider, colour
+-- a slider's value as its row shows it
+local function slider_text(row, value)
+    local fmt = row.fmt or '%.2f'
+    local shown = fmt:find('%%d') and math.floor(value + 0.5) or value
+    return row.format ~= nil and row.format(value) or string.format(fmt, shown)
+end
+
+-- The value column of a section's plain slider rows: as wide as the widest of their values at their min and max, so the
+-- tracks end together and a "5" isn't 40 px from its track (a 48 px column for every slider till 2026-11-27). Kept on the
+-- section till the scale changes.
+local function section_value_w(sec)
+    if sec._value_w ~= nil and sec._value_w_scale == M.scale then
+        return sec._value_w
+    end
+    local w = 0
+    for _, row in ipairs(sec.rows) do
+        if row.kind == 'slider' and row.min ~= nil and row.max ~= nil then
+            for _, v in ipairs({ row.min, row.max }) do
+                local ok, text = pcall(slider_text, row, v)
+                if ok and text ~= nil then
+                    w = math.max(w, M.measure(tostring(text), fonts.text, SMALL + 0.5))
+                end
+            end
+        end
+    end
+    sec._value_w, sec._value_w_scale = math.max(S(16), math.ceil(w + S(4))), M.scale
+    return sec._value_w
+end
+
 -- A slider row's control at sx: its reset icon (unless no_reset), the track, then the value (a press on it opens a typed
 -- number). `width` and `value_w` size it (draw.lua's usual when nil)
 local function draw_slider(row, id, sx, cy, enabled, alpha, width, value_w)
@@ -1857,9 +1886,7 @@ local function draw_slider(row, id, sx, cy, enabled, alpha, width, value_w)
     if st.drag ~= nil and st.drag.id == id and st.sliding == id then
         value = st.drag.value
     end
-    local fmt = row.fmt or '%.2f'
-    local shown = fmt:find('%%d') and math.floor(value + 0.5) or value
-    local text = row.format ~= nil and row.format(value) or string.format(fmt, shown)
+    local text = slider_text(row, value)
     local can_reset = M.differs(row, value)
     local v, moved, released, value_clicked, reset_clicked = M.slider(id, sx, cy, value, row.min, row.max, row.step, enabled,
         { text = text, reset = not row.no_reset, can_reset = can_reset, marks = row.marks, alpha = alpha, width = width, value_w = value_w })
@@ -1995,7 +2022,8 @@ local function draw_control(page, sec, row, id, right, cy, enabled, alpha, label
             end
         end
     elseif row.kind == 'slider' then
-        draw_slider(row, id, right - S(M.SLIDER_W), cy, enabled, alpha) -- (its own reset, before its track)
+        -- (its own reset, before its track; the value's column the section's, section_value_w)
+        draw_slider(row, id, right - S(M.SLIDER_W), cy, enabled, alpha, nil, sec ~= nil and section_value_w(sec) or nil)
     elseif row.kind == 'colour' then
         left = draw_colour(row, id, right, cy, enabled, alpha)
     end

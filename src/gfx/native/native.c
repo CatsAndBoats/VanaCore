@@ -808,6 +808,7 @@ void vanacore_gfx_set_window_corners(int shape, float size) { d3d8_set_window_co
 int vanacore_gfx_window_corners(float* size) { return d3d8_window_corners(size); }
 void vanacore_gfx_clip_to_corners(const float* rect) { d3d8_clip_to_corners(rect); }
 void vanacore_gfx_window_drawing(int on) { d3d8_window_drawing(on); }
+void vanacore_gfx_window_scale(float s, float ox, float oy) { d3d8_window_scale(s, ox, oy); }
 void vanacore_gfx_set_input_look(float alpha, float border_alpha, int tint_on, uint32_t tint_rgb, int border_on, uint32_t border_rgb)
 {
     d3d8_set_input_look(alpha, border_alpha, tint_on, tint_rgb, border_on, border_rgb);

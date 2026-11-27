@@ -508,6 +508,8 @@ short __fastcall on_button_hook(void* ctrl, void* edx, const int* point, char* e
     int mapped[2];
     if (buffwin::map_point(ctrl, point, mapped)) // buffs.scale: the status icons are drawn bigger or smaller than laid out
         return g_on_button(ctrl, edx, mapped, enabled);
+    if (hudwin::map_point(ctrl, point, mapped)) // <id>.scale: the window drawn bigger or smaller than laid out
+        point = mapped;
     const short found = g_on_button(ctrl, edx, point, enabled);
     if (found != -1 || point == nullptr || g_menu_want <= kMenuRowsDefault || !menu_window(ctrl))
         return found;
@@ -1602,6 +1604,7 @@ void __fastcall ctrl_draw_hook(void* ctrl, void* edx)
         CornerScope(const CornerScope&) = delete;
         CornerScope& operator=(const CornerScope&) = delete;
     } const corners;
+    const hudwin::Scaled scaled(ctrl); // [client] <id>.scale: drawn bigger or smaller about its anchor point
     left_out.drawn = true; // (the game's draw runs its calc itself)
     g_ctrl_draw(ctrl, edx);
     buffwin::leave_window(buff_outer);

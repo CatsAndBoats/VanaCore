@@ -197,6 +197,7 @@ void d3d8_set_window_corners(int shape, float size);
 int d3d8_window_corners(float* size);
 void d3d8_clip_to_corners(const float* rect);
 void d3d8_window_drawing(int on);
+void d3d8_window_scale(float s, float ox, float oy);
 void d3d8_set_input_look(float alpha, float border_alpha, int tint_on, uint32_t tint_rgb, int border_on, uint32_t border_rgb);
 void d3d8_set_chat_shadow(int mode, float opacity);
 struct VanaTextFont;

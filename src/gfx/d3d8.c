@@ -3695,28 +3695,37 @@ static void ui_present(void)
  * XYZRHW mapping (u.vp, the viewport in the game's pixels) stays, so the draw keeps its clip */
 static void ui_target_size(float* w, float* h);
 
+/* The target's pixels per game pixel as the draw came (draw_packet clears it for each draw; the first ui_map_axis notes it),
+ * so a second mapping (a window's scale over the aspect's squeeze: d3d8_winscale.h) keeps the target's edge where it is */
+static float g_ui_k0[2];
+
 static void ui_map_axis(GfxDraw* d, int i, float a, float b)
 {
     float x0 = d->u.vp[i], w = d->u.vp[i + 2];
-    if (!(w > 0))
+    if (!(w > 0) || !(b > 0))
         return;
-    float k = (float)d->vp[i + 2] / w; /* the target's pixels per game pixel */
-    float l = (a + b * x0) * k, r = (a + b * (x0 + w)) * k;
+    float k = (float)d->vp[i + 2] / w; /* the target's pixels per game pixel, as mapped so far */
+    if (!(g_ui_k0[i] > 0))
+        g_ui_k0[i] = k;
+    const float c = (float)d->vp[i] - k * x0; /* where game pixel 0 lands (0 until a mapping moved it) */
+    float l = c + (a + b * x0) * k, r = c + (a + b * (x0 + w)) * k;
     /* kept within the target: the back ends clip a viewport to it, which shrank the mapping (a bar's edge line, widened past
      * the screen's edge, stopped short of its corner) (from XI on Anything, rubymatrix/xi-on-anything ecf6cf7) */
     float tw, th;
     ui_target_size(&tw, &th);
-    const float edge = (i ? th : tw) * k;
+    const float edge = (i ? th : tw) * g_ui_k0[i];
     l = l < 0 ? 0 : l;
     r = r > edge ? edge : r;
     d->vp[i] = (uint32_t)(l + 0.5f);
     d->vp[i + 2] = r > l ? (uint32_t)(r - l + 0.5f) : 0;
     /* what rounding the clip took off, given back to the mapping so the draw lands where asked */
-    d->u.vp[i] = x0 + ((float)d->vp[i] / k - (a + b * x0)) / b;
+    d->u.vp[i] = ((float)d->vp[i] - c - k * a) / (k * b);
     d->u.vp[i + 2] = (float)d->vp[i + 2] / k / b;
 }
 
 static void ui_map(GfxDraw* d, float a, float b) { ui_map_axis(d, 0, a, b); }
+
+#include "d3d8_winscale.h" /* ws_apply, ws_box: each game window drawn at a scale of its own ([client] <id>.scale) */
 
 /* The game's size of the target the draw goes to: the back buffer's, or the menu target's */
 static void ui_target_size(float* w, float* h)
@@ -3833,6 +3842,7 @@ static void ui_squeeze(GfxDraw* d, uint32_t first, uint32_t n, uint32_t up_data,
     float box[4];
     if (!rhw_bounds(d, first, n, up_data, up_stride, box))
         return;
+    ws_box(box); /* a scaled window's draw: where it's drawn (ws_apply maps it after this) */
     float lo = box[0], ylo = box[1], hi = box[2], yhi = box[3];
     /* everything is squeezed toward the target's middle, whatever viewport the draw has (the chat
      * log's text and the menus' titles are clipped to their windows); "the whole width" with some
@@ -5848,6 +5858,7 @@ static void draw_packet(uint32_t prim, uint32_t count, uint32_t start, uint32_t 
         return;
     int window_scaled = 0, window_tinted = 0;
     g_wc.kind = 0;
+    g_ui_k0[0] = g_ui_k0[1] = 0.0f;
     up_data = window_alpha(d, prim, count, up_data, up_stride, n, &window_scaled, &window_tinted);
     window_look(d, window_scaled, window_tinted);
     up_data = wc_apply(d, &prim, &count, &nverts, up_data, up_stride); /* [client] window.corners (d3d8_corners.h) */
@@ -5931,6 +5942,7 @@ static void draw_packet(uint32_t prim, uint32_t count, uint32_t start, uint32_t 
             fprintf(g_cap, "  ui vp %.1f %.1f %.1f %.1f clip %u %u %u %u\n", d->u.vp[0], d->u.vp[1], d->u.vp[2], d->u.vp[3],
                 d->vp[0], d->vp[1], d->vp[2], d->vp[3]);
     }
+    ws_apply(d); /* a game window drawn at its own scale (d3d8_winscale.h): over the aspect's squeeze, under True Font's take */
     d->prim = prim, d->count = count;
     /* a point fill (/fillmode point): Direct3D 11 and 12 have none, so a triangle draw goes as its vertices, a point list
      * (a list's 3 a triangle, a strip's or a fan's each once, from the draw's own indices or vertex range) */

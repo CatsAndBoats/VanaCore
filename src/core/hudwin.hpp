@@ -72,6 +72,8 @@
 //                          is on an item (the game closes it for the item's details: hudwin_comment.h)
 //   itemdetails.move/.x/.y every item description ("iteminfo", "item4inf"... "itemx12i"): X and Y its top left; off, it
 //                          goes with its list as before
+//   <id>.scale             a percent (50 to 200, 100 the game's): the window drawn that many times its size about its
+//                          anchor point (hudwin_scale.h); the lists that go with the main menu take mainmenu.scale
 //   fulllog.move/.x/.y     the chat maximized ("menu    fulllog "): X and Y its top left corner; never moved by
 //                          menucontent
 //   fulllog.height         its height, a percent of the interface's (left out or 0: the game's), by the game's own resize
@@ -164,6 +166,22 @@ struct TitleBack {
 };
 void untitled(const void* ctrl, TitleBack& back);
 void title_back(TitleBack& back);
+
+// From the same hook, around the game's draw of `ctrl`: one of the table's windows with its <id>.scale (50 to 200 percent,
+// 100 the game's) drawn that many times its size about its anchor point (X and Y still say where that point is); the main
+// menu's lists that go with it, and the windows laid out in its place, at mainmenu.scale. The renderer maps the draw
+// (vanacore_gfx_window_scale) and the mouse's tests of the window are mapped back (map_point, and IsOnWindow's own hook).
+struct Scaled {
+    explicit Scaled(const void* ctrl);
+    ~Scaled();
+    Scaled(const Scaled&) = delete;
+    Scaled& operator=(const Scaled&) = delete;
+    bool on = false;
+};
+
+// The mouse's `point` (x, y, the interface's units) for window `window`, drawn scaled lately: taken back to where the game
+// laid the window out (for its IsOnButton), true with `mapped` set; false for a window drawn at its own size.
+bool map_point(const void* window, const int* point, int mapped[2]);
 
 // The window `ctrl`'s frame is switched off by the game (its frame piece's fade mode 1, or its alpha 0, as it is after the
 // game's fade-out of a window flagged 0x8000: the help bar's three) and it has no buttons. Whether anything else is drawn in

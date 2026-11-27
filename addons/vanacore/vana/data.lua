@@ -2850,6 +2850,8 @@ TIPS.rows = {
     ['client.buffs.font.family'] = 'This area\'s own font, or the default font.',
     ['client.buffs.font.size'] = 'The font\'s size, in pixels at the interface\'s size. Each timer stays centred under its icon.',
     ['client.map.fullscreen'] = 'The map (Main menu > Map) over the whole screen, as the game has it. Off, it\'s a square box you place.',
+    ['client.mainmenu.scale'] = 'How big the main menu is, with the menus it opens in its place. It grows from its top right corner.',
+    ['client.party.scale'] = 'How big the party list is. It grows from its bottom right corner.',
     ['client.map.scale'] = 'The box\'s size, as a percent of the screen\'s height.',
     ['client.map.opacity'] = 'How see-through the map\'s picture is. Its markers stay solid.',
     ['client.map.border'] = 'A 2 px black border with rounded corners and a drop shadow round the box.',
@@ -3587,6 +3589,13 @@ local TABS = {
                            dropdown('UI resolution', 'ffxi', 'resolution.ui', '', resolutions('resolution.ui', 'Same as Resolution')),
                            needs_dx(as_dropdown(choice('UI aspect ratio', 'ui', 'aspect', 'game', aspects({ { 'game', "Game's" }, { 'off', 'Fill the window' } })))),
                            needs_dx(choice('Anti-aliasing', 'graphics', 'antialias', 'off', { { 'off', 'Off' }, { 'fxaa', 'FXAA' } })),
+                           -- above the window's place (moved up from before Behaviour, 2026-11-27)
+                           subheader('Frame rate'),
+                           hinted(choice('Max FPS', 'client', 'fps.max', '60', { { '30', '30 FPS' }, { '45', '45 FPS' }, { '60', '60 FPS' }, { '0', 'Unlocked', tip = 'Use at your own risk - Game was designed for 30/60 FPS' } }), 'before frame gen'),
+                           choice('Cutscene FPS', 'client', 'fps.cutscene', '', { { '', 'Same' }, { '30', '30 FPS' }, { '60', '60 FPS' }, { '0', 'Unlocked', tip = 'Cutscenes play faster. Use at your own risk - Game was designed for 30/60 FPS' } }),
+                           dropdown('Background FPS', 'client', 'fps.background', '0', { { '0', 'Same as Max FPS' }, { '30', 'Reduced FPS' } }),
+                           toggle('V-Sync', 'graphics', 'vsync', false),
+                           needs_dx(choice('Cutscene V-Sync', 'graphics', 'vsync.cutscene', '', { { '', 'Same' }, { '0', 'Off' } })),
                            subheader(full and 'Monitor' or 'Window') }
             if not full then
                 rows[#rows + 1] = toggle('Resizable edges', 'window', 'resizable', false)
@@ -3972,12 +3981,6 @@ local TABS = {
                 return rows
             end
             for _, row in ipairs({
-                subheader('Frame rate'),
-                hinted(choice('Max FPS', 'client', 'fps.max', '60', { { '30', '30 FPS' }, { '45', '45 FPS' }, { '60', '60 FPS' }, { '0', 'Unlocked', tip = 'Use at your own risk - Game was designed for 30/60 FPS' } }), 'before frame gen'),
-                choice('Cutscene FPS', 'client', 'fps.cutscene', '', { { '', 'Same' }, { '30', '30 FPS' }, { '60', '60 FPS' }, { '0', 'Unlocked', tip = 'Cutscenes play faster. Use at your own risk - Game was designed for 30/60 FPS' } }),
-                dropdown('Background FPS', 'client', 'fps.background', '0', { { '0', 'Same as Max FPS' }, { '30', 'Reduced FPS' } }),
-                toggle('V-Sync', 'graphics', 'vsync', false),
-                needs_dx(choice('Cutscene V-Sync', 'graphics', 'vsync.cutscene', '', { { '', 'Same' }, { '0', 'Off' } })),
                 subheader('Behaviour'),
                 toggle('Keep FFXI always on top', 'window', 'topmost', false),
                 toggle('Keep-Awake (Disable Screen Saver)', 'window', 'keepawake', true),
@@ -5677,6 +5680,7 @@ local TABS = {
                 subheader('Position'),
                 place('Position', 'mainmenu', 'X: its right edge. Y: its top edge. The menus it opens go there too.', 99.4, 3, 'mainmenu'),
                 anchor('mainmenu', true),
+                slider('Scale', 'client', 'mainmenu.scale', 100, 50, 200, 5, '%d%%'),
                 element('Main Menu: Status Sub-Menu', 'Main Menu'),
                 toggle('Hide', 'client', 'statusmenu.hide', false),
                 toggle('Show the frame', 'client', 'statusmenu.background', true),
@@ -5809,6 +5813,7 @@ local TABS = {
                 subheader('Position'),
                 place('Position', 'party', 'X: its right edge. Y: its bottom edge.', 99.4, 99, 'party'),
                 anchor('party', true),
+                slider('Scale', 'client', 'party.scale', 100, 50, 200, 5, '%d%%'),
                 element('Region Map', 'Maps'),
                 subheader('Layout'),
                 (function (row) row.rebuild = true return row end)( -- the rows below lock and unlock by it

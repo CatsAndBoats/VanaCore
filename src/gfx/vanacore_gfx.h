@@ -443,6 +443,10 @@ void vanacore_gfx_clip_to_corners(const float* rect);
  * cut or round on it, what it draws inside its background after the background (its text, list rows, item squares) is kept
  * inside their shape; what crosses its edge (a title's tab) is left as it is. The chat's rows go by the chat window they're in. */
 void vanacore_gfx_window_drawing(int on);
+/* Around the game's drawing of a window drawn at a scale of its own ([client] <id>.scale, hudwin.cpp): s > 0 before it (its
+ * screen-space draws mapped x -> o + (x - o) s about (ox, oy), the interface's pixels as the game's vertices lie; nested
+ * windows' scales compose), s 0 after it. */
+void vanacore_gfx_window_scale(float s, float ox, float oy);
 /* The chat's text (the glyphs inside the chat windows' rectangles) drawn over a shadow of itself: mode 1 a pixel down and to
  * the right, 2 an outline all round, 0 none; `opacity` (0..1) how dark it is. */
 void vanacore_gfx_set_chat_shadow(int mode, float opacity);
