@@ -1455,12 +1455,28 @@ bool substitute_arguments(std::string& line, const std::vector<std::string>& arg
     return true;
 }
 
+// A script's name under scripts\, subfolders allowed as Windower has them ("folder/script"): each part a
+// valid_name (no "..", ':' or empty part, so nothing outside scripts\), '/' made '\'
+bool script_name(std::string& name)
+{
+    std::replace(name.begin(), name.end(), '/', '\\');
+    for (size_t start = 0;;) {
+        const size_t end = name.find('\\', start);
+        if (!valid_name(std::string_view(name).substr(start, end == std::string::npos ? std::string::npos : end - start)))
+            return false;
+        if (end == std::string::npos)
+            return true;
+        start = end + 1;
+    }
+}
+
 // The script scripts\<name>.txt as text; false when there's no such script
 bool read_script(std::string name, std::string& text, bool quiet_if_missing)
 {
-    if (name.find('.') == std::string::npos)
+    const size_t file = name.find_last_of("/\\");
+    if (name.find('.', file == std::string::npos ? 0 : file + 1) == std::string::npos)
         name += ".txt";
-    if (!valid_name(name)) {
+    if (!script_name(name)) {
         say_error("\"" + name + "\" isn't a script name");
         return false;
     }
