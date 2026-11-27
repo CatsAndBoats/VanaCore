@@ -91,10 +91,11 @@ jobs:
           if (-not ($env:KVU -and $env:KVI -and $env:KVT -and $env:KVS -and $env:KVC)) {
             throw 'The AZURE_* signing secrets are missing: an unsigned setup is never put on a release'
           }
+          # (the tool unquoted in the command: pwsh would pass its quotes to ISCC escaped, and the runner's temp has no spaces)
           $tools = Join-Path $env:RUNNER_TEMP tools
           dotnet tool install AzureSignTool --version 7.0.1 --tool-path $tools
           if ($LASTEXITCODE) { throw 'Could not install AzureSignTool' }
-          $sign = "`"$(Join-Path $tools azuresigntool.exe)`" sign -kvu $env:KVU -kvi $env:KVI -kvt $env:KVT -kvs $env:KVS -kvc $env:KVC " +
+          $sign = "$(Join-Path $tools azuresigntool.exe) sign -kvu $env:KVU -kvi $env:KVI -kvt $env:KVT -kvs $env:KVS -kvc $env:KVC " +
                   '-tr http://timestamp.digicert.com -td sha256 -fd sha256 $f'
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           $out = Join-Path $env:RUNNER_TEMP out
