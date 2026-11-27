@@ -253,6 +253,19 @@ static void zm_rt_tree(const VanaZoneMesh* m)
             for (uint32_t c = r->first / 3u; c < (r->first + r->count) / 3u && c < nc; ++c)
                 pay[(size_t)(ns + c) * ZM_RT_WORDS + 9] = 0x10000u | ((uint32_t)r->texture + 1u);
         }
+    /* what moves (a door, a lift: rt_only ranges), bit 17: it is in the tree where the zone's file places it, which is not where the
+     * game draws it - Bastok's Metalworks gate stood a yalm in front of the gate on the screen, lit as the stone round it where
+     * the game's stands dark in its recess. The trace's shader lets the screen's picture of such a thing stand over the tree's */
+    uint32_t nmove = 0;
+    for (uint32_t i = 0; i < m->nranges; ++i)
+    {
+        const VanaZoneMeshRange* r = &m->ranges[i];
+        if (!r->rt_only)
+            continue;
+        const uint32_t base = r->texture < 0 ? 0u : ns, most = r->texture < 0 ? ns : nc;
+        for (uint32_t c = r->first / 3u; c < (r->first + r->count) / 3u && c < most; ++c, ++nmove)
+            pay[(size_t)(base + c) * ZM_RT_WORDS + 9] |= 0x20000u;
+    }
     const uint64_t t0 = gfx_now_ns();
     uint32_t bytes = 0, node_bytes = 0, attr_at = 0;
     uint8_t* tree = rtbvh_build_ex(v, 3, nt, pay, ZM_RT_WORDS, &bytes, &node_bytes, &attr_at);
@@ -261,9 +274,9 @@ static void zm_rt_tree(const VanaZoneMesh* m)
         return;
     gfx_scene_rt_geometry(tree, bytes, node_bytes, 1, attr_at, zm.tex, zm.ntex);
     rt_log("[recomp] gfx: ray tracing: the zone's meshes as a tree: %u solid and %u cut-out triangles, %u KB, built in %u ms; %s, "
-           "%u textures, mean vertex colour %d %d %d\n",
+           "%u textures, mean vertex colour %d %d %d, %u triangles of things that move\n",
         ns, nc, bytes >> 10, (unsigned)((gfx_now_ns() - t0) / 1000000u), have ? "textured" : "no uv or textures handed over", zm.ntex,
-        cn ? (int)(csum[0] / cn) : 0, cn ? (int)(csum[1] / cn) : 0, cn ? (int)(csum[2] / cn) : 0);
+        cn ? (int)(csum[0] / cn) : 0, cn ? (int)(csum[1] / cn) : 0, cn ? (int)(csum[2] / cn) : 0, nmove);
     free(tree);
 }
 

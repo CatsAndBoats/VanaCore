@@ -554,7 +554,7 @@ typedef struct FxSettings
     float refl_floors;
     /* ... and how much the floor's own picture bends them (a fake bump map: its brightness read as height, so grooves and
      * tile edges tilt the reflection), 0 none; fades out with distance (fx_ssr) */
-    float refl_bump;
+    float refl_bump, refl_bump_near;
     /* ... and how far a ray that leaves the floor low is tilted up (its rise above the floor's plane, 0 none): seen from a low
      * camera the mirror's rays skim the ground and find only the walls' dark feet far off, and the reflection stopped
      * part way down the floor (fx_ssr) */
@@ -5036,7 +5036,8 @@ static const char FX_HLSL_1[] =
     "  float4 smapm;  // its texel in world units, depth bias, penumbra, slope\n"
     "  float4 smapm2; // its depth units, 1 when it is there; z where the sharp map's fade starts (sun_handoff)\n"
     "  float4 toon4;  // the lines on VanaCore's grass (toon3.z): share of toon.x (0 none), width, threshold, fade\n"
-    "  float4 rtx;    // the ray-traced reflections: x the blur's radius in texels of their layer (0 none), in fx_zlate the effects' level's plane\n"
+    "  float4 rtx;    // the ray-traced reflections: x the blur's radius in texels of their layer (0 none), y 1 with them traced; in fx_zlate the effects' level's plane\n"
+    "  float4 rbf;    // the floor's relief by distance (refl_bump_near): the player's feet in view space, w how far from them it is whole (0: everywhere)\n"
     "};\n"
     "cbuffer CU : register(b0) { FxU u; };\n"
     "cbuffer FB : register(b1) { uint4 fti[2]; uint4 fsi[2]; };\n"
@@ -6777,7 +6778,7 @@ static const char FX_HLSL_2[] =
     "        sum += fo.x * (1.0 - fo.y); cnt += 1.0 - fo.y;\n"
     "      }\n"
     "    }\n"
-    "    mw = (cnt > 0.0 ? smoothstep(0.5, 0.95, sum / cnt) : 0.0) * (1.0 - narrow_top(px, P, dist));\n"
+    "    mw = (cnt > 0.0 ? smoothstep(0.5, 0.95, sum / cnt) : 0.0) * (1.0 - narrow_top(P, N));\n"
     "    if (mw <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n"
     "    flat_ *= mw;\n"
     "  }\n"
@@ -6825,7 +6826,7 @@ static const char FX_HLSL_2[] =
      * Eased off across a shadow's edge (the sun's light differing between the taps), where what's left of the edge after
      * luma_at would still read as a ridge */
     "  float3 Nb = N;\n"
-    "  float bump = u.elight2.y * (1.0 - smoothstep(25.0, 70.0, dist));\n"
+    "  float bump = u.elight2.y * bump_fade(P, dist);\n"
     "  if (bump > 0.0) {\n"
     "    float s = max(floor(u.vp.z / u.size.z + 0.5), 1.0);\n"
     "    float2 br = luma_at(px + float2(s, 0.0)), bl = luma_at(px - float2(s, 0.0));\n"
@@ -6840,7 +6841,7 @@ static const char FX_HLSL_2[] =
     "    float3 t = (0.8 * bump) * (((lr - ll) / m) * tx + ((lu - ld) / m) * ty);\n"
     "    t /= max(1.0, length(t) / 0.5);\n"
     "    Nb = normalize(N - t);\n"
-    "    if (u.rtx.x < 0.5) amt *= 1.0 - saturate(bump) * 0.6 * saturate(2.0 * (m - bc.x) / m);\n" /* (blurred: refl_relief's, after it) */
+    "    if (u.rtx.y < 0.5) amt *= 1.0 - saturate(bump) * 0.6 * saturate(2.0 * (m - bc.x) / m);\n" /* (traced: refl_relief's, after the layer) */
     "  }\n"
     "  float3 R = reflect(-V, Nb);\n"
     /* a ray that leaves the floor low, tilted up (refl_lift): its rise above the floor's plane at least about the lift, eased
@@ -7931,7 +7932,7 @@ typedef struct FxU
         rain[4], /* the rain's wet ground for the floor reflections (fx_ssr): how wet, rain.reflect, rain.puddles, its mask's slot + 1 */
         lmatm[16], smapm[4], smapm2[4], /* the middle map (sun_mid, gfx_sun_mid.h) */
         toon4[4], /* the lines on VanaCore's grass (outline_grass): share of the lines' strength, width, threshold, fade */
-        rtx[4];   /* the ray-traced reflections (refl_rt_blur): x the blur's radius in texels of their layer */
+        rtx[4], rbf[4]; /* the ray-traced reflections (refl_rt_blur): x the blur's radius in texels of their layer; rbf: refl_bump_near */
 } FxU;
 static void mfx_late_in(int32_t* in, FxU* u); /* (gfx_d3d12_rtfx.h) */
 
@@ -8300,17 +8301,18 @@ static const struct
     { "dlss_reactive_moving", offsetof(FxSettings, dlss_reactive_moving), 0.5f },
     { "refl", offsetof(FxSettings, refl), 0.0f },
     { "refl_wet", offsetof(FxSettings, refl_wet), 0.5f }, /* (read and not used: how wet is half of refl since 2026-11-27) */
-    { "refl_rough", offsetof(FxSettings, refl_rough), 0.3f },
-    { "refl_dist", offsetof(FxSettings, refl_dist), 100.0f },
-    { "refl_quality", offsetof(FxSettings, refl_quality), 3.0f },
-    { "refl_sun", offsetof(FxSettings, refl_sun), 1.0f },
+    { "refl_rough", offsetof(FxSettings, refl_rough), 0.5f },
+    { "refl_dist", offsetof(FxSettings, refl_dist), 150.0f },
+    { "refl_quality", offsetof(FxSettings, refl_quality), 2.0f },
+    { "refl_sun", offsetof(FxSettings, refl_sun), 3.0f },
     { "refl_floors", offsetof(FxSettings, refl_floors), 1.0f },
-    { "refl_bump", offsetof(FxSettings, refl_bump), 1.3f },
-    { "refl_lift", offsetof(FxSettings, refl_lift), 0.15f },
+    { "refl_bump", offsetof(FxSettings, refl_bump), 0.2f },
+    { "refl_bump_near", offsetof(FxSettings, refl_bump_near), 30.0f },
+    { "refl_lift", offsetof(FxSettings, refl_lift), 0.0f },
     { "refl_rt", offsetof(FxSettings, refl_rt), 2.0f },
-    { "refl_rt_res", offsetof(FxSettings, refl_rt_res), 0.5f },
+    { "refl_rt_res", offsetof(FxSettings, refl_rt_res), 0.75f },
     { "refl_rt_blur", offsetof(FxSettings, refl_rt_blur), 0.0f },
-    { "refl_rt_fx", offsetof(FxSettings, refl_rt_fx), 0.0f }, { "refl_rt_fx_level", offsetof(FxSettings, refl_rt_fx_level), 0.0f },
+    { "refl_rt_fx", offsetof(FxSettings, refl_rt_fx), 1.0f }, { "refl_rt_fx_level", offsetof(FxSettings, refl_rt_fx_level), 0.0f },
     { "gi", offsetof(FxSettings, gi), 0.0f },
     { "gi_radius", offsetof(FxSettings, gi_radius), 5.0f },
     { "gi_quality", offsetof(FxSettings, gi_quality), 1.09f },
@@ -15737,7 +15739,8 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         const uint32_t gw = (uint32_t)ceilf(vw / gdiv), gh = (uint32_t)ceilf(vh / gdiv);
         u.bounce[0] = (float)gw, u.bounce[1] = (float)gh;
         u.refl2[0] = REFL_STEPS[rq];
-        u.rtx[0] = g_fxs.refl_rt >= 2.0f ? floorf(fminf(fmaxf(g_fxs.refl_rt_blur, 0.0f) + 8.0f * fmaxf(1.0f - 2.0f * u.refl[1], 0.0f), 24.0f) + 0.5f) : 0.0f; /* (drier, softer) */
+        u.rtx[0] = g_fxs.refl_rt >= 2.0f ? floorf(fminf(fmaxf(g_fxs.refl_rt_blur, 0.0f) + 8.0f * fmaxf(1.0f - 2.0f * u.refl[1], 0.0f), 24.0f) + 0.5f) : 0.0f, u.rtx[1] = g_fxs.refl_rt >= 2.0f ? 1.0f : 0.0f; /* (drier, softer; y: traced) */
+        for (int k = 0; k < 4; ++k) u.rbf[k] = k < 3 ? s->focus[0] * s->view[k] + s->focus[1] * s->view[4 + k] + s->focus[2] * s->view[8 + k] + s->view[12 + k] : s->focus[3] != 0.0f ? fmaxf(g_fxs.refl_bump_near, 0.0f) : 0.0f;
         u.refl2[1] = g_fxs.refl_sun, u.refl2[2] = g_fxs.gi;
         /* ... the reflections' pattern turning from frame to frame only where DLSS gathers the frames (else it would shimmer);
          * the bounce light's turns with its temporal pass's (u.hist.y) unless held still (gi_still) */

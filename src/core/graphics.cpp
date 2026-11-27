@@ -90,7 +90,7 @@ constexpr const char* kEffectKeys[] = {"ao",      "radius",      "grade",      "
                                        "outline_grass", "outline_width_grass", "outline_depth_grass", "outline_fade_grass",
                                        "bands",  "band_soft",   "smooth",
                                        "dof",     "dof_focus",   "dof_player", "dof_range",  "dof_far",  "dof_near", "dof_sky",
-                                       "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_lift", "refl_rt", "refl_rt_res", "refl_rt_blur", "refl_rt_fx", "refl_rt_fx_level", "gi", "gi_radius", "gi_quality",
+                                       "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_bump_near", "refl_lift", "refl_rt", "refl_rt_res", "refl_rt_blur", "refl_rt_fx", "refl_rt_fx_level", "gi", "gi_radius", "gi_quality",
                                        "midtones", "whites", "rolloff", "light_tint", "hue",
                                        "clarity", "elight", "elight_radius", "elight_warp", "elight_lantern", "elight_dim", "elight_actor",
                                        "ao_quality", "ao_chars", "ao_soft_chars", "sun_rings", "sun_ring_spacing", "sun_detail", "sun_far_hold", "sun_near_hold", "sun_roll", "sun_plants", "sun_plants_still", "sun_fade", "normalmap", "normalmap_strength", "normalmap_view", "normalmap_refl", "normalmap_fx",

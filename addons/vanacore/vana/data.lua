@@ -2220,6 +2220,7 @@ TIPS.rows = {
     ['graphics.effects.refl_rt_fx'] = 'Shows spells, glows and lamps\' flares in the ray traced reflections. They are mirrored about the ground you stand on, so a floor much higher or lower shows them less truly. Only with Ray Tracing.',
     ['graphics.effects.refl_sun'] = 'The bright sparkle of the sun on the ground: Off, Low or High.',
     ['graphics.effects.refl_bump'] = 'How much the stone\'s own texture bends the reflections: grooves and tile edges give them depth.',
+    ['graphics.effects.refl_bump_near'] = 'Fades Surface Depth in with distance from you: a clean mirror at your feet, the full effect this many yalms away. 0 is full everywhere.',
     ['graphics.effects.refl_lift'] = 'Tilts the reflections up where the camera is low, so the floor shows more than the bottom of the walls. 1 is a true mirror, 10 tilts them the most.',
     ['graphics.effects.refl_floors'] = 'Which ground reflects, by the zone\'s collision (the ground the footsteps know).\n'
         .. 'Stone and metal: not dirt, grass, sand or snow.\n'
@@ -4600,9 +4601,36 @@ local TABS = {
                     end
                     return row
                 end)(),
+                -- Strength 1 to 10 as 0.2 to 2.0 in vanacore.ini (shown = kept * 5), Roughness 0 to 10 as 0 to 1.0 (* 10), Surface
+                -- Depth 0 to 20 as 0 to 2.0 (shown = kept * 10: the 2 is its 0.2 default; finer steps, asked for 2026-11-27), Lift 1 to 10 as 0 to 0.5 (shown = kept * 18 + 1)
+                trimmed(shown_as(slider('Strength', FX, 'refl', 5, 1, 10, 1, '%d'), 5)),
+                -- the ray's steps (16 to 128) and the blur's taps: more is cleaner and costs more
+                -- (4 is an ini edit, as the occlusion's)
+                choice('Quality', FX, 'refl_quality', '2', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
+                trimmed(shown_as(slider('Roughness', FX, 'refl_rough', 5, 0, 10, 1, '%d'), 10)),
+                -- the floor's picture read as a height tilts the reflection's normal (fx_ssr); 0 is a flat mirror
+                trimmed(shown_as(slider('Surface Depth', FX, 'refl_bump', 2, 0, 20, 1, '%d'), 10)),
+                -- Surface Depth by distance from the player (refl_bump_near, yalms): none at their feet, all of it that far off; 0 everywhere
+                slider('Surface Depth Fade', FX, 'refl_bump_near', 30, 0, 60, 5, '%d'),
+                -- Off, Low (1) or High (3): a value in vanacore.ini between them shows as the nearer
+                (function ()
+                    local row = choice('Sun Glint', FX, 'refl_sun', '3', { { '0', 'Off' }, { '1', 'Low' }, { '3', 'High' } })
+                    row.get = function ()
+                        local value = tonumber(vana.config.get(FX, 'refl_sun') or '')
+                        if value == nil then
+                            return row.default
+                        end
+                        return value < 0.5 and '0' or value < 2 and '1' or '3'
+                    end
+                    return row
+                end)(),
+                -- the ray tracing's own rows under a heading of their own, after the rows both methods share; greyed with Screen
+                -- Space (asked for, 2026-11-27). A plain heading, not a box: they aren't advanced settings. Their names without
+                -- the method's: the heading has it
+                subheader('Ray Tracing'),
                 -- the ray traced layer's size, a share of the scene's each way (refl_rt_res 0.25 to 1), for the ray tracing only
                 (function ()
-                    local row = choice('Ray Tracing Resolution', FX, 'refl_rt_res', '0.5', { { '0.25', 'Low' }, { '0.5', 'Medium' }, { '0.75', 'High' }, { '1', 'Max' } })
+                    local row = choice('Resolution', FX, 'refl_rt_res', '0.75', { { '0.25', 'Low' }, { '0.5', 'Medium' }, { '0.75', 'High' }, { '1', 'Max' } })
                     row.lock_if = function () return (tonumber(vana.config.get(FX, 'refl_rt') or '') or 2) < 0.5 end
                     row.get = function ()
                         local value = tonumber(vana.config.get(FX, 'refl_rt_res') or '')
@@ -4615,13 +4643,13 @@ local TABS = {
                 end)(),
                 -- a Gaussian over the ray traced layer, its radius in texels of the layer (refl_rt_blur 0 to 24), for the ray tracing only
                 (function ()
-                    local row = slider('Ray Tracing Blur', FX, 'refl_rt_blur', 0, 0, 24, 1, '%d')
+                    local row = slider('Blur', FX, 'refl_rt_blur', 0, 0, 24, 1, '%d')
                     row.lock_if = function () return (tonumber(vana.config.get(FX, 'refl_rt') or '') or 2) < 0.5 end
                     return row
                 end)(),
                 -- the game's effects (spells, glows, lamps' flares) mirrored into the ray traced reflections (refl_rt_fx), for the ray tracing only
                 (function ()
-                    local row = choice('Reflect Effects', FX, 'refl_rt_fx', '0', { { '0', 'Off' }, { '1', 'On' } })
+                    local row = choice('Reflect Effects', FX, 'refl_rt_fx', '1', { { '0', 'Off' }, { '1', 'On' } })
                     row.lock_if = function () return (tonumber(vana.config.get(FX, 'refl_rt') or '') or 2) < 0.5 end
                     row.get = function ()
                         local value = tonumber(vana.config.get(FX, 'refl_rt_fx') or '')
@@ -4632,32 +4660,11 @@ local TABS = {
                     end
                     return row
                 end)(),
-                -- Strength 1 to 10 as 0.2 to 2.0 in vanacore.ini (shown = kept * 5), Roughness 0 to 10 as 0 to 1.0 (* 10), Surface
-                -- Depth 0 to 10 as 0 to 2.0 (the 6.5 is its 1.3 default), Lift 1 to 10 as 0 to 0.5 (shown = kept * 18 + 1)
-                trimmed(shown_as(slider('Strength', FX, 'refl', 5, 1, 10, 1, '%d'), 5)),
-                -- the ray's steps (16 to 128) and the blur's taps: more is cleaner and costs more
-                -- (4 is an ini edit, as the occlusion's)
-                choice('Quality', FX, 'refl_quality', '3', { { '0', 'Low' }, { '1', 'Medium' }, { '2', 'High' }, { '3', 'Max' } }),
-                trimmed(shown_as(slider('Roughness', FX, 'refl_rough', 3, 0, 10, 1, '%d'), 10)),
-                -- the floor's picture read as a height tilts the reflection's normal (fx_ssr); 0 is a flat mirror
-                trimmed(shown_as(slider('Surface Depth', FX, 'refl_bump', 6.5, 0, 10, 1, '%d'), 5)),
-                -- Off, Low (1) or High (3): a value in vanacore.ini between them shows as the nearer
-                (function ()
-                    local row = choice('Sun Glint', FX, 'refl_sun', '1', { { '0', 'Off' }, { '1', 'Low' }, { '3', 'High' } })
-                    row.get = function ()
-                        local value = tonumber(vana.config.get(FX, 'refl_sun') or '')
-                        if value == nil then
-                            return row.default
-                        end
-                        return value < 0.5 and '0' or value < 2 and '1' or '3'
-                    end
-                    return row
-                end)(),
                 advanced_group('Fine-tuning for the reflections: how far they reach, how far low rays are tilted up, and which ground '
                                .. 'reflects. Most players never need these.'),
-                slider('Reflective Distance', FX, 'refl_dist', 100, 5, 150, 5, '%d'),
+                slider('Reflective Distance', FX, 'refl_dist', 150, 5, 150, 5, '%d'),
                 -- low rays tilted up (fx_ssr): from a low camera a true mirror shows only the walls' dark feet; 1 is the mirror
-                trimmed(shown_as(slider('Lift', FX, 'refl_lift', 3.7, 1, 10, 1, '%d'), 18, 1)),
+                trimmed(shown_as(slider('Lift', FX, 'refl_lift', 1, 1, 10, 1, '%d'), 18, 1)),
                 -- which ground reflects, by the zone's collision (the kind of ground the footsteps sound for, under each pixel: floors.c,
                 -- fx_ssr); Any is the colour rule alone
                 choice('Ground', FX, 'refl_floors', '1', { { '0', 'Any' }, { '1', 'Stone and metal' }, { '2', 'Stone, metal, wood' },

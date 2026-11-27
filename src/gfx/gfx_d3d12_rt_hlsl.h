@@ -13,39 +13,59 @@
     "  float l = dot(c, LUMA);\n" \
     "  return lerp(c, max(lerp(float3(l, l, l), c, 1.25), 0.0) * 0.72, k);\n" \
     "}\n" \
-    /* the floor's own relief on a blurred reflection (fx_refl, at the scene's size, after the blur; refl_bump, u.elight2.y): the \
+    /* the floor's own relief on a traced reflection (fx_refl, at the scene's size, after the blur; refl_bump, u.elight2.y): the \
      * share of it a pixel keeps, less in a groove - a pixel darker than both its neighbours across it, which a shadow's edge, \
-     * darker on one side alone, is not. fx_ssr takes it off the weight before the blur (its amt), and with the ray-traced \
-     * reflections' blur on (u.rtx.x) the grooves and tile edges went soft with the reflection, Surface Depth doing nothing under \
-     * a wide blur: there it is left to this, 1 without the blur */ \
+     * darker on one side alone, is not. For the screen's reflections fx_ssr takes it off the weight (its amt); done there for \
+     * the traced ones, before their blur, the grooves and tile edges went soft with the reflection, Surface Depth doing nothing \
+     * under a wide blur: they are left to this (u.rtx.y), 1 for the screen's */ \
     /* (looked for a pixel either side and three: a groove a few pixels wide is no darker than the pixel next to it, and by that \
      * one alone nothing showed at 1600 lines. Up to nine tenths off at refl_bump 2, the slider's top: at six it couldn't be told \
      * from none under a wide blur) */ \
+    /* the share of the floor's relief (refl_bump, Surface Depth) a point of the floor takes, by where it is: none past 70 units \
+     * from the camera, the texture's detail smaller than a pixel there; and with refl_bump_near (u.rbf.w, Surface Depth Fade: \
+     * u.rbf.xyz the player's feet in view space) none at the player's feet, all of it that far from them - a clean mirror to \
+     * stand in, the stones breaking it up farther off. The far fade starts later with it, so the whole of it is reached */ \
+    "float bump_fade(float3 P, float dist) {\n" \
+    "  float nr = u.rbf.w;\n" \
+    "  float fo = 1.0 - smoothstep(max(25.0, nr + 10.0), max(70.0, nr + 55.0), dist);\n" \
+    "  return nr > 0.0 ? fo * smoothstep(0.0, nr, length(P - u.rbf.xyz)) : fo;\n" \
+    "}\n" \
     "float relief_dip(int2 px, float lc, int s) {\n" \
     "  float lr = dot(texel(1, px + int2(s, 0)).rgb, LUMA), ll = dot(texel(1, px - int2(s, 0)).rgb, LUMA);\n" \
     "  float lu = dot(texel(1, px - int2(0, s)).rgb, LUMA), ld = dot(texel(1, px + int2(0, s)).rgb, LUMA);\n" \
     "  return (max(min(lr, ll), min(lu, ld)) - lc) / max(0.25 * (lr + ll + lu + ld), 0.04);\n" \
     "}\n" \
-    /* 1 on the top of something narrow that stands up from the ground (fx_ssr's floor mask): the picture a little over half a \
-     * yalm either side of the pixel, across some direction, lower than it on both. A low wall's top, a rail's, a crate's lid is \
-     * floor in the zone's collision, stone as often as not, and took a reflection - a strip of sky along the top of a wall. A \
-     * platform's edge is lower on one side only, a stair's tread lower on one and higher on the other */ \
-    "float narrow_top(float2 px, float3 P, float dist) {\n" \
-    "  float rp = 0.65 * u.proj.y * 0.5 * u.vp.w / max(dist, 0.5);\n" \
-    "  if (rp < 2.0) return 0.0;\n" \
+    /* 1 on a narrow strip of floor (fx_ssr's floor mask): 0.65 yalm either side of the pixel along the floor's own plane, across \
+     * some direction, the picture is off that plane on both - a drop, or something rising. A low wall's top, a rail's, a crate's \
+     * lid, a ledge along a wall is floor in the zone's collision, stone as often as not, and took a reflection - a strip of sky \
+     * along the top of a wall. A platform's edge, or a floor's foot against a wall, is off on one side only; what is under 1.3 \
+     * yalms across is no floor anyone walks. By the pixel's own normal, each place taken to the screen: measured along u.up, a \
+     * step of pixels either side, a floor far off was higher on one side and lower on the other whenever the camera pitched (up \
+     * is eased over frames) or the ground sloped, and the far half of the mask went black with every move of the camera. What \
+     * stands well nearer than the place (someone in front of it) says nothing of it */ \
+    "bool strip_off(float3 Q, float3 P, float3 N) {\n" \
+    "  float3 q = to_px(Q);\n" \
+    "  if (!(q.z > 0.1) || !in_view(q.xy)) return false;\n" \
+    "  float z = view_z(texel(0, int2(q.xy)).r);\n" \
+    "  if (z == 0.0) return true;\n" \
+    "  float3 S = view_pos(floor(q.xy) + 0.5, z);\n" \
+    "  return abs(dot(S - P, N)) > 0.3 && z * u.hand.x > q.z - 1.5;\n" \
+    "}\n" \
+    "float narrow_top(float3 P, float3 N) {\n" \
+    "  float3 t1 = cross(N, P);\n" \
+    "  if (dot(t1, t1) < 1e-8) return 0.0;\n" \
+    "  t1 = normalize(t1) * 0.65;\n" \
+    "  float3 t2 = cross(N, t1);\n" \
     "  float nt = 0.0;\n" \
     "  [unroll] for (int k = 0; k < 4; ++k) {\n" \
-    "    float2 dd = float2(cos(float(k) * 0.7853982), sin(float(k) * 0.7853982)) * rp;\n" \
-    "    float2 q1 = clamp(px + dd, u.vp.xy, u.vp.xy + u.vp.zw - 1.0), q2 = clamp(px - dd, u.vp.xy, u.vp.xy + u.vp.zw - 1.0);\n" \
-    "    float z1 = view_z(texel(0, int2(q1)).r), z2 = view_z(texel(0, int2(q2)).r);\n" \
-    "    float h1 = z1 != 0.0 ? dot(view_pos(q1, z1) - P, u.up.xyz) : -1e3, h2 = z2 != 0.0 ? dot(view_pos(q2, z2) - P, u.up.xyz) : -1e3;\n" \
-    "    if (h1 < -0.3 && h2 < -0.3) nt = 1.0;\n" \
+    "    float3 d = k == 0 ? t1 : k == 1 ? t2 : (k == 2 ? t1 + t2 : t1 - t2) * 0.7071;\n" \
+    "    if (strip_off(P + d, P, N) && strip_off(P - d, P, N)) nt = 1.0;\n" \
     "  }\n" \
     "  return nt;\n" \
     "}\n" \
     "float refl_relief(int2 px, float3 c, float dist) {\n" \
-    "  float bump = min(u.elight2.y, 2.0) * 0.45 * (1.0 - smoothstep(25.0, 70.0, dist));\n" \
-    "  if (u.rtx.x < 0.5 || bump <= 0.0) return 1.0;\n" \
+    "  float bump = min(u.elight2.y, 2.0) * 0.45 * bump_fade(view_pos(float2(px) + 0.5, dist * u.hand.x), dist);\n" \
+    "  if (u.rtx.y < 0.5 || bump <= 0.0) return 1.0;\n" \
     "  int s = max(int(u.vp.w / 1080.0 + 0.5), 1);\n" \
     "  float lc = dot(c, LUMA);\n" \
     "  return 1.0 - bump * saturate(3.0 * max(relief_dip(px, lc, s), relief_dip(px, lc, 3 * s)));\n" \
@@ -60,7 +80,7 @@
     "static float4 g_rts = float4(0.0, 0.0, 0.0, 0.0);\n" \
     /* the meshes' tree's own words for a triangle (ab: where they start, zonemesh.c: 10 words each): the three corners' uv (6), the \
      * three vertex colours (3: 0xAARRGGBB), and the texture (bits 0 to 15: its index + 1 in the frame words' list from byte 96, 0 \
-     * none; bit 16: cut out by its alpha). The colour of the surface a ray found: vc the vertex colour there */ \
+     * none; bit 16: cut out by its alpha; bit 17: a thing that moves). The colour of the surface a ray found: vc the vertex colour there */ \
     "float4 tri_tex(uint ab, uint ti, float2 b, float lod, out float3 vc) {\n" \
     "  uint p = ab + ti * 40u;\n" \
     "  uint4 r0 = g_bvh.Load4(p), r1 = g_bvh.Load4(p + 16u);\n" \
@@ -90,15 +110,18 @@
     "  ht = 0u; hb = float2(0.0, 0.0);\n" \
     "  float3 inv = 1.0 / (d + float3(d.x == 0.0 ? 1e-8 : 0.0, d.y == 0.0 ? 1e-8 : 0.0, d.z == 0.0 ? 1e-8 : 0.0));\n" \
     "  uint stack[32];\n" \
-    "  uint sp = 0u, node = 0u;\n" \
+    "  uint sp = 0u;\n" \
     "  float best = -1.0, tm = tmax;\n" \
     "  bool done = false;\n" \
     "  g_rtf = 0u;\n" \
+    /* (n0, n1: the node the walk stands in, met: the ray goes through its box. A child gone down into was read and tested by its \
+     * parent, and is not read and tested again: every node was, two reads and a box test of each of the walk's steps for nothing - \
+     * a third of the reflection ray's time. Only a node taken off the stack is tested, the ray having shortened since it was put by) */ \
+    "  float4 n0 = asfloat(g_bvh.Load4(0u)), n1 = asfloat(g_bvh.Load4(16u));\n" \
+    "  bool met = box_t(n0, n1, o, inv, tmin, tm) < 1e29;\n" \
     "  [loop] for (int it = 0; it < 640; ++it) {\n" \
-    "    uint nb = node * 32u;\n" \
-    "    float4 n0 = asfloat(g_bvh.Load4(nb)), n1 = asfloat(g_bvh.Load4(nb + 16u));\n" \
     "    bool pop = true;\n" \
-    "    if (box_t(n0, n1, o, inv, tmin, tm) < 1e29) {\n" \
+    "    if (met) {\n" \
     "      uint a = asuint(n0.w), cnt = asuint(n1.w);\n" \
     "      if (cnt > 0u) {\n" \
     "        for (uint k = 0u; k < cnt; ++k) {\n" \
@@ -146,14 +169,16 @@
     "        if (ea < 1e29 || eb < 1e29) {\n" \
     "          bool na = ea <= eb;\n" \
     "          if (na ? eb < 1e29 : ea < 1e29) stack[sp++] = na ? cb : a;\n" \
-    "          node = na ? a : cb;\n" \
+    "          if (na) { n0 = a0; n1 = a1; } else { n0 = b0; n1 = b1; }\n" \
     "          pop = false;\n" \
     "        }\n" \
     "      } else g_rtf |= 4u;\n" \
     "    }\n" \
     "    if (pop) {\n" \
     "      if (sp == 0u) { done = true; break; }\n" \
-    "      node = stack[--sp];\n" \
+    "      uint nb = stack[--sp] * 32u;\n" \
+    "      n0 = asfloat(g_bvh.Load4(nb)); n1 = asfloat(g_bvh.Load4(nb + 16u));\n" \
+    "      met = box_t(n0, n1, o, inv, tmin, tm) < 1e29;\n" \
     "    }\n" \
     "  }\n" \
     "  if (!done) g_rtf |= 1u;\n" \
@@ -178,14 +203,16 @@
     "    if (rti.x != 0u) {\n" \
     "      float4 m0 = asfloat(g_rtv.Load4(0u)), m1 = asfloat(g_rtv.Load4(16u)), m2 = asfloat(g_rtv.Load4(32u)), m3 = asfloat(g_rtv.Load4(48u));\n" \
     "      float3 ow = P.x * m0.xyz + P.y * m1.xyz + P.z * m2.xyz + m3.xyz;\n" \
-    /* (the tree's ray leaves along the floor's own normal, not the bumped one: the bump tilts it by the floor picture's grooves and \
-     * tile edges, which the screen's blur hides, and a ray that isn't blurred showed as a checker of lines across the floor) */ \
+    /* (the tree's ray is tilted by the floor's relief as the screen's is, Nb's tilt off N: refl_bump, Surface Depth. It went by \
+     * the clean normal for a while - tilted, each stone and tile edge shows another part of what it reflects, which read as a \
+     * checker of lines - and Surface Depth then did next to nothing with the reflections traced: a flat mirror under the stones, \
+     * where the screen's were wet cobbles. The slider is the say in it: at 0 it is the mirror) */ \
     /* (N is worked out from the depth, a little different at each pixel and frame: the screen's blur hid it, the tree's sharp hits \
      * showed it as a jitter and patches of other colours. A floor is flat for the most part: drawn most of the way to up) */ \
     "      float3 Nf = normalize(lerp(N, upn, 0.85));\n" \
     /* (and not lifted: refl_lift tilts a low ray up because the screen has nothing to show along the floor; the tree has the whole zone, \
      * and the tilt, which changes with the view's angle, swam the reflection like jelly as the camera moved up and down) */ \
-    "      float3 Rt = reflect(-V, Nf);\n" \
+    "      float3 Rt = reflect(-V, normalize(Nf + (Nb - N)));\n" \
     "      float3 dw = Rt.x * m0.xyz + Rt.y * m1.xyz + Rt.z * m2.xyz;\n" \
     "      float rtmax = max(u.refl.w, 100.0);\n" \
     "      uint ht; float2 hb;\n" \
@@ -201,7 +228,10 @@
      * and took the tree's answer from half the floor) */ \
     /* (the characters' mask is bound only while the rain wets them, so it can't say which is one: a surface the screen found \
      * clearly nearer than the tree's, and well above the floor the ray left, is something standing in front of it) */ \
-    "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && (th <= 0.0 || tt < th - 0.3) && tt * dot(R, upn) > 0.4;\n" \
+    /* (... or over a thing that moves, bit 17 - a door, a lift, in the tree where the zone's file has it and on the screen where the \
+     * game draws it, not the same place: whatever the screen's ray found, nearer than it or not) */ \
+    "      bool mover = rti.x == 2u && th > 0.0 && (g_bvh.Load(rti.z + ht * 40u + 36u) & 0x20000u) != 0u;\n" \
+    "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && (th <= 0.0 || mover || tt < th - 0.3) && tt * dot(R, upn) > 0.4;\n" \
     /* (... and not the zone's own: the screen's ray goes by the bumped normal, tilted by the floor's grooves, and found a wall's \
      * foot or a step nearer than the tree's clean ray did - a speckle of the screen's reflection across the floor, each pixel \
      * dithered anew every frame, which flickered. So the tree is asked for the very point the screen found: a surface of its own \
@@ -211,7 +241,7 @@
     "        float hl = max(length(Hs), 1e-3), ht_ = 0.35 + 0.02 * hl;\n" \
     "        uint ct; float2 cb_;\n" \
     "        float3 hdw = (Hs.x * m0.xyz + Hs.y * m1.xyz + Hs.z * m2.xyz) / hl;\n" \
-    "        if (bvh_trace(ow, hdw, max(hl - ht_, 0.05), hl + ht_, rti.y, rti.z, true, ct, cb_) > 0.0) nearer = false;\n" \
+    "        if (bvh_trace(ow, hdw, max(hl - ht_, 0.05), hl + ht_, rti.y, rti.z, true, ct, cb_) > 0.0 && (g_bvh.Load(rti.z + ct * 40u + 36u) & 0x20000u) == 0u) nearer = false;\n" \
     "      }\n" \
     "      if (th > 0.0 && !nearer) {\n" \
     "        float lm = luma_at(px).x;\n" \
@@ -255,6 +285,7 @@
      * maps), and a wall the tree alone finds had none - sunlit in a courtyard that lies in shade, twice and more as bright as the \
      * same stone beside it on the screen. A second ray, from the point toward the sun through the same tree, any hit ending it; \
      * then as the maps' shadow is laid: sun_min in the shade, a surface turned from the sun by sun_face, at the shadows' strength */ \
+    "          bool sunlit = false;\n" \
     "          if (sbw < 0.98 && u.smap.x > 0.0 && u.sunsh.w > 0.0) {\n" \
     "            float nls = dot(nv, u.sunsh.xyz);\n" \
     "            float sm = lerp(1.0 - 0.6 * u.smap2.y, 1.0, smoothstep(-0.3, 0.25, nls));\n" \
@@ -264,9 +295,20 @@
     /* (from a little off the surface, along its own facing: from the point itself, a ray low over a curved wall met the wall's \
      * next triangle at once, here and not a pixel on) */ \
     "              float3 so = ow + dw * th + (nv.x * m0.xyz + nv.y * m1.xyz + nv.z * m2.xyz) * (0.04 + 0.002 * th);\n" \
-    "              if (bvh_trace(so, sdw, 0.05, 400.0, rti.y, rti.z, true, st, stb) > 0.0) sm = min(sm, u.smap2.z);\n" \
+    "              if (bvh_trace(so, sdw, 0.05, 400.0, rti.y, rti.z, true, st, stb) > 0.0) sm = min(sm, u.smap2.z); else sunlit = nls > 0.2;\n" \
     "            }\n" \
     "            rtc *= max(lerp(1.0, sm, u.smap.x), 0.15);\n" \
+    "          }\n" \
+    /* ... and what stands over it: the screen's picture has the occlusion laid over it too (fx_comp, u.ao.y its strength), and the \
+     * tree's own colour of an arch's underside and the walls of the recess beneath it was the open wall's - a gate's reflection \
+     * with its inside as bright as its face. A third ray, short (6 units), up and a little out from the surface, any hit ending \
+     * it: half the light under cover, an open wall meeting nothing. Only for what the sun doesn't reach (what it lights isn't \
+     * under cover, and the ray for every hit was 3.5 ms more at 1600 lines with a whole plaza reflecting) */ \
+    "          if (sbw < 0.98 && u.ao.y > 0.0 && !sunlit) {\n" \
+    "            float3 nwd = nv.x * m0.xyz + nv.y * m1.xyz + nv.z * m2.xyz;\n" \
+    "            uint at_; float2 ab_;\n" \
+    "            float ta = bvh_trace(ow + dw * th + nwd * (0.04 + 0.002 * th), normalize(g_rts.xyz + nwd * 0.6), 0.05, 6.0, rti.y, rti.z, true, at_, ab_);\n" \
+    "            if (ta > 0.0) rtc *= lerp(1.0, 0.5, saturate(u.ao.y));\n" \
     "          }\n" \
     /* the zone's fog over what is far, as the world has it */ \
     "          rtc = lerp(rtc, u.fogc.rgb, u.fogc.a > 0.0 ? min(1.0 - exp(-u.fogc.a * th), u.fogp.y) : 0.0);\n" \
