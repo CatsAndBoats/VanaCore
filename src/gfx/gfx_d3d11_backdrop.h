@@ -3,7 +3,8 @@
 
 int gfx_present_backdrops(const float* rects, int n)
 {
-    (void)rects, (void)n;
+    (void)rects;
+    (void)n;
     return 0;
 }
 

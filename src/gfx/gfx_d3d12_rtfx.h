@@ -287,9 +287,10 @@ static void mfx_viewport(float* x, float* y, float* w, float* h)
 /* The level the effects are mirrored about as a plane in view space (g_mfx.plane, fx_zlate's u.rtx: mfx_late_in), which lays them
  * only on floors at that level, where the mirror is theirs: this frame's up (the view's own, as rt_bind's: u->up is eased and trails
  * a camera that pitches) times the effects' strength, and the player's feet along it from the camera */
-static void mfx_refl_in(int ssr, int32_t* refl_in, int* refl_n, FxU* u, const GfxScene* s)
+static void mfx_refl_in(int ssr, int32_t* refl_in, int* refl_n, const FxU* u, const GfxScene* s)
 {
-    (void)refl_in, (void)refl_n;
+    (void)refl_in;
+    (void)refl_n;
     const float st = ssr && mfx_wanted() ? fminf(g_fxs.refl_rt_fx, 1.0f) : 0.0f;
     const float sign = s->view[5] < 0.0f ? -1.0f : 1.0f;
     float up[3] = { s->view[4] * sign, s->view[5] * sign, s->view[6] * sign }, fv[3];

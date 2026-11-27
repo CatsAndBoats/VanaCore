@@ -264,7 +264,7 @@ uint8_t* rtbvh_build_ex(const float* verts, uint32_t stride, uint32_t ntris, con
     if (out)
     {
         memcpy(out, nodes, nb);
-        float* tri = (float*)(out + nb);
+        float* tri = (float*)(void*)(out + nb);
         for (uint32_t i = 0; i < ntris; ++i, tri += 9)
         {
             const float* a = corner(verts, stride, idx[i], 0);

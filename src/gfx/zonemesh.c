@@ -208,7 +208,7 @@ static void zm_rt_tree(const VanaZoneMesh* m)
         memcpy(v + (size_t)ns * 9u + i * 3u, &m->cut[i * 5u], 12u);
     /* the words of each: from what the core handed over (uv, col, tex, cut_col), else a grey no texture's */
     const int have = m->uv && m->col && m->tex && m->cut_col;
-    float* uvw = (float*)pay;
+    float* uvw = (float*)(void*)pay;
     double csum[3] = { 0, 0, 0 };
     uint32_t cn = 0;
     for (uint32_t t = 0; t < nt; ++t)

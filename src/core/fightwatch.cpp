@@ -297,7 +297,7 @@ void watch_scene(ULONGLONG now)
     g.next_scene = now + kSceneEvery, g.scene_pending = true;
     screenshot::capture(
         false,
-        [](bool ok, unsigned w, unsigned h, unsigned stride, std::vector<unsigned char> bgr, std::string error) {
+        [](bool ok, unsigned w, unsigned h, unsigned stride, const std::vector<unsigned char>& bgr, const std::string& error) {
             on_scene(ok, w, h, stride, bgr, error);
         },
         false);

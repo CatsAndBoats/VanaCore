@@ -225,7 +225,7 @@ bool sheet_listed()
 {
     char* node = field<char*>(g_menus->sheets, 0);
     for (int n = 0; node != nullptr && n < kNodesMost; ++n, node = field<char*>(node, kNodeNext)) {
-        char* sheet = field<std::uint8_t>(node, kNodeSkip) == 0 ? field<char*>(node, kNodeItem) : nullptr;
+        const char* sheet = field<std::uint8_t>(node, kNodeSkip) == 0 ? field<char*>(node, kNodeItem) : nullptr;
         if (sheet != nullptr && std::memcmp(sheet + kSheetName, kSheet, 16) == 0)
             return true;
     }

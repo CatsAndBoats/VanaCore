@@ -102,7 +102,7 @@ Frame read_frame(const unsigned char* d, int hour)
     return f;
 }
 
-// The zone's model DAT walked by its section headers (as zoneweather.cpp's read_weathers), each environment under a weather's
+// The zone's model DAT walked by its section headers (zoneweather.cpp's walk_sections), each environment under a weather's
 // folder in "weat" read: 0xAC bytes after its 16-byte header
 std::shared_ptr<Zone> read_zone(int zone)
 {
@@ -110,53 +110,27 @@ std::shared_ptr<Zone> read_zone(int zone)
     const std::wstring path = dats::path(zone_model(zone));
     if (path.empty())
         return out;
-    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE)
-        return out;
-    LARGE_INTEGER size{};
-    if (GetFileSizeEx(file, &size)) {
-        std::vector<std::array<char, 4>> folders;
-        long long pos = 0;
-        unsigned char head[16 + kEnvBytes];
-        while (pos + 16 <= size.QuadPart) {
-            LARGE_INTEGER at{};
-            at.QuadPart = pos;
-            DWORD got = 0;
-            if (!SetFilePointerEx(file, at, nullptr, FILE_BEGIN) || !ReadFile(file, head, 16, &got, nullptr) || got != 16)
-                break;
-            std::uint32_t meta = 0;
-            std::memcpy(&meta, head + 4, 4);
-            const long long bytes = static_cast<long long>((meta >> 7) & 0xFFFFFu) * 16;
-            if (bytes <= 0)
-                break;
-            const unsigned kind = meta & 0x7Fu;
-            std::array<char, 4> id{};
-            std::memcpy(id.data(), head, 4);
-            if (kind == 0x01) {
-                folders.push_back(id);
-            } else if (kind == 0x00) {
-                if (!folders.empty())
-                    folders.pop_back();
-            } else if (kind == 0x2F && bytes >= static_cast<long long>(16 + kEnvBytes) && folders.size() >= 2 &&
-                       std::memcmp(folders[folders.size() - 2].data(), "weat", 4) == 0) {
-                const int weather = folder_weather(folders.back().data());
-                int hhmm = 0;
-                bool digits = true;
-                for (int i = 0; i < 4; ++i) {
-                    digits = digits && id[i] >= '0' && id[i] <= '9';
-                    hhmm = hhmm * 10 + (id[i] - '0');
-                }
-                if (weather >= 0 && digits && ReadFile(file, head + 16, static_cast<DWORD>(kEnvBytes), &got, nullptr) && got == kEnvBytes) {
-                    const Frame f = read_frame(head + 16, (hhmm / 100) % 24);
-                    out->frames[static_cast<std::size_t>(weather)].push_back(f);
-                    out->outdoors = out->outdoors || (!f.indoors && f.radius > 0.0f && f.spokes > 0);
-                }
-            }
-            pos += bytes;
+    unsigned char env[kEnvBytes];
+    walk_sections(path, [&out, &env](const Section& s) {
+        const auto& folders = *s.folders;
+        if (s.kind != 0x2F || s.bytes < static_cast<long long>(16 + kEnvBytes) || folders.size() < 2 ||
+            std::memcmp(folders[folders.size() - 2].data(), "weat", 4) != 0)
+            return;
+        const int weather = folder_weather(folders.back().data());
+        int hhmm = 0;
+        bool digits = true;
+        for (int i = 0; i < 4; ++i) {
+            digits = digits && s.id[i] >= '0' && s.id[i] <= '9';
+            hhmm = hhmm * 10 + (s.id[i] - '0');
         }
-    }
-    CloseHandle(file);
+        DWORD got = 0;
+        if (weather >= 0 && digits && ReadFile(static_cast<HANDLE>(s.file), env, static_cast<DWORD>(kEnvBytes), &got, nullptr) &&
+            got == kEnvBytes) {
+            const Frame f = read_frame(env, (hhmm / 100) % 24);
+            out->frames[static_cast<std::size_t>(weather)].push_back(f);
+            out->outdoors = out->outdoors || (!f.indoors && f.radius > 0.0f && f.spokes > 0);
+        }
+    });
     for (auto& list : out->frames)
         std::sort(list.begin(), list.end(), [](const Frame& a, const Frame& b) { return a.hour < b.hour; });
     return out;

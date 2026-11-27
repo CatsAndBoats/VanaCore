@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -12,6 +13,51 @@
 #include "dats.hpp"
 
 namespace vanacore::zoneweather {
+
+// Walks a zone DAT's section headers, 16 bytes each: a 4-character id, then a u32 with the kind in its low 7 bits and the size
+// (header included) in 16-byte units in the next 20. Kind 0x01 opens a folder named by its id and 0x00 closes one (kept in
+// `folders`, not handed over); every other section is. An environment (0x2F, one an hour: 0000, 0600, 1200...) under a weather
+// folder whose own folder is "weat" is that weather's; other trees (ev01, ev02...) are single objects' own light. Only the
+// headers are read (a zone DAT is 10 to 20 MB), and what a visit reads past its header itself
+bool walk_sections(const std::wstring& path, const std::function<void(const Section&)>& visit)
+{
+    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return false;
+    LARGE_INTEGER size{};
+    if (GetFileSizeEx(file, &size)) {
+        std::vector<std::array<char, 4>> folders;
+        Section s;
+        s.folders = &folders;
+        s.file = file;
+        unsigned char head[16];
+        for (long long pos = 0; pos + 16 <= size.QuadPart; pos += s.bytes) {
+            LARGE_INTEGER at{};
+            at.QuadPart = pos;
+            DWORD got = 0;
+            if (!SetFilePointerEx(file, at, nullptr, FILE_BEGIN) || !ReadFile(file, head, 16, &got, nullptr) || got != 16)
+                break;
+            std::uint32_t meta = 0;
+            std::memcpy(&meta, head + 4, 4);
+            s.bytes = static_cast<long long>((meta >> 7) & 0xFFFFFu) * 16;
+            if (s.bytes <= 0)
+                break;
+            s.kind = meta & 0x7Fu;
+            std::memcpy(s.id.data(), head, 4);
+            if (s.kind == 0x01)
+                folders.push_back(s.id);
+            else if (s.kind == 0x00) {
+                if (!folders.empty())
+                    folders.pop_back();
+            } else
+                visit(s);
+        }
+    }
+    CloseHandle(file);
+    return true;
+}
+
 namespace {
 
 // The weather folders of a zone's environment tree, in 0x057's order (Ashita's xi.weather): clear, sunny, cloudy, fog, hot
@@ -45,62 +91,29 @@ int folder_weather(const std::array<char, 4>& id)
     return -1;
 }
 
-// Walks the DAT's section headers, 16 bytes each: a 4-character id, then a u32 with the kind in its low 7 bits and the size
-// (header included) in 16-byte units in the next 20. Kind 0x01 opens a folder named by its id, 0x00 closes one, 0x2F is an
-// environment (one an hour: 0000, 0600, 1200...). One under a weather folder whose own folder is "weat" is that weather's;
-// other trees (ev01, ev02...) are single objects' own light. A texture (kind 0x20) named rain or rai1 laid straight in a
-// weather's folder is the rain the game draws round the camera in it (rains). Only the headers are read: a zone DAT is 10 to
-// 20 MB.
+// What the zone's DAT says: the weathers with an environment under "weat" (sky), and those whose folder carries a texture named
+// rain or rai1 laid straight in it, the rain the game draws round the camera in that weather (rains)
 Read read_weathers(const std::wstring& path)
 {
     Read out;
-    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE)
-        return out;
-    LARGE_INTEGER size{};
-    if (GetFileSizeEx(file, &size)) {
-        std::vector<std::array<char, 4>> folders;
-        long long pos = 0;
-        unsigned char head[16];
-        while (pos + 16 <= size.QuadPart) {
-            LARGE_INTEGER at{};
-            at.QuadPart = pos;
-            DWORD got = 0;
-            if (!SetFilePointerEx(file, at, nullptr, FILE_BEGIN) || !ReadFile(file, head, 16, &got, nullptr) || got != 16)
+    walk_sections(path, [&out](const Section& s) {
+        const auto& folders = *s.folders;
+        if (s.kind == 0x2F) {
+            for (std::size_t i = folders.size(); i-- > 1;) {
+                const int weather = folder_weather(folders[i]);
+                if (weather < 0)
+                    continue;
+                if (std::memcmp(folders[i - 1].data(), "weat", 4) == 0)
+                    out.sky |= 1u << weather;
                 break;
-            std::uint32_t meta = 0;
-            std::memcpy(&meta, head + 4, 4);
-            const long long bytes = static_cast<long long>((meta >> 7) & 0xFFFFFu) * 16;
-            if (bytes <= 0)
-                break;
-            const unsigned kind = meta & 0x7Fu;
-            std::array<char, 4> id{};
-            std::memcpy(id.data(), head, 4);
-            if (kind == 0x01) {
-                folders.push_back(id);
-            } else if (kind == 0x00) {
-                if (!folders.empty())
-                    folders.pop_back();
-            } else if (kind == 0x2F) {
-                for (std::size_t i = folders.size(); i-- > 1;) {
-                    const int weather = folder_weather(folders[i]);
-                    if (weather < 0)
-                        continue;
-                    if (std::memcmp(folders[i - 1].data(), "weat", 4) == 0)
-                        out.sky |= 1u << weather;
-                    break;
-                }
-            } else if (kind == 0x20 && std::memcmp(id.data(), "rai", 3) == 0 && folders.size() >= 2 &&
-                       std::memcmp(folders[folders.size() - 2].data(), "weat", 4) == 0) {
-                const int weather = folder_weather(folders.back());
-                if (weather >= 0)
-                    out.rain |= 1u << weather;
             }
-            pos += bytes;
+        } else if (s.kind == 0x20 && std::memcmp(s.id.data(), "rai", 3) == 0 && folders.size() >= 2 &&
+                   std::memcmp(folders[folders.size() - 2].data(), "weat", 4) == 0) {
+            const int weather = folder_weather(folders.back());
+            if (weather >= 0)
+                out.rain |= 1u << weather;
         }
-    }
-    CloseHandle(file);
+    });
     return out;
 }
 

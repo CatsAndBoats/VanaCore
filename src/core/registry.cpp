@@ -37,9 +37,9 @@ constexpr const char* kRegistryApiSets[] = {"api-ms-win-core-registry-l1-1-0.dll
 
 // A value served in place of the registry's, held as the bytes RegQueryValueExA hands back.
 struct Value {
-    Key key;
+    Key key{};
     std::string name; // value name, e.g. "0001"
-    DWORD type;       // REG_DWORD or REG_SZ
+    DWORD type = 0;   // REG_DWORD or REG_SZ
     std::vector<BYTE> data;
     std::wstring text; // as written in the ini, for the log
     std::wstring from; // where it came from, for the log: "[ffxi] mipmap", "[ffxi] mipmap's default",
@@ -58,9 +58,9 @@ enum class Form {
     Text,   // REG_SZ
 };
 struct Named {
-    const wchar_t* key; // in [ffxi]
-    const char* name;   // the game's value name
-    Form form;
+    const wchar_t* key = nullptr; // in [ffxi]
+    const char* name = nullptr;   // the game's value name
+    Form form = Form::Number;
     const wchar_t* preset = nullptr; // the default, as [ffxi] would write it; "screen" is the main
                                      // display's resolution, "resolution.game" that setting's
     const char* height = nullptr;    // Size: the height's value name
@@ -589,10 +589,10 @@ bool convert_moved(Convert how, wchar_t (&value)[256])
 void move_old_keys(const wchar_t* ini)
 {
     struct Move {
-        const wchar_t* section;
-        const wchar_t* key;
-        const wchar_t* to_section; // nullptr: taken out
-        const wchar_t* to_key;
+        const wchar_t* section = nullptr;
+        const wchar_t* key = nullptr;
+        const wchar_t* to_section = nullptr; // nullptr: taken out
+        const wchar_t* to_key = nullptr;
         Convert how = Convert::Copy;
     };
     constexpr Move kMoves[] = {
@@ -723,10 +723,10 @@ constexpr std::wstring_view kStandInKeys[] = {
 // and the install folders come first, and a value the game writes to the stand-in is kept.
 struct StandInValue {
     std::wstring_view key; // as kStandInKeys
-    const char* name;      // "" is the key's default value
-    DWORD type;
-    DWORD number;          // REG_DWORD
-    const wchar_t* text;   // REG_SZ (environment variables expanded); REG_BINARY as hex
+    const char* name = nullptr;    // "" is the key's default value
+    DWORD type = 0;
+    DWORD number = 0;              // REG_DWORD
+    const wchar_t* text = nullptr; // REG_SZ (environment variables expanded); REG_BINARY as hex
 };
 constexpr StandInValue kStandInValues[] = {
     {L"", "CommonFilesFolder", REG_SZ, 0, L"%CommonProgramFiles%\\"},
@@ -1351,10 +1351,10 @@ void serve(Key key, const char* name, const std::wstring& text)
 static void reset_old_defaults(const wchar_t* ini)
 {
     struct Reset {
-        int step;
-        const wchar_t* section;
-        const wchar_t* key;
-        double old;
+        int step = 0;
+        const wchar_t* section = nullptr;
+        const wchar_t* key = nullptr;
+        double old = 0;
         bool force = false; // taken out at any value, not only the old default
     };
     constexpr Reset kResets[] = {

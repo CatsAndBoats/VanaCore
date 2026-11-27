@@ -8,6 +8,7 @@
 #include <imgui_internal.h>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "../gfx/vanacore_gfx.h"
@@ -65,7 +66,7 @@ bool ask(float x, float y, float w, float h, float radius, float strength)
         float level = kDefaultStrength; // (NaN stays that: both comparisons are false)
         if (strength >= 0.0f)
             level = std::min(strength, 1.0f);
-        else if (strength < 0.0f)
+        else if (!std::isnan(strength))
             level = 0.0f;
         g_asks.push_back({x0, y0, x1 - x0, y1 - y0, std::max(0.0f, radius) * scale, level});
     }
@@ -90,7 +91,7 @@ void flush(bool shown)
         return;
     }
     unsigned layer_w = 0, layer_h = 0;
-    ImGuiContext* context = ImGui::GetCurrentContext();
+    const ImGuiContext* context = ImGui::GetCurrentContext();
     if (context == nullptr || !graphics::ui_size(layer_w, layer_h) || layer_w == 0 || layer_h == 0) {
         drop();
         return;

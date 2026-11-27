@@ -88,8 +88,8 @@ text::Style name_style(const text::Style& letters, const text::Style& stroked, f
 // One line of the name drawn, its pen at `pen`, its baseline kNameBaseline below `y` (interface units); its picture made
 // again when its text or style changed. Its picture's own width, interface units, for the alignment (-1: not drawn)
 struct NameFrame {
-    void* device;
-    unsigned width, height;
+    void* device = nullptr;
+    unsigned width = 0, height = 0;
     const NamePending& pending;
     const text::Style& style;
 };

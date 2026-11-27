@@ -17,9 +17,9 @@ namespace {
 
 // A window another module places, with an <id>.scale of its own here: its layout and its anchor point (its X and Y's)
 struct Extra {
-    const char* id;
-    char layout[16 + 1];
-    double anchor_x, anchor_y;
+    const char* id = nullptr;
+    char layout[16 + 1] = {};
+    double anchor_x = 0, anchor_y = 0;
     double scale = 1;
 };
 Extra g_extras[] = {

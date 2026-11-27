@@ -60,10 +60,12 @@ static void rt_bind(ID3D12GraphicsCommandList* l, const GfxScene* s, int sky_ok)
          * camera that pitches, and a reflection taken along it swung after it) */
         {
             const float sign = inv[5] < 0.0f ? -1.0f : 1.0f;
-            float up[3] = { inv[1] * sign, inv[5] * sign, inv[9] * sign };
-            const float l = sqrtf(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
+            const float up[3] = { inv[1] * sign, inv[5] * sign, inv[9] * sign };
+            const float len = sqrtf(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
+            float unit[3];
             for (int j = 0; j < 3; ++j)
-                ((float*)a.cpu)[20 + j] = l > 1e-6f ? up[j] / l : 0.0f;
+                unit[j] = len > 1e-6f ? up[j] / len : 0.0f;
+            memcpy(a.cpu + 80, unit, 12);
         }
         /* the scene's ambient light (word 23: 10 bits a channel, 0 to 2), for the light on what a ray finds as the game has it */
         {
@@ -106,7 +108,7 @@ static void sky_colour_pass(FxU* u, int32_t depth_srv, int32_t* comp_in)
     fx_state(last_sky, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     fx_state(sky, D3D12_RESOURCE_STATE_RENDER_TARGET);
     float vp1[4] = { 0, 0, 1, 1 };
-    int32_t sky_in[3] = { g_fx.src.srv, depth_srv, last_sky->srv };
+    const int32_t sky_in[3] = { g_fx.src.srv, depth_srv, last_sky->srv };
     gpu_part(GP_SKY);
     fx_draw(heap_cpu(&g_rtv, sky->rtv), 1, 1, g_fx.skycol_pso, vp1, u, sky_in, 3, 0, 0);
     gpu_part(GP_REST);

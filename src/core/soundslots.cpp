@@ -161,8 +161,8 @@ bool rewrite(const Sites& s, std::uint32_t slots)
 // them). The old ones, empty, are left.
 bool swap(const Sites& s, std::uint32_t slots)
 {
-    auto* const global = reinterpret_cast<std::uint8_t**>(read32(s.setup + kSetupSlots));
-    std::uint8_t* const old = *global;
+    std::uint8_t** const global = reinterpret_cast<std::uint8_t**>(read32(s.setup + kSetupSlots));
+    const std::uint8_t* const old = *global;
     if (old == nullptr || read32(reinterpret_cast<std::uintptr_t>(old) - 4) != kGame)
         return false;
     const auto game_new = reinterpret_cast<New>(s.setup + kSetupNew + 5 + static_cast<std::int32_t>(read32(s.setup + kSetupNew + 1)));

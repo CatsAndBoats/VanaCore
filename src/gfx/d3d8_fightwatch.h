@@ -152,5 +152,4 @@ void vanacore_gfx_drawlog_once(const char* path)
 #else
 static void fw_draw(const GfxDraw* d) { (void)d; }
 static void fw_scene(const GfxScene* s) { (void)s; }
-static int fw_cap_once(void) { return 0; }
 #endif

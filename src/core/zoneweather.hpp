@@ -1,6 +1,10 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace vanacore::zoneweather {
 
@@ -14,6 +18,21 @@ bool weathers(int zone, std::uint32_t& mask);
 // are a sky and light alone - Alzadaal Undersea Ruins, the Temple of Uggalepih, Crawlers' Nest, the Boyahda Tree...: the game
 // draws no rain there. False (`mask` 0) when it can't be read or has none.
 bool rains(int zone, std::uint32_t& mask);
+
+// --- zoneweather.cpp's, for weatherlook.cpp too -------------------------------------------------------------------------
+// One section of a zone DAT as walk_sections hands it over: its id, kind and size (header included), the folders open round it
+// (innermost last), and the file (a HANDLE), placed just after the section's 16-byte header
+struct Section
+{
+    std::array<char, 4> id{};
+    unsigned kind = 0;
+    long long bytes = 0;
+    const std::vector<std::array<char, 4>>* folders = nullptr;
+    void* file = nullptr;
+};
+
+// Each section of the DAT at `path` but the folders' opening and closing ones, in order; false when it can't be opened
+bool walk_sections(const std::wstring& path, const std::function<void(const Section&)>& visit);
 
 // --- weatherlook.cpp ----------------------------------------------------------------------------------------------------
 // A weather's look borrowed from another zone's files, for a weather the zone the player is in has none of (its model DAT has
