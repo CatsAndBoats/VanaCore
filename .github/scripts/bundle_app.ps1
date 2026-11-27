@@ -38,25 +38,26 @@ if ($LASTEXITCODE) { throw "Couldn't list $Repo's releases" }
 
 # ---- The App release
 $apps = @($releases | Where-Object { $_.tag_name -like 'app-v*' })
-$app = if ($App) { @($apps | Where-Object tag_name -eq $App)[0] }
+# ($appRelease, not $app: PowerShell's names ignore case, and $app is the [string] -App, which would turn the release into text)
+$appRelease = if ($App) { @($apps | Where-Object tag_name -eq $App)[0] }
        else { @($apps | Where-Object { -not $_.draft } | Sort-Object { [datetime]$_.published_at } -Descending)[0] }
-if (-not $app) {
+if (-not $appRelease) {
   if ($App) { throw "No App release $App" }
   'No VanaCore App release published yet: nothing bundled'
   return
 }
-$appZip = @($app.assets | Where-Object name -like 'VanaCoreApp-*.zip')[0]
-if (-not $appZip) { throw "$($app.name) has no VanaCoreApp-*.zip" }
+$appZip = @($appRelease.assets | Where-Object name -like 'VanaCoreApp-*.zip')[0]
+if (-not $appZip) { throw "$($appRelease.name) has no VanaCoreApp-*.zip" }
 Get-Asset $appZip (Join-Path $work app.zip)
 Expand-Archive -Path (Join-Path $work app.zip) -DestinationPath (Join-Path $work app)
 $files = 'VanaCoreApp.exe', 'VanaCoreApp.dll'
 foreach ($f in $files) {
   $path = Join-Path $work "app/$f"
-  if (-not (Test-Path $path)) { throw "$($app.name)'s zip has no $f" }
-  if ((Get-AuthenticodeSignature -LiteralPath $path).Status -ne 'Valid') { throw "$($app.name)'s $f has no valid signature" }
+  if (-not (Test-Path $path)) { throw "$($appRelease.name)'s zip has no $f" }
+  if ((Get-AuthenticodeSignature -LiteralPath $path).Status -ne 'Valid') { throw "$($appRelease.name)'s $f has no valid signature" }
 }
-$version = $app.tag_name -replace '^app-v', ''
-"VanaCore App $version ($($app.tag_name)$(if ($app.draft) { ', draft' }))"
+$version = $appRelease.tag_name -replace '^app-v', ''
+"VanaCore App $version ($($appRelease.tag_name)$(if ($appRelease.draft) { ', draft' }))"
 
 function Copy-App($to) {
   foreach ($f in $files) { Copy-Item -LiteralPath (Join-Path $work "app/$f") -Destination (Join-Path $to $f) -Force }
