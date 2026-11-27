@@ -179,10 +179,6 @@ bool present(const std::string& name)
 void install(const wchar_t* install_dir, const wchar_t* settings_ini)
 {
     g_install = ansi(install_dir) + "\\";
-    // The folders, so it's clear where plugins go.
-    CreateDirectoryA((g_install + "plugins").c_str(), nullptr);
-    for (const Source& source : kSources)
-        CreateDirectoryA((g_install + source.folder).c_str(), nullptr);
     g_silent = settings_ini != nullptr && GetPrivateProfileIntW(L"addons", L"plugins.silent", 0, settings_ini) != 0;
     g_silent_ini = g_silent;
     plugin_memory::install();

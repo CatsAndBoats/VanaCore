@@ -240,6 +240,7 @@ exit /b 0</Command>
     <ClCompile Include="pivot.cpp" />
     <ClCompile Include="plugin_fault.cpp" />
     <ClCompile Include="plugin_memory.cpp" />
+    <ClCompile Include="folders.cpp" />
     <ClCompile Include="plugins.cpp" />
     <ClCompile Include="pluginapi.cpp" />
     <ClCompile Include="registry.cpp" />
@@ -514,6 +515,7 @@ exit /b 0</Command>
     <ClInclude Include="pivot.hpp" />
     <ClInclude Include="plugin_fault.hpp" />
     <ClInclude Include="plugin_memory.hpp" />
+    <ClInclude Include="folders.hpp" />
     <ClInclude Include="plugins.hpp" />
     <ClInclude Include="pluginapi.hpp" />
     <ClInclude Include="registry.hpp" />

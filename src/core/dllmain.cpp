@@ -19,6 +19,7 @@
 #include "tpbar.hpp"
 #include "noblink.hpp"
 #include "fishing.hpp"
+#include "folders.hpp"
 #include "autologin.hpp"
 #include "macrobar.hpp"
 #include "menuhover.hpp"
@@ -260,6 +261,7 @@ extern "C" DWORD WINAPI VanaCoreInstall(LPVOID param)
     vanacore::overlay::install(g_boot.settings_ini, name, name + L" - CatsEyeXI",
                                std::wstring(g_boot.install_dir) + L"\\addons\\vanacore\\vana\\logo.png",
                                std::wstring(g_boot.install_dir) + L"\\VanaCore.exe");
+    vanacore::folders::install(g_boot.install_dir); // where addons and plugins go: addons\ashita, addons\windower, plugins\...
     vanacore::addons::install(g_boot.install_dir, g_boot.settings_ini);
     vanacore::plugins::install(g_boot.install_dir, g_boot.settings_ini);
     vanacore::shutdown::install(); // ExitProcess: addons and plugins unloaded first
