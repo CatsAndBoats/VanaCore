@@ -337,6 +337,15 @@
     "        float3 sk = texel(11, int2(0, 0)).rgb;\n" \
     "        rtd = (rtf & 1u) != 0u ? float3(1.0, 0.0, 1.0) : float3(0.0, 0.3, 1.0);\n" \
     "        rtc = lerp(sk, dot(sk, LUMA) * float3(0.75, 0.85, 1.1), 0.5 * el) * lerp(1.0, 0.85, el);\n" \
+    /* ... and the sky itself where the screen shows it that way (the sky is as far as it gets: the ray's direction from the \
+     * camera), its clouds and its colour there, easing to the one colour toward the picture's edges: that one colour alone \
+     * read as no sky at all under an overcast evening, Whitegate 2026-11-27 */ \
+    "        float3 sq = to_px(Rt * 1e4);\n" \
+    "        if (sq.z > 0.1 && in_view(sq.xy) && dist_at(sq.xy) > 9e4) {\n" \
+    "          float2 sqe = (sq.xy - u.vp.xy) / u.vp.zw;\n" \
+    "          float sqw = smoothstep(0.0, 0.08, min(sqe.x, 1.0 - sqe.x)) * smoothstep(0.0, 0.08, min(sqe.y, 1.0 - sqe.y));\n" \
+    "          rtc = lerp(rtc, tap(1, sq.xy / u.size.xy).rgb, sqw);\n" \
+    "        }\n" \
     "      }\n" \
     "    }\n" \
     "  }\n" \
@@ -381,15 +390,20 @@
  * plane's length is that radius plus the strength (0 to 1, so the radius is the whole part less one) - laid sharp, a crystal's
  * reflection stood crisp in a floor whose every other reflection was a soft blur */
 #define RT_FX_HLSL \
+    /* (two mirrors, each a floor level in view: input 3 by u.rtx, input 5 by u.rbf, its length 0 with one alone, gfx_d3d12_rtfx.h \
+     * mfx_late_in) */ \
     "#ifdef ZL_LATE\n" \
-    "  float mln = length(u.rtx.xyz);\n" \
+    "  [unroll] for (int mi = 0; mi < 2; ++mi) {\n" \
+    "  float4 mpl = mi == 0 ? u.rtx : u.rbf;\n" \
+    "  int msl = mi == 0 ? 3 : 5;\n" \
+    "  float mln = length(mpl.xyz);\n" \
     "  if (mln > 0.001 && z != 0.0) {\n" \
     "    float mbl = ceil(mln) - 1.0, mst = mln - mbl;\n" \
-    "    float lvl = 1.0 - smoothstep(0.4, 1.2, abs(dot(view_pos(i.pos.xy, z), u.rtx.xyz / mln) - u.rtx.w));\n" \
+    "    float lvl = 1.0 - smoothstep(0.4, 1.2, abs(dot(view_pos(i.pos.xy, z), mpl.xyz / mln) - mpl.w));\n" \
     "    float mk = saturate(tap(4, i.uv).a) * mst * lvl;\n" \
     "    if (mk > 0.001) {\n" \
     "      float2 mu = (u.vp.xy + i.uv * u.vp.zw) / size_of(2);\n" \
-    "      float4 mf = tap(3, mu);\n" \
+    "      float4 mf = tap(msl, mu);\n" \
     "      if (mbl > 0.5) {\n" \
     "        float2 mt = u.vp.zw / (size_of(2) * size_of(4));\n" \
     "        float stp = max(1.0, mbl * 0.25), inv = -2.0 / (mbl * mbl), bw_ = 0.0;\n" \
@@ -400,7 +414,7 @@
     "          [loop] for (int ox = -nr; ox <= nr; ++ox) {\n" \
     "            float2 off = float2(ox, oy) * stp + jit;\n" \
     "            float gw = exp(dot(off, off) * inv);\n" \
-    "            mf += tap(3, mu + off * mt) * gw; bw_ += gw;\n" \
+    "            mf += tap(msl, mu + off * mt) * gw; bw_ += gw;\n" \
     "          }\n" \
     "        }\n" \
     "        mf /= bw_;\n" \
@@ -408,5 +422,6 @@
     "      r += mf.rgb * mk;\n" \
     "      w = 1.0 - (1.0 - w) * (1.0 - saturate(mf.a) * mk);\n" \
     "    }\n" \
+    "  }\n" \
     "  }\n" \
     "#endif\n"

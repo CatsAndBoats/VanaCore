@@ -16,14 +16,15 @@
 
 static struct
 {
-    GfxTex *t, *d;   /* the mirrored effects and the mirrored world's depth: drawn this frame, read the next */
+    GfxTex *t[2], *d[2]; /* each mirror's effects and its mirrored world's depth (MFX_MIRRORS: one a floor level in view) */
     GfxTex* scene;   /* the scene they're taken from (g_rt then) */
     uint64_t serial; /* the frame they're being drawn in (0 none) */
     uint64_t drawn;  /* the frame they were last begun in */
-    float m[16];     /* the draws' clip space into the mirror (mirror_matrix) */
+    float m[2][16];  /* the draws' clip space into each mirror (mirror_matrix) */
+    int nm;          /* the mirrors begun this frame (0 to 2) */
     float sx, sy;    /* the target's size over the scene's: a draw's viewport by it (viewport_for) */
     uint32_t n;      /* effects drawn into it */
-    float plane[4];  /* the level in view space, for fx_zlate (mfx_refl_in): this frame's up, as long as the strength plus the blur's radius; the level along it */
+    float plane[2][4]; /* each mirror's level in view space, for fx_zlate (mfx_refl_in): this frame's up, as long as the strength plus the blur's radius; the level along it */
 } g_mfx;
 
 /* the models drawn before the scene ends, kept to be drawn into the mirror (mfx_rec_new, mfx_replay) */
@@ -45,7 +46,8 @@ static int mfx_wanted(void)
 
 static void mfx_release(void)
 {
-    gfx_tex_destroy(g_mfx.t), gfx_tex_destroy(g_mfx.d);
+    for (int k = 0; k < 2; ++k)
+        gfx_tex_destroy(g_mfx.t[k]), gfx_tex_destroy(g_mfx.d[k]);
     memset(&g_mfx, 0, sizeof g_mfx);
     g_mfr.n = 0, g_mfr.serial = 0; /* (its arrays kept for the next) */
 }
@@ -107,7 +109,7 @@ static Caster* mfx_rec_new(const GfxDraw* d)
 
 /* this frame's early models into the mirror, its targets bound and its world's depth drawn: each with its own blend and depth
  * test (no depth written), the faces turned over */
-static uint32_t mfx_replay(ID3D12GraphicsCommandList* l)
+static uint32_t mfx_replay(ID3D12GraphicsCommandList* l, int mk)
 {
     uint32_t drawn = 0;
     if (g_mfr.serial != g_serial)
@@ -126,7 +128,7 @@ static uint32_t mfx_replay(ID3D12GraphicsCommandList* l)
         pk.lib.vs.shadow = GFX_VS_MIRROR, pk.lib.vs.pixel = 0, pk.lib.vs.motion = 0, pk.lib.vs.cpos = 0;
         pk.lib.vs.inst = (uint8_t)(pieces ? islot : 0);
         pk.lib.fs.nmap = 0, pk.lib.fs.wet = 0, pk.lib.fs.pool = 0, pk.lib.fs.hfog = 0;
-        pk.color = (uint32_t)g_mfx.t->dxfmt, pk.dsv = (uint32_t)g_mfx.d->dxfmt;
+        pk.color = (uint32_t)g_mfx.t[mk]->dxfmt, pk.dsv = (uint32_t)g_mfx.d[mk]->dxfmt;
         pk.pipe = g_mfr.pipe[i], pk.depth = g_mfr.depth[i];
         pk.depth.zwrite = 0;
         pk.depth.stencil = pk.depth.sfail = pk.depth.szfail = pk.depth.spass = pk.depth.sfunc = pk.depth.sread = pk.depth.swrite = 0;
@@ -167,49 +169,58 @@ static uint32_t mfx_replay(ID3D12GraphicsCommandList* l)
     return drawn;
 }
 
-/* fx_zlate's inputs 3 and 4 (gfx_d3d12.c zl_run, once the game has drawn its last effect): this frame's mirrored effects and the
- * reflections' layer, whose alpha is each pixel's weight; and u->rtx, in this pass the level's plane (g_mfx.plane), 0 with none */
+/* fx_zlate's inputs 3 and 5 (gfx_d3d12.c zl_run, once the game has drawn its last effect): this frame's mirrored effects, one a
+ * mirror (the second the first again with one alone), and 4 the reflections' layer, whose alpha is each pixel's weight; and in
+ * this pass u->rtx the first mirror's level's plane (g_mfx.plane), u->rbf the second's (fx_ssr's relief fade, not read here), 0
+ * with none */
 static void mfx_late_in(int32_t* in, FxU* u)
 {
-    memset(u->rtx, 0, sizeof u->rtx);
-    if (!mfx_wanted() || !g_mfx.t || g_mfx.t->srv < 0 || g_mfx.serial != g_serial || !g_mfx.n || !g_fx.rl.res || g_fx.rl.srv < 0)
+    memset(u->rtx, 0, sizeof u->rtx), memset(u->rbf, 0, sizeof u->rbf);
+    if (!mfx_wanted() || g_mfx.nm < 1 || !g_mfx.t[0] || g_mfx.t[0]->srv < 0 || g_mfx.serial != g_serial || !g_mfx.n || !g_fx.rl.res ||
+        g_fx.rl.srv < 0)
         return;
-    tex_state(g_mfx.t, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    for (int k = 0; k < g_mfx.nm; ++k)
+        tex_state(g_mfx.t[k], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     fx_state(&g_fx.rl, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    in[3] = g_mfx.t->srv, in[4] = g_fx.rl.srv;
-    memcpy(u->rtx, g_mfx.plane, sizeof u->rtx);
+    in[3] = g_mfx.t[0]->srv, in[4] = g_fx.rl.srv, in[5] = g_mfx.nm > 1 ? g_mfx.t[1]->srv : g_mfx.t[0]->srv;
+    memcpy(u->rtx, g_mfx.plane[0], sizeof u->rtx);
+    if (g_mfx.nm > 1)
+        memcpy(u->rbf, g_mfx.plane[1], sizeof u->rbf);
 }
 
-static int mfx_targets(uint32_t w, uint32_t h, uint32_t depth_fmt)
+static int mfx_targets(int k, uint32_t w, uint32_t h, uint32_t depth_fmt)
 {
-    if (!g_mfx.t || g_mfx.t->w != w || g_mfx.t->h != h)
+    if (!g_mfx.t[k] || g_mfx.t[k]->w != w || g_mfx.t[k]->h != h)
     {
-        gfx_tex_destroy(g_mfx.t);
-        g_mfx.t = gfx_tex_create(GFX_TEX_2D, 21 /* D3DFMT_A8R8G8B8 */, w, h, 1, GFX_USE_RT);
+        gfx_tex_destroy(g_mfx.t[k]);
+        g_mfx.t[k] = gfx_tex_create(GFX_TEX_2D, 21 /* D3DFMT_A8R8G8B8 */, w, h, 1, GFX_USE_RT);
     }
-    if (!g_mfx.d || g_mfx.d->w != w || g_mfx.d->h != h || g_mfx.d->fmt != depth_fmt)
+    if (!g_mfx.d[k] || g_mfx.d[k]->w != w || g_mfx.d[k]->h != h || g_mfx.d[k]->fmt != depth_fmt)
     {
-        gfx_tex_destroy(g_mfx.d);
-        g_mfx.d = gfx_tex_create(GFX_TEX_2D, depth_fmt, w, h, 1, GFX_USE_DEPTH);
+        gfx_tex_destroy(g_mfx.d[k]);
+        g_mfx.d[k] = gfx_tex_create(GFX_TEX_2D, depth_fmt, w, h, 1, GFX_USE_DEPTH);
     }
-    return g_mfx.t && g_mfx.d && g_mfx.t->srv >= 0;
+    return g_mfx.t[k] && g_mfx.d[k] && g_mfx.t[k]->srv >= 0;
 }
 
-/* The level the effects are mirrored about (the world's y, down): the floor most of the view looks onto, not the player's feet.
- * By the feet, a player up a stair or a hill had the floor below lose its home point crystal's and lanterns' reflections: they
- * stood under the level, which cuts them off, on floors fx_zlate leaves out as not at it (Aht Urhgan Whitegate, 2026-11-27). A
- * grid of rays from the camera across the view, each stepped through the zone's collision floors (grass_floor_near) to the first
- * it meets; the level that most of them meet (within half a yalm) wins, kept until another has half as many again, so it doesn't
- * flip at every edge. Worked out every MFX_LEVEL_EVERY frames; the feet where no ray meets a floor or the floors aren't known */
+/* The levels the effects are mirrored about (the world's y, down): the floors the view looks onto, not the player's feet. By the
+ * feet, a player up a stair or a hill had the floor below lose its home point crystal's and lanterns' reflections: they stood
+ * under the level, which cuts them off, on floors fx_zlate leaves out as not at it (Aht Urhgan Whitegate, 2026-11-27). And by one
+ * level alone, the most of the view's, the walkway the player stood on won over the pool below, and the crystal was gone again: two
+ * mirrors, one a level. A grid of rays from the camera across the view, each stepped through the zone's collision floors
+ * (grass_floor_near) to the first it meets; the level most of them meet (within half a yalm) first, kept until another has half
+ * as many again, so it doesn't flip at every edge; then the most met of the rest a yalm or more off it, if MFX_LEVEL_SECOND of
+ * the rays meet it. Worked out every MFX_LEVEL_EVERY frames; the feet where no ray meets a floor or the floors aren't known */
 #define MFX_LEVEL_COLS 8
 #define MFX_LEVEL_ROWS 6
 #define MFX_LEVEL_EVERY 6u
 #define MFX_LEVEL_STEP 0.5f
+#define MFX_LEVEL_SECOND 4 /* rays */
 static struct
 {
-    uint64_t serial; /* the frame it was worked out in (0 never) */
-    float level;     /* that level, while known */
-    int known;
+    uint64_t serial; /* the frame they were worked out in (0 never) */
+    float level[2];  /* the levels, while known */
+    int known;       /* how many (0: the feet) */
 } g_mfl;
 
 /* the first of the zone's floors the ray from o along d (the world, unit length) meets within MFX_REACH, its y into *y */
@@ -237,19 +248,29 @@ static int mfx_level_count(const float* h, int n, float v)
     return c;
 }
 
-static float mfx_level(const GfxScene* s)
+/* the most met of the n levels in h, leaving out those within a yalm of `skip` when `has_skip`; its count into *best */
+static float mfx_level_top(const float* h, int n, int has_skip, float skip, int* best)
 {
-    const float feet = s->focus[1];
-    if (g_mfl.serial && g_serial >= g_mfl.serial && g_serial - g_mfl.serial < MFX_LEVEL_EVERY)
-        return g_mfl.known ? g_mfl.level : feet;
-    g_mfl.serial = g_serial ? g_serial : 1;
-    float inv[16], h[MFX_LEVEL_COLS * MFX_LEVEL_ROWS];
+    float at = 0.0f;
+    *best = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (has_skip && fabsf(h[i] - skip) < 1.0f)
+            continue;
+        const int c = mfx_level_count(h, n, h[i]);
+        if (c > *best)
+            *best = c, at = h[i];
+    }
+    return at;
+}
+
+/* the view's floors as levels (h, how many into *n), a ray each through the grid */
+static void mfx_level_rays(const GfxScene* s, const float* inv, float* h, int* n)
+{
     const float* p = s->proj;
-    if (!mat_inverse(inv, s->view) || p[0] == 0.0f || p[5] == 0.0f || p[11] == 0.0f)
-        return g_mfl.known = 0, feet;
     /* a view ray through (x, y) on the screen: its view z the side the projection's w is positive on */
     const float zf = p[11] > 0.0f ? 1.0f : -1.0f, w = fabsf(p[11]);
-    int n = 0;
+    *n = 0;
     for (int r = 0; r < MFX_LEVEL_ROWS; ++r)
         for (int c = 0; c < MFX_LEVEL_COLS; ++c)
         {
@@ -264,49 +285,47 @@ static float mfx_level(const GfxScene* s)
                 continue;
             for (int k = 0; k < 3; ++k)
                 d[k] /= l;
-            n += mfx_ray_floor(inv + 12, d, &h[n]);
+            *n += mfx_ray_floor(inv + 12, d, &h[*n]);
         }
-    int best = 0;
-    float at = feet;
-    for (int i = 0; i < n; ++i)
-    {
-        const int c = mfx_level_count(h, n, h[i]);
-        if (c > best)
-            best = c, at = h[i];
-    }
-    if (!best)
-        return g_mfl.known = 0, feet;
-    if (!g_mfl.known || 2 * best > 3 * mfx_level_count(h, n, g_mfl.level))
-        g_mfl.level = at;
-    g_mfl.known = 1;
-    return g_mfl.level;
 }
 
-/* After they're laid: this frame's begun - the mirror about the level most of the view looks onto (mfx_level), its targets
- * cleared and the world's casters drawn into its depth (their colour cleared again: only the effects are read) */
-static void mfx_begin(GfxTex* color, const GfxScene* s)
+/* the levels into lv (refl_rt_fx_level taken off: it raises them, the world's y counting down); how many (1 or 2) */
+static int mfx_levels(const GfxScene* s, float lv[2])
 {
-    g_mfx.serial = 0;
-    if (!mfx_wanted())
+    const float feet = s->focus[1];
+    const int fresh = g_mfl.serial && g_serial >= g_mfl.serial && g_serial - g_mfl.serial < MFX_LEVEL_EVERY;
+    if (!fresh)
     {
-        if (g_mfx.t)
-            mfx_release();
-        return;
+        g_mfl.serial = g_serial ? g_serial : 1;
+        float inv[16], h[MFX_LEVEL_COLS * MFX_LEVEL_ROWS];
+        int n = 0, best = 0, second = 0;
+        const float* p = s->proj;
+        if (mat_inverse(inv, s->view) && p[0] != 0.0f && p[5] != 0.0f && p[11] != 0.0f)
+            mfx_level_rays(s, inv, h, &n);
+        const float at = mfx_level_top(h, n, 0, 0.0f, &best);
+        if (!best)
+            g_mfl.known = 0;
+        else
+        {
+            if (!g_mfl.known || 2 * best > 3 * mfx_level_count(h, n, g_mfl.level[0]))
+                g_mfl.level[0] = at;
+            g_mfl.level[1] = mfx_level_top(h, n, 1, g_mfl.level[0], &second);
+            g_mfl.known = second >= MFX_LEVEL_SECOND ? 2 : 1;
+        }
     }
-    float clip_world[16], cam[3];
-    const float level = mfx_level(s) - g_fxs.refl_rt_fx_level; /* (refl_rt_fx_level raises it: the world's y counts down) */
-    /* (the world's up is -y: the camera above the level) */
-    if (s->focus[3] == 0.0f || !mirror_matrix(g_mfx.m, clip_world, cam, s, level) || !(level - cam[1] > 0.05f))
-        return;
-    const uint32_t w = (uint32_t)((float)color->w * MFX_SCALE + 0.5f), h = (uint32_t)((float)color->h * MFX_SCALE + 0.5f);
-    const GfxTex* sd = color->depth_seen;
-    if (w < 16 || h < 16 || !mfx_targets(w, h, sd && sd->use == GFX_USE_DEPTH ? sd->fmt : F_D24S8))
-        return;
-    BATCH_SETTLE(); /* the zone's draws kept: their casters with them */
+    lv[0] = (g_mfl.known ? g_mfl.level[0] : feet) - g_fxs.refl_rt_fx_level;
+    lv[1] = g_mfl.level[1] - g_fxs.refl_rt_fx_level;
+    return g_mfl.known ? g_mfl.known : 1;
+}
+
+/* mirror k's targets, the world's casters drawn into its depth (their colour cleared again: only the effects are read) and this
+ * frame's early models replayed into it; how many of those */
+static uint32_t mfx_begin_one(int k, const float* clip_world, const float* cam, uint32_t w, uint32_t h)
+{
     ID3D12GraphicsCommandList* l = list();
-    tex_state(g_mfx.t, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    tex_state(g_mfx.d, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    D3D12_CPU_DESCRIPTOR_HANDLE rtv = target_view(g_mfx.t, 0, 0), dsv = target_view(g_mfx.d, 0, 0);
+    tex_state(g_mfx.t[k], D3D12_RESOURCE_STATE_RENDER_TARGET);
+    tex_state(g_mfx.d[k], D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = target_view(g_mfx.t[k], 0, 0), dsv = target_view(g_mfx.d[k], 0, 0);
     static const float black[4] = { 0, 0, 0, 0 };
     ID3D12GraphicsCommandList_ClearDepthStencilView(l, dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, NULL);
     ID3D12GraphicsCommandList_OMSetRenderTargets(l, 1, &rtv, FALSE, &dsv);
@@ -315,23 +334,61 @@ static void mfx_begin(GfxTex* color, const GfxScene* s)
     ID3D12GraphicsCommandList_RSSetViewports(l, 1, &v);
     ID3D12GraphicsCommandList_RSSetScissorRects(l, 1, &sc);
     static const float nofade[4] = { 1, 0, 0, 0 };
-    ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(l, ROOT_SUN, 16, g_mfx.m, 0);
+    ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(l, ROOT_SUN, 16, g_mfx.m[k], 0);
     ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(l, ROOT_SUN, 4, nofade, 16);
     g_targets_bound = 0;
     drawn_forget();
-    const int part_was = gpu_part_cur();
-    gpu_part(GP_SSR);
-    mirror_casters(l, clip_world, cam, (MFX_REACH + MIRROR_SLACK) * (MFX_REACH + MIRROR_SLACK), (uint32_t)g_mfx.t->dxfmt,
-        (uint32_t)g_mfx.d->dxfmt);
+    mirror_casters(l, clip_world, cam, (MFX_REACH + MIRROR_SLACK) * (MFX_REACH + MIRROR_SLACK), (uint32_t)g_mfx.t[k]->dxfmt,
+        (uint32_t)g_mfx.d[k]->dxfmt);
     ID3D12GraphicsCommandList_ClearRenderTargetView(l, rtv, black, 0, NULL);
-    const uint32_t early = mfx_replay(l); /* the models drawn before the scene ended (the hike point's crystal) */
-    gpu_part(part_was);
+    const uint32_t early = mfx_replay(l, k); /* the models drawn before the scene ended (the hike point's crystal) */
     g_targets_bound = 0; /* the game's next draw binds its own again */
     drawn_forget();
+    return early;
+}
+
+/* After they're laid: this frame's begun - a mirror about each level the view looks onto (mfx_levels), each with the plane
+ * mfx_refl_in made for that level */
+static void mfx_begin(GfxTex* color, const GfxScene* s)
+{
+    g_mfx.serial = 0, g_mfx.nm = 0;
+    if (!mfx_wanted())
+    {
+        if (g_mfx.t[0])
+            mfx_release();
+        return;
+    }
+    float lv[2];
+    const int nl = mfx_levels(s, lv);
+    const uint32_t w = (uint32_t)((float)color->w * MFX_SCALE + 0.5f), h = (uint32_t)((float)color->h * MFX_SCALE + 0.5f);
+    const GfxTex* sd = color->depth_seen;
+    if (s->focus[3] == 0.0f || w < 16 || h < 16)
+        return;
+    BATCH_SETTLE(); /* the zone's draws kept: their casters with them */
+    const int part_was = gpu_part_cur();
+    gpu_part(GP_SSR);
+    uint32_t early = 0;
+    float planes[2][4];
+    memcpy(planes, g_mfx.plane, sizeof planes);
+    for (int i = 0; i < nl; ++i)
+    {
+        float clip_world[16], cam[3];
+        const int k = g_mfx.nm;
+        /* (the world's up is -y: the camera above the level) */
+        if (!mirror_matrix(g_mfx.m[k], clip_world, cam, s, lv[i]) || !(lv[i] - cam[1] > 0.05f) ||
+            !mfx_targets(k, w, h, sd && sd->use == GFX_USE_DEPTH ? sd->fmt : F_D24S8))
+            continue;
+        memcpy(g_mfx.plane[k], planes[i], sizeof planes[i]);
+        early += mfx_begin_one(k, clip_world, cam, w, h);
+        g_mfx.nm++;
+    }
+    gpu_part(part_was);
+    if (!g_mfx.nm)
+        return;
     g_mfx.sx = (float)w / (float)color->w, g_mfx.sy = (float)h / (float)color->h;
     if (g_serial % 1200 == 0) /* (the log's, every 20 s or so) */
-        fprintf(stderr, "[recomp] gfx: reflections' effects: %u models drawn before the scene ended (of %u kept), %u effects the frame before\n",
-            early, g_mfr.serial == g_serial ? g_mfr.n : 0, g_mfx.n);
+        fprintf(stderr, "[recomp] gfx: reflections' effects: %d mirrors (levels %.1f %.1f), %u models drawn before the scene ended (of %u kept), %u effects the frame before\n",
+            g_mfx.nm, lv[0], nl > 1 ? lv[1] : lv[0], early, g_mfr.serial == g_serial ? g_mfr.n : 0, g_mfx.n);
     g_mfx.scene = color, g_mfx.serial = g_mfx.drawn = g_serial, g_mfx.n = early;
 }
 
@@ -347,21 +404,25 @@ static int mfx_takes(const GfxDraw* d)
     return d->pipe.dst == 2 || (d->pipe.src == 5 && d->pipe.dst == 6 && !d->vs.lighting && !d->fs.water && !d->zbias && !d->depth.zwrite);
 }
 
+/* ... into each mirror begun */
 static void mfx_emit(const GfxDraw* d)
 {
-    if (g_mfx.serial != g_serial || !g_mfx.t || !g_mfx.d || g_rt != g_mfx.scene || g_rt_face || g_rt_level || d->vs.rhw ||
-        d->overlay || d->screen_fx || !mfx_takes(d))
+    if (g_mfx.serial != g_serial || g_mfx.nm < 1 || g_rt != g_mfx.scene || g_rt_face || g_rt_level || d->vs.rhw || d->overlay ||
+        d->screen_fx || !mfx_takes(d))
         return;
     ID3D12GraphicsCommandList* l = list();
     static const float nofade[4] = { 1, 0, 0, 0 };
-    ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(l, ROOT_SUN, 16, g_mfx.m, 0);
-    ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(l, ROOT_SUN, 4, nofade, 16);
-    GfxTex *rt = g_rt, *ds = g_ds, *seen = g_mfx.t->depth_seen;
-    g_rt = g_mfx.t, g_ds = g_mfx.d, g_targets_bound = 0, g_mfxout = 1;
-    draw_encode(d);
-    g_mfxout = 0, g_rt = rt, g_ds = ds, g_targets_bound = 0;
-    g_mfx.t->depth_seen = seen;
-    drawn_forget(); /* (the viewport was the mirror's) */
+    for (int k = 0; k < g_mfx.nm; ++k)
+    {
+        ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(l, ROOT_SUN, 16, g_mfx.m[k], 0);
+        ID3D12GraphicsCommandList_SetGraphicsRoot32BitConstants(l, ROOT_SUN, 4, nofade, 16);
+        GfxTex *rt = g_rt, *ds = g_ds, *seen = g_mfx.t[k]->depth_seen;
+        g_rt = g_mfx.t[k], g_ds = g_mfx.d[k], g_targets_bound = 0, g_mfxout = 1;
+        draw_encode(d);
+        g_mfxout = 0, g_rt = rt, g_ds = ds, g_targets_bound = 0;
+        g_mfx.t[k]->depth_seen = seen;
+        drawn_forget(); /* (the viewport was the mirror's) */
+    }
     g_mfx.n++;
 }
 
@@ -371,25 +432,32 @@ static void mfx_viewport(float* x, float* y, float* w, float* h)
     *x *= g_mfx.sx, *w *= g_mfx.sx, *y *= g_mfx.sy, *h *= g_mfx.sy;
 }
 
-/* The level the effects are mirrored about as a plane in view space (g_mfx.plane, fx_zlate's u.rtx: mfx_late_in), which lays them
- * only on floors at that level, where the mirror is theirs: this frame's up (the view's own, as rt_bind's: u->up is eased and trails
- * a camera that pitches) times the effects' strength, and that level (mfx_level) along it from the camera */
+/* The levels the effects are mirrored about as planes in view space (g_mfx.plane, fx_zlate's u.rtx and u.rbf: mfx_late_in), which
+ * lay them only on floors at each level, where that mirror is theirs: this frame's up (the view's own, as rt_bind's: u->up is eased
+ * and trails a camera that pitches) times the effects' strength, and the level (mfx_levels) along it from the camera. mfx_begin
+ * takes them over for the mirrors it begins */
 static void mfx_refl_in(int ssr, int32_t* refl_in, int* refl_n, const FxU* u, const GfxScene* s)
 {
     (void)refl_in;
     (void)refl_n;
     const float st = ssr && mfx_wanted() ? fminf(g_fxs.refl_rt_fx, 1.0f) : 0.0f;
     const float sign = s->view[5] < 0.0f ? -1.0f : 1.0f;
-    float up[3] = { s->view[4] * sign, s->view[5] * sign, s->view[6] * sign }, fv[3];
+    float up[3] = { s->view[4] * sign, s->view[5] * sign, s->view[6] * sign }, lv[2];
     const float l = sqrtf(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
+    const int nl = mfx_levels(s, lv);
     for (int k = 0; k < 3; ++k)
-    {
         up[k] = l > 1e-6f ? up[k] / l : 0.0f;
-        fv[k] = s->focus[0] * s->view[k] + (mfx_level(s) - g_fxs.refl_rt_fx_level) * s->view[4 + k] + s->focus[2] * s->view[8 + k] + s->view[12 + k];
+    memset(g_mfx.plane, 0, sizeof g_mfx.plane);
+    for (int i = 0; i < nl; ++i)
+    {
+        float fv[3];
+        for (int k = 0; k < 3; ++k)
+        {
+            fv[k] = s->focus[0] * s->view[k] + lv[i] * s->view[4 + k] + s->focus[2] * s->view[8 + k] + s->view[12 + k];
+            g_mfx.plane[i][k] = up[k] * (st > 0.0f ? st + u->rtx[0] : 0.0f); /* (and the blur's radius, a whole number: fx_zlate blurs them as the layer is) */
+        }
+        g_mfx.plane[i][3] = fv[0] * up[0] + fv[1] * up[1] + fv[2] * up[2];
     }
-    for (int k = 0; k < 3; ++k)
-        g_mfx.plane[k] = up[k] * (st > 0.0f ? st + u->rtx[0] : 0.0f); /* (and the blur's radius, a whole number: fx_zlate blurs them as the layer is) */
-    g_mfx.plane[3] = fv[0] * up[0] + fv[1] * up[1] + fv[2] * up[2];
 }
 
 /* the pipeline an effect is drawn again with (pipeline, g_mfxout): the water mirror's key, the faces turned over; its own depth test */

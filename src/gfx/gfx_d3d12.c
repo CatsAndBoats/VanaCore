@@ -11009,10 +11009,10 @@ static void zl_run(void)
     gpu_part(GP_REFL);
     tex_state(depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     tex_state(color, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    int32_t in[5] = { scene, halo, depth->srv, -1, -1 };
+    int32_t in[6] = { scene, halo, depth->srv, -1, -1, -1 };
     mfx_late_in(in, u); /* the game's effects mirrored, laid on the reflections now they're all drawn (gfx_d3d12_rtfx.h) */
     const float vp[4] = { u->vp[0], u->vp[1], u->vp[2], u->vp[3] };
-    fx_draw(target_view(color, 0, 0), color->w, color->h, g_fx.by_fmt[g_zl.fmt].zlate, vp, u, in, 5, 0, 0);
+    fx_draw(target_view(color, 0, 0), color->w, color->h, g_fx.by_fmt[g_zl.fmt].zlate, vp, u, in, in[5] >= 0 ? 6 : 5, 0, 0);
     color->scene = 0; /* its chain is behind (scene_mips) */
     gpu_scope(scope_was);
     gpu_part(part_was);
