@@ -8,6 +8,14 @@
 static float g_fx_rain;
 
 #ifdef VANACORE
+/* Whether fx_ssr takes the characters' mask as its input 10: while the rain's reflection is on them (rain: u.rays[3]), and with the
+ * ray-traced reflections (refl_rt 2), whose tree has no one in it: a reflection's hit on a character is the screen's at any height
+ * (gfx_d3d12_rt_hlsl.h hchr; by its height above the floor alone, everyone's reflection was cut off at the knees) */
+static int cmask_in_ssr(float rain)
+{
+    return rain > 0.0f || (g_fxs.refl > 0.0f && g_fxs.refl_rt >= 2.0f);
+}
+
 /* Whether the characters are told from the world by the stencil (CHAR_STENCIL, written by their draws): something asks for it
  * (the rain's wet sheen on them, the occlusion's share on characters, ao_chars, its smoothing on them, ao_soft_chars, an aura's glow, the bounce light,
  * which is left off them, the sun's shadows, whose casters within half a unit a character leaves out (fx_ao g_minc), or Render
@@ -18,7 +26,7 @@ static int cmask_usable(const GfxTex* ds)
 {
     return ds && ds->has_stencil && !g_game_stencil &&
            ((g_fxs.ao > 0.0f && (g_fxs.ao_chars != 1.0f || g_fxs.ao_soft_chars > 0.0f)) || g_fxs.gi > 0.0f || g_aura_on ||
-            g_fxs.sun > 0.0f || (int)g_fxs.debug == 19 || g_fx_rain > 0.0f) &&
+            g_fxs.sun > 0.0f || (int)g_fxs.debug == 19 || g_fx_rain > 0.0f || cmask_in_ssr(0.0f)) &&
            InterlockedCompareExchange(&g_fx.state, 2, 2) == 2 && g_fx.pso[FX_CMASK];
 }
 

@@ -230,13 +230,17 @@
      * clearly nearer than the tree's, and well above the floor the ray left, is something standing in front of it) */ \
     /* (... or over a thing that moves, bit 17 - a door, a lift, in the tree where the zone's file has it and on the screen where the \
      * game draws it, not the same place: whatever the screen's ray found, nearer than it or not) */ \
+    /* (... but where the characters' mask is there (u.aoc.w; input 10 with the ray tracing on, cmask_in_ssr), a hit on a character \
+     * is one at any height: by the height alone, everyone's reflection was cut off at the knees, the 0.4 above the floor the \
+     * tree's wall or floor behind them, Port Jeuno 2026-11-27) */ \
     "      bool mover = rti.x == 2u && th > 0.0 && (g_bvh.Load(rti.z + ht * 40u + 36u) & 0x20000u) != 0u;\n" \
-    "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && (th <= 0.0 || mover || tt < th - 0.3) && tt * dot(R, upn) > 0.4;\n" \
+    "      bool hchr = rti.x == 2u && u.aoc.w > 0.0 && h.w > 0.5 && h.w < 1.5 && texel(10, int2(h.xy)).r > 0.5;\n" \
+    "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && (hchr || ((th <= 0.0 || mover || tt < th - 0.3) && tt * dot(R, upn) > 0.4));\n" \
     /* (... and not the zone's own: the screen's ray goes by the bumped normal, tilted by the floor's grooves, and found a wall's \
      * foot or a step nearer than the tree's clean ray did - a speckle of the screen's reflection across the floor, each pixel \
      * dithered anew every frame, which flickered. So the tree is asked for the very point the screen found: a surface of its own \
      * there, and the tree's ray stands - its hit, or the sky where it met nothing: only what the tree hasn't is the screen's) */ \
-    "      if (nearer) {\n" \
+    "      if (nearer && !hchr) {\n" \
     "        float3 Hs = pos_at(0, h.xy) - P;\n" \
     "        float hl = max(length(Hs), 1e-3), ht_ = 0.35 + 0.02 * hl;\n" \
     "        uint ct; float2 cb_;\n" \

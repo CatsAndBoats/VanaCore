@@ -16346,8 +16346,8 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
                         tex_state(g_fx.rain_mask, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
                     int ssr_n = rw >= 2 ? 10 : 7;
 #ifdef VANACORE
-                    /* the characters' mask as input 10 while the rain's reflection is on them (fx_ssr's chr) */
-                    if (use_cm && u.rays[3] > 0.0f)
+                    /* the characters' mask as input 10 while the rain's reflection is on them (fx_ssr's chr) or traced (cmask_in_ssr) */
+                    if (use_cm && cmask_in_ssr(u.rays[3]))
                     {
                         fx_state(&g_fx.cmask, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
                         ssr_in[10] = g_fx.cmask.srv, ssr_n = 11;
