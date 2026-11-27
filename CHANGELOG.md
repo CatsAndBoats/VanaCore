@@ -1,6 +1,19 @@
 # Changelog
 
-What's new in each VanaCore release. A release's notes on GitHub are its section here (`## 0.9.11
+What's new in each VanaCore release. A release's notes on GitHub are its section here (`## 0.9.12
+
+### New
+- VanaCore App: VanaCore updated by itself as the app opens, where VanaCoreInstaller.exe put it (unins000.dat): the glass bar says Checking for updates in place of the profile and START, downloads a newer release's installer with a bar, checks its signature is this app's signer, runs it silently over the folder (the app's own exe and DLL moved aside to .old first, so it's never closed), then the profile and START come back with the new version. A green UP TO DATE pill beside the head's version when nothing's newer or it just updated; a failure gives START back with a red line. Only this install's own VanaCore in use holds it back. Tested on a retail install: 0.9.10 to 0.9.11
+
+### Changed
+- VanaCore App 0.1.1
+- Ray-traced reflections from stairs and hills: the sky kept, effects on the floor in view, Whitegate textured
+- /vana Reset: a panel's Reset leaves what each setting's own reset would
+- VanaCore App: the HTTPS download and file checks shared (app\shared\net.cpp, net.h: WinHTTP, the system's proxy, TLS 1.2 and 1.3, WinTrust) by VanaCoreApp.exe's update of the DLL (exe\update.cpp) and the DLL's update of VanaCore from its home screen (dll\home_update.cpp). Not built or tested yet
+- /vana: one layout, the one with the pages as tabs in a header. It was behind /vana3 and kept per person (layout = 'hybrid' in config\addons\vana\settings.lua), so players kept the old window, with the list of every page and the tools at the left, since 0.9.10. The old layout is gone: its title line, its list, its minimize and close; so are layout in settings.lua, /vana3 and /vana classic
+- /vana Reset: an effect's strength back to its slider's default in the key's units (Reflections' Strength 5, not 10)
+
+## 0.9.11
 
 ### Changed
 - mcp 1.2: sym(name) and vcall(name, signature, ...): VanaCore.Core.dll's symbols from the .map beside the loaded DLL, refused unless the .map's timestamp is the loaded DLL's, at the base it's loaded at; C names with or without the leading _, C++ by a mangled name's start (one match only). An address carried over from another build called into some other function and took the game down
