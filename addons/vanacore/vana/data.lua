@@ -3200,14 +3200,14 @@ TIPS.panels = {
     ['Temperature'] = 'Tints the picture warmer by day and cooler at night, outdoors. It works through the Colour grade, so that must be on too.',
     ['Moon'] = 'The moon in the sky.',
     ['Texture Filtering'] = 'How sharp textures stay in the distance and at a slant.',
-    ['Water Shader (Experimental)'] = 'VanaCore\'s own moving water, with the bed showing through where it is shallow.',
+    ['Water Shader'] = 'VanaCore\'s own moving water, with the bed showing through where it is shallow.',
     ['Mass Grass'] = 'Adds lots of grass and flowers on the ground. West Ronfaure so far.',
     ['Snow Trails'] = 'Footprints in the snow where characters walk. Shading only: the ground is not dug.',
     ['Colour grade'] = 'Changes the picture\'s colours and light, like a photo filter. On DirectX 12 it is applied last, over every other effect and after DLSS or FSR.',
     ['Ink Lines'] = 'Cartoon-style outlines round things.',
     ['Brightness Bands'] = 'Flattens the light into steps, for a cartoon look.',
     ['Depth of Field'] = 'Blurs things that are not in focus.',
-    ['Normal maps (Experimental)'] = 'Bump detail from a texture pack. Needs maps made with xi-tools.',
+    ['Normals (WIP)'] = 'Bump detail from a texture pack. Needs maps made with xi-tools.',
     ['Characters'] = 'Light on players, NPCs and monsters.',
     ['NPC effects'] = 'Glows and arrival effects on Trusts and avatars.',
     ['Zones'] = "Markers where you walk into the next zone, and the zone's name when you get there.",
@@ -3717,7 +3717,7 @@ local TABS = {
                 end
                 local copies = {
                     { kind = 'graphics', action = 'characters_copy_graphics', label = 'Copy Graphics Settings', icon = 'display',
-                      tip = "The Main's Graphics and Experimental settings, made the Alt's: every one, as a Graphics preset holds them\n"
+                      tip = "The Main's Graphics settings, made the Alt's: every one, as a Graphics preset holds them\n"
                             .. "With them Client > Game's renderer, background resolution, frame rate, V-Sync, anti-aliasing and aspect ratio\n"
                             .. "Not the window: its mode, resolution and place stay the Alt's\n"
                             .. "The renderer and background resolution apply at the Alt's next start" },
@@ -4255,7 +4255,7 @@ local TABS = {
     {
         name = 'Graphics',
         search = true,
-        aliases = { 'lighting', 'shadows', 'toggles', 'layers' },
+        aliases = { 'lighting', 'shadows', 'toggles', 'layers', 'glow', 'elight', 'reflections', 'refl', 'normalmap', 'normals' },
         buttons = { { 'Frame stats', function () vana.chat.run('/vana stats') end, 'account_tree', 'Frame stats: where a frame goes (/vana stats)' },
                     { 'Performance graph', function () vana.chat.run('/vana graph') end, 'show_chart', 'Performance graph: FPS and more, 1 minute (/vana graph)' } },
         rows = function ()
@@ -4709,16 +4709,6 @@ local TABS = {
                 -- fx_ssr); Any is the colour rule alone
                 choice('Ground', FX, 'refl_floors', '1', { { '0', 'Any' }, { '1', 'Stone and metal' }, { '2', 'Stone, metal, wood' },
                                                            { '3', 'Anything built' } }),
-                -- normal maps from a texture pack folder ([graphics] textures), bending the sun's per-pixel light (the renderer:
-                -- DirectX 12); shown on the Experimental page (vana.lua MOVED_PANELS, by the heading)
-                warn(effect('Normal maps (Experimental)', 'normalmap', 0, 1)),
-                callout('In development', 'Needs normal maps generated with xi-tools.'),
-                note('Bends the sunlight on textures that have a normal map in a texture pack (textures= in vanacore.ini), where the sun is lit per pixel (Light, below). DirectX 12.'),
-                slider('Strength', FX, 'normalmap_strength', 1, 0, 4, 0.1),
-                choice('View', FX, 'normalmap_view', '0', { { '0', 'Lit' }, { '1', 'Normals as colour' }, { '2', 'Lit, Y flipped' } }),
-                -- the detail the maps add goes into a per-pixel normal target, which these effects read in place of the normal worked out from depth
-                choice('Reflections follow them', FX, 'normalmap_refl', '1', { { '0', 'Off' }, { '1', 'On' } }),
-                choice('Occlusion and sun shadows follow them', FX, 'normalmap_fx', '1', { { '0', 'Off' }, { '1', 'On' } }),
                 effect('Bounce Lighting', 'gi', 0, 0.5),
                 note('Light picked up from lit surfaces nearby: colour on what is beside them, fill in the corners. DirectX 12.'),
                 slider('Strength', FX, 'gi', 0, 0, 2, 0.05),
@@ -4812,8 +4802,9 @@ local TABS = {
                 needs_dx(toggle('Untextured', 'graphics', 'untextured', false)),
                 -- VanaCore's water (src/gfx/gfx_hlsl_water.h, d3d8_water.h): the zone's flat water tiles and level water models shaded
                 -- with waves and ripples, the bed through them by its depth, the sky in them and the sun's glint, in place of the
-                -- game's layers over them ([graphics] water* in vanacore.ini)
-                warn(needs_dx({ kind = 'header', text = 'Water Shader (Experimental)', section = 'graphics', key = 'water',
+                -- game's layers over them ([graphics] water* in vanacore.ini); shown on the Mods page (vana.lua's MOVED_PANELS;
+                -- 2026-11-27, the Experimental page's before, "(Experimental)" off its name, the banner instead)
+                warn(needs_dx({ kind = 'header', text = 'Water Shader', section = 'graphics', key = 'water',
                                 switch = { get = function () return tonumber(vana.config.get('graphics', 'water') or '') == 1 end,
                                            set = function (on) vana.config.set('graphics', 'water', on and '1' or '0') end } })),
                 callout('Extremely beta', 'Being heavily tested and debugged right now. What you see is not the final look.', 'danger'),
@@ -5096,6 +5087,16 @@ local TABS = {
                 slider('Blur in front', FX, 'dof_near', 0, 0, 1, 0.05),
                 slider('Fixed focus (0: you)', FX, 'dof_focus', 0, 0, 100, 1, '%d'),
                 toggle('Keep the sky sharp', FX, 'dof_sky', false),
+                -- normal maps from a texture pack folder ([graphics] textures), bending the sun's per-pixel light (the renderer:
+                -- DirectX 12); the Experimental page's till 2026-11-27 (as "Normal maps (Experimental)")
+                warn(effect('Normals (WIP)', 'normalmap', 0, 1)),
+                callout('In development', 'Needs normal maps generated with xi-tools.'),
+                note('Bends the sunlight on textures that have a normal map in a texture pack (textures= in vanacore.ini), where the sun is lit per pixel (Light). DirectX 12.'),
+                slider('Strength', FX, 'normalmap_strength', 1, 0, 4, 0.1),
+                choice('View', FX, 'normalmap_view', '0', { { '0', 'Lit' }, { '1', 'Normals as colour' }, { '2', 'Lit, Y flipped' } }),
+                -- the detail the maps add goes into a per-pixel normal target, which these effects read in place of the normal worked out from depth
+                choice('Reflections follow them', FX, 'normalmap_refl', '1', { { '0', 'Off' }, { '1', 'On' } }),
+                choice('Occlusion and sun shadows follow them', FX, 'normalmap_fx', '1', { { '0', 'Off' }, { '1', 'On' } }),
             }
         end,
     },
@@ -7458,7 +7459,7 @@ local layers = {
         { 'Ambient occlusion', FX, 'ao' },
         { 'Bounce light', FX, 'gi' },
         { 'Reflections', FX, 'refl' },
-        { 'Normal maps', FX, 'normalmap' },
+        { 'Normals (WIP)', FX, 'normalmap' },
         { 'Glow effects', FX, 'elight' },
         { 'Height fog', FX, 'fog' },
         { 'Bloom', FX, 'bloom' },

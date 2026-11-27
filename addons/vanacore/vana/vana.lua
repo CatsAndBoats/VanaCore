@@ -14,7 +14,7 @@ In game (//vana works the same):
   /vana gamepad           the Client page's Gamepads (/gamepad too)
   /vana pivot             the Pivot page: the DAT overlays (/pivot too)
   /vana hud               the HUD page: the grid and the HUD presets
-  /vana preset <name>     loads the Graphics, Effects and Experimental preset of that name (a scripts\boot.txt line can); alone, Presets
+  /vana preset <name>     loads the Graphics preset of that name (a scripts\boot.txt line can); alone, Presets
   /vana hudpreset <name>  loads the HUD and Game Options preset of that name; alone, the HUD page at its Presets
   /hud [element]          the HUD Manager (hud.lua): every game window's box, and the one picked's settings
   /hud addons             the HUD Manager in its Addon View: the addons' windows' boxes; /hud <addon> at that one
@@ -37,7 +37,7 @@ shows one as a string to copy (or saves a .json), Import takes either, with the 
 
 addon.name    = 'vana'
 addon.author  = 'Vekien'
-addon.version = '2.0'
+addon.version = '2.3'
 addon.desc    = "VanaCore's window: what's running, and its settings."
 
 local imgui = vana.imgui
@@ -179,15 +179,13 @@ do
     for _, tab in ipairs(M.TABS) do
         local pages = add(tab)
         if tab.name == 'Game Options' then
-            -- Experimental, under Game Options: the Graphics tab's experimental panels, moved here (EXPERIMENTAL)
-            local experimental = { id = 'experimental', name = 'Experimental', icon = 'flask', tab = M.tab_named('graphics'), virtual = true,
-                                   aliases = { 'water', 'glow', 'elight', 'reflections', 'refl', 'normalmap', 'normals' }, buttons = {}, color = P.experimental, preset_pick = true }
-            PAGES[#PAGES + 1] = experimental
-            pages[#pages + 1] = experimental
-            -- Mods, after Game Options: the Graphics tab's Mass Grass and Snow Trails and Game Options' Loading Screen, moved
+            -- (the Experimental page, the Graphics tab's experimental panels under a heading of their own, is gone since
+            -- 2026-11-27: Water Shader is the Mods page's, Normals (WIP) Graphics' own)
+            -- Mods, after Game Options: the Graphics tab's Mass Grass, Snow Trails, Weather Effects and Water Shader and Game
+            -- Options' Loading Screen, moved
             -- here (MOVED_PANELS, MOVED_OPTIONS); a tab in the header
             local mods = { id = 'mods', name = 'Mods', icon = 'wand', tab = M.tab_named('graphics'), virtual = true,
-                           aliases = { 'grass', 'snow', 'weather', 'loadscreen', 'zonelines', 'zones', 'zone', 'zonename' }, buttons = {}, preset_pick = true }
+                           aliases = { 'grass', 'snow', 'weather', 'water', 'loadscreen', 'zonelines', 'zones', 'zone', 'zonename' }, buttons = {}, preset_pick = true }
             PAGES[#PAGES + 1] = mods
             pages[#pages + 1] = mods
         end
@@ -197,9 +195,9 @@ end
 -- the Graphics tab's panels shown on another page instead, by their heading: that page and their order there (Reflections
 -- and Glow Effects: Graphics' own). Mass Grass and Snow Trails: the Mods page's (Mass Grass was Game Options' last sub-tab
 -- from 2026-11-06, the Experimental page's before)
-local MOVED_PANELS = { ['Water Shader (Experimental)'] = { 'experimental', 1 }, ['Normal maps (Experimental)'] = { 'experimental', 2 },
-                       ['Snow Trails'] = { 'mods', 2 }, ['Mass Grass'] = { 'mods', 1 },
-                       ['Weather Effects'] = { 'mods', 3 } } -- (Graphics' till 2026-11-27)
+local MOVED_PANELS = { ['Snow Trails'] = { 'mods', 2 }, ['Mass Grass'] = { 'mods', 1 },
+                       ['Weather Effects'] = { 'mods', 3 }, -- (Graphics' till 2026-11-27)
+                       ['Water Shader'] = { 'mods', 4 } } -- (the Experimental page's till 2026-11-27)
 -- the Game Options tab's sections shown on the Mods page instead, by their heading (after the Graphics tab's)
 local MOVED_OPTIONS = { ['Zones'] = true, ['Loading Screen'] = true, ['Sparkles'] = true }
 -- the pages showing them, which a Graphics preset reads too (preset_keys)
@@ -749,7 +747,7 @@ end
 
 local PRESET_KINDS = {
     graphics = { pages = { graphics = true, experimental = true }, file = 'vanacore.presets.ini', key = 'preset', state = st.presets,
-                 ext = 'gfx', note = 'Named sets of the Graphics and Experimental settings.', what = 'Graphics and Experimental', where = 'Graphics' },
+                 ext = 'gfx', note = 'Named sets of the Graphics settings.', what = 'Graphics', where = 'Graphics' },
     hud = { pages = { hud = true, options = true }, without = 'Options', file = 'vanacore.hudpresets.ini', key = 'hud.preset', ext = 'hud',
             state = { list = {}, read = false, name = { '' } }, note = 'Named sets of the HUD and interface settings.',
             what = 'HUD and interface', where = 'HUD' },
@@ -4482,16 +4480,6 @@ function M.hy.nav(x, top, w, bottom, searching)
 
         ny = ny + S(2)
         ny = sub_rows(home, ny, false)
-        local experimental = home.id == 'graphics' and page_named('experimental') or nil
-        if experimental ~= nil then
-            -- Graphics' experimental panels (Water Shader, Normal maps, Snow Trails), under a red heading
-            ny = ny + S(6)
-            M.hline(cdl, x + pad, x + w - pad, ny, P.border, 0.8)
-            ny = ny + S(8)
-            M.text_spaced(cdl, x + pad + S(6), ny + S(7), 'EXPERIMENTAL', P.rose, fonts.semi, SMALL - 0.5, 1, S(1.4))
-            ny = ny + S(16)
-            ny = sub_rows(experimental, ny, false)
-        end
         if home.id == 'client' then
             -- Client's: Plugins, Addons and Pivot, with their icons, under a line
             local function line()
@@ -6507,7 +6495,7 @@ local function print_commands(command, unknown)
         { ' commands', 'VanaCore\'s commands, each switched on or off' },
         { ' boot', 'edit scripts\\boot.txt, what runs at each start' },
         { ' install [file]', 'install an addon package (.vcaddon), shown first' },
-        { ' preset <name>', 'load a Graphics, Effects and Experimental preset (a boot.txt line can)' },
+        { ' preset <name>', 'load a Graphics preset (a boot.txt line can)' },
         { ' hudpreset <name>', 'load a HUD and Game Options preset' },
         { ' reset ui', 'every addon\'s window to the top-left corner' },
         { ' close', 'close the window' },
