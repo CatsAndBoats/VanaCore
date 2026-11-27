@@ -44,7 +44,28 @@ static struct
      * dome left (the back end can't), 3 the sky not drawn after the dome was taken */
     int said;
     uint32_t said_strips, said_rings;
+    float look[8][3], look_el[8], look_k; /* a borrowed weather's sky (sky_set_look) */
 } g;
+
+void sky_set_look(const float slice[8][3], const float elev[8], float k)
+{
+    memcpy(g.look, slice, sizeof g.look);
+    memcpy(g.look_el, elev, sizeof g.look_el);
+    g.look_k = k < 0.0f ? 0.0f : k > 1.0f ? 1.0f : k;
+}
+
+/* the borrowed sky's colour at height s (the sine of the elevation): between the two slices either side of it */
+static void look_at(float s, float out[3])
+{
+    int i = 0;
+    while (i < 7 && g.look_el[i + 1] <= s)
+        ++i;
+    const float lo = g.look_el[i], hi = i < 7 ? g.look_el[i + 1] : lo;
+    const float t = hi > lo ? fminf(fmaxf((s - lo) / (hi - lo), 0.0f), 1.0f) : 0.0f;
+    const int j = i < 7 ? i + 1 : i;
+    for (int c = 0; c < 3; ++c)
+        out[c] = g.look[i][c] + (g.look[j][c] - g.look[i][c]) * t;
+}
 
 void sky_configure(const SkySettings* in)
 {
@@ -243,6 +264,14 @@ static void sky_build(void)
     {
         g.sky.ring[r] = g.ring[r].s;
         ring_bearings(&g.ring[r], g.sky.color[r]);
+        if (g.look_k > 0.0f) /* a borrowed weather's sky over the game's, by how far it has faded in */
+        {
+            float c[3];
+            look_at(g.ring[r].s, c);
+            for (uint32_t b = 0; b < GFX_SKY_BEARINGS; ++b)
+                for (int k = 0; k < 3; ++k)
+                    g.sky.color[r][b][k] += (c[k] - g.sky.color[r][b][k]) * g.look_k;
+        }
     }
 }
 
@@ -264,7 +293,7 @@ static void say(int what)
 int sky_scene_draw(const GfxDraw* d, uint32_t prim, uint32_t nverts, uint32_t number, int round_camera)
 {
     if (number == 1)
-        g.taken = 0, g.over = !g.set.enabled;
+        g.taken = 0, g.over = !g.set.enabled && !(g.look_k > 0.0f);
     if (g.over || number != g.taken + 1)
         return 0;
     if (!is_dome(d, prim, nverts, round_camera))

@@ -83,4 +83,5 @@ static void track_rain_weathers(unsigned zone)
         mask = sky ? (sky & ~kWet) | (rain & kWet) | 0x80000000u : 0;
     }
     vanacore_gfx_set_zone_weathers(mask);
+    track_weather_look(zone); // a weather the zone has no look for: another zone's (graphics_weather.h)
 }

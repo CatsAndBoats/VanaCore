@@ -141,8 +141,23 @@ typedef struct WeatherSettings
     int on;
     float amount[WX_KINDS];
     int preview;
+    float wind_dir; /* the wind's heading, degrees in the ground plane: 0 along +x, 90 along +z */
+    float wind;     /* its strength, times (0 still to 3) */
+    int drift;      /* 1: the heading wanders some 45 degrees either side of wind_dir over minutes */
+    int fixed;      /* 1: every weather blows along wind_dir; 0 each weather as it comes (and each zone) picks a heading of its own */
 } WeatherSettings;
 void d3d8_set_weather_fx(const WeatherSettings* settings);
+/* A weather's look borrowed from another zone's files (d3d8_weather_look.h; vanacore_gfx.h VanaWeatherLook, field for field),
+ * each frame: active 0 lets the last one fade out */
+typedef struct WeatherLook
+{
+    int active;
+    float fog[3], fog_ratio;
+    float amb_t[3], sun_t[3], amb_m[3], sun_m[3];
+    int sky;
+    float slice[8][3], elev[8];
+} WeatherLook;
+void d3d8_set_weather_look(const WeatherLook* look);
 
 typedef struct WaterSettings
 {

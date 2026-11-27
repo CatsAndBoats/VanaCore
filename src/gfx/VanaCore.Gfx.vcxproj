@@ -89,6 +89,7 @@
   <ItemGroup>
     <ClInclude Include="d3d8.h" />
     <ClInclude Include="d3d8_cap.h" />
+    <ClInclude Include="d3d8_fightwatch.h" />
     <ClInclude Include="d3d8_casters.h" />
     <ClInclude Include="d3d8_water.h" />
     <ClInclude Include="d3d8_water_fill.h" />
@@ -129,6 +130,7 @@
     <ClInclude Include="gfx_d3d11_smooth.h" />
     <ClInclude Include="gfx_d3d12_batch.h" />
     <ClInclude Include="gfx_d3d12_cmask.h" />
+    <ClInclude Include="gfx_d3d12_gi_clock.h" />
     <ClInclude Include="gfx_d3d12_floors.h" />
     <ClInclude Include="gfx_d3d12_rt.h" />
     <ClInclude Include="gfx_d3d12_rtfx.h" />

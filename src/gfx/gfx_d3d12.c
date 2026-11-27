@@ -416,7 +416,7 @@ static char g_fps_text[32] = "-- FPS";
  * (gfx_scene_done, fx_reload), or gfx_fx_set. fx = 0 is the game as it was. As gfx_metal.m. */
 typedef struct FxSettings
 {
-    float fx, ao, radius, grade, sat, contrast, sharpen, filter, aniso, fog, fog_falloff, fog_height, fog_max, fog_floor, fog_sun,
+    float fx, ao, radius, grade, sat, contrast, sharpen, filter, aniso, tex_sharp, fog, fog_falloff, fog_height, fog_max, fog_floor, fog_sun,
         fog_g, bloom, threshold, rays, rays_decay, rays_length, light, sun, sun_distance, sun_soft,
         sun_face, sun_min, sun_direct, sun_dusk, sun_casters, sun_near, temporal, debug;
     float ao_quality; /* the occlusion's taps a pixel a frame: 0 low (6), 1 medium (10), 2 high (16), 3 ultra (24), 4 max (32);
@@ -547,8 +547,8 @@ typedef struct FxSettings
     float dlss_reactive, dlss_reactive_moving;
     /* reflections on floors and bounce light (screen space, a pass after the composite): strength (0 off), wetness, roughness,
      * how far in world units, quality (0-4: the ray's steps and the blur's taps, a table in gfx_scene_done), the sun's glint;
-     * bounce light's strength (0 off), radius and quality (0-4: its samples) */
-    float refl, refl_wet, refl_rough, refl_dist, refl_quality, refl_sun, gi, gi_radius, gi_quality;
+     * bounce light's strength (0 off), radius and quality (0-4: its samples); gi_night 1: none at night (gi_by_clock) */
+    float refl, refl_wet, refl_rough, refl_dist, refl_quality, refl_sun, gi, gi_radius, gi_quality, gi_night;
     /* ... and which kinds of ground reflect, by the zone's floors (gfx_scene_floors, floors.c: the collision's footstep kinds):
      * 0 any (the colour alone), 1 (the default) stone and metal, 2 wood too, 3 anything built (props as well) */
     float refl_floors;
@@ -4291,23 +4291,18 @@ static void draw_encode(const GfxDraw* d)
         int32_t view = t ? t->srv : -1;
         if (t && g_fxs.fx != 0.0f)
         {
-            /* the world's solid textures (not the interface's, not the sky's or effects' - which write
-             * no depth: the sky's clouds, mapped at steep angles near the horizon, flicker through an
-             * anisotropic filter as the camera turns), where every mip is there: trilinear and
-             * anisotropic, so ground and walls at a slant stay sharp and do not swim */
-            if (!d->vs.rhw && d->depth.zwrite && !d->fs.st[i].projected && g_fxs.aniso > 1.0f && t->levels > 1 &&
-                t->levels < 32 && t->filled == (1u << t->levels) - 1 && sk.min >= 2)
-                sk.min = 3, sk.mip = 2, sk.max_aniso = (uint8_t)(g_fxs.aniso > 16.0f ? 16.0f : g_fxs.aniso);
+            /* the world's solid textures: Texture Filtering's mode and sharpness (gfx.h gfx_world_filter) */
+            gfx_world_filter(&sk, d, i, t->scene, t->levels, t->filled, g_fxs.aniso, g_fxs.tex_sharp);
             /* the finished scene made smaller (FFXI's background onto the back buffer): through its
              * mips (scene_mips), anisotropic for a squeeze that differs across and down */
-            else if (t->scene && t->srv_mips >= 0)
+            if (t->scene && t->srv_mips >= 0)
                 sk.min = 3, sk.mag = 2, sk.mip = 2, sk.max_aniso = 16, sk.max_level = 0, view = t->srv_mips;
         }
 #ifdef VANACORE
         /* the world drawn smaller for DLSS: its textures' mips chosen as at the size it's shown at (NVIDIA's
          * log2 of the render size over the shown one), else they're a level or two blurrier than DLSS makes the rest */
         if (t && !d->vs.rhw && sk.mip >= 1 && !t->scene)
-            sk.lod_bias = dlss_lod_bias();
+            sk.lod_bias = (int8_t)(sk.lod_bias + dlss_lod_bias()); /* (Texture Sharpness's with it) */
 #endif
         /* each stage mostly samples the same way draw after draw: its last key before the lookup */
         static GfxSampler stage_key[8];
@@ -8176,13 +8171,14 @@ static const struct
     { "sharpen", offsetof(FxSettings, sharpen), 0.3f },
     { "filter", offsetof(FxSettings, filter), 1.0f },
     { "aniso", offsetof(FxSettings, aniso), 16.0f },
-    { "fog", offsetof(FxSettings, fog), 0.004f },
+    { "tex_sharp", offsetof(FxSettings, tex_sharp), 0.0f }, /* Texture Sharpness: the world's mips 0 to 2 levels finer (gfx_world_filter) */
+    { "fog", offsetof(FxSettings, fog), 0.01f },
     { "fog_falloff", offsetof(FxSettings, fog_falloff), 0.08f },
     { "fog_height", offsetof(FxSettings, fog_height), 2.0f },
     { "fog_floor", offsetof(FxSettings, fog_floor), 4.0f },
-    { "fog_max", offsetof(FxSettings, fog_max), 0.5f },
-    { "fog_sun", offsetof(FxSettings, fog_sun), 0.5f },
-    { "fog_g", offsetof(FxSettings, fog_g), 0.6f },
+    { "fog_max", offsetof(FxSettings, fog_max), 0.6f },
+    { "fog_sunlight", offsetof(FxSettings, fog_sun), 2.5f }, /* (fog_sun till 2026-11-27, 0 to 2: now 0 to 10, as /vana shows it) */
+    { "fog_glow", offsetof(FxSettings, fog_g), 0.95f }, /* (fog_g till 2026-11-27; low, medium, high are graphics.cpp effect_word's) */
     { "bloom", offsetof(FxSettings, bloom), 1.5f },
     { "threshold", offsetof(FxSettings, threshold), 0.85f },
     { "rays", offsetof(FxSettings, rays), 0.6f },
@@ -8315,7 +8311,7 @@ static const struct
     { "refl_rt_fx", offsetof(FxSettings, refl_rt_fx), 1.0f }, { "refl_rt_fx_level", offsetof(FxSettings, refl_rt_fx_level), 0.0f },
     { "gi", offsetof(FxSettings, gi), 0.0f },
     { "gi_radius", offsetof(FxSettings, gi_radius), 5.0f },
-    { "gi_quality", offsetof(FxSettings, gi_quality), 1.09f },
+    { "gi_quality", offsetof(FxSettings, gi_quality), 1.09f }, { "gi_night", offsetof(FxSettings, gi_night), 1.0f },
     { "midtones", offsetof(FxSettings, midtones), 0.0f },
     { "whites", offsetof(FxSettings, whites), 0.0f },
     { "rolloff", offsetof(FxSettings, rolloff), 0.0f },
@@ -11902,6 +11898,7 @@ static int moon_wanted(void)
 {
     return g_night_now > 0.0f && g_fxs.night_moon > 0.0f;
 }
+#include "gfx_d3d12_gi_clock.h" /* gi_by_clock: the bounce light off at night (gi_night) */
 
 /* the grade (or the moonlight, laid with it) is on, and there's a pass for the scene's format */
 static int grade_wanted(int fmt)
@@ -15741,7 +15738,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
         u.refl2[0] = REFL_STEPS[rq];
         u.rtx[0] = g_fxs.refl_rt >= 2.0f ? floorf(fminf(fmaxf(g_fxs.refl_rt_blur, 0.0f) + 8.0f * fmaxf(1.0f - 2.0f * u.refl[1], 0.0f), 24.0f) + 0.5f) : 0.0f, u.rtx[1] = g_fxs.refl_rt >= 2.0f ? 1.0f : 0.0f; /* (drier, softer; y: traced) */
         for (int k = 0; k < 4; ++k) u.rbf[k] = k < 3 ? s->focus[0] * s->view[k] + s->focus[1] * s->view[4 + k] + s->focus[2] * s->view[8 + k] + s->view[12 + k] : s->focus[3] != 0.0f ? fmaxf(g_fxs.refl_bump_near, 0.0f) : 0.0f;
-        u.refl2[1] = g_fxs.refl_sun, u.refl2[2] = g_fxs.gi;
+        u.refl2[1] = g_fxs.refl_sun, u.refl2[2] = g_fxs.gi * gi_by_clock(s);
         /* ... the reflections' pattern turning from frame to frame only where DLSS gathers the frames (else it would shimmer);
          * the bounce light's turns with its temporal pass's (u.hist.y) unless held still (gi_still) */
         u.refl2[3] = gathers ? (float)fmod((double)g_serial * 0.6180339887, 1.0) : 0.0f;
@@ -15850,7 +15847,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
             gfx_player_pool_keep(u.plight, u.plight2, u.up); /* for the world's draws after the effects (d3d8_casters.h late_pool) */
             memcpy(u.fogc, g_fx.fogc, 12);
             u.fogc[3] = g_fxs.fog * g_fx.fog_on * expf(-g_fxs.fog_falloff * g_fxs.fog_height);
-            u.fogp[0] = g_fxs.fog_falloff, u.fogp[1] = g_fxs.fog_max, u.fogp[2] = g_fxs.fog_sun;
+            u.fogp[0] = g_fxs.fog_falloff, u.fogp[1] = g_fxs.fog_max, u.fogp[2] = g_fxs.fog_sun * 0.2f; /* (fog_sunlight, 0 to 10) */
             u.fogp[3] = fminf(fmaxf(g_fxs.fog_g, 0.0f), 0.95f);
         }
         /* the sun, kept in the world: the zone's shader draws carry no light, so a frame gives one

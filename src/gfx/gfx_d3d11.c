@@ -218,7 +218,7 @@ static ID3D11PixelShader* g_cas_ps; /* the frame sharpened at Present (the scene
  * (VanaCore's vanacore.ini) or FFXI_FX_FILE. gfx_d3d12.c's, key for key. */
 typedef struct FxSettings
 {
-    float fx, ao, radius, grade, sat, contrast, sharpen, filter, aniso, fog, fog_falloff, fog_height, fog_max, fog_floor, fog_sun,
+    float fx, ao, radius, grade, sat, contrast, sharpen, filter, aniso, tex_sharp, fog, fog_falloff, fog_height, fog_max, fog_floor, fog_sun,
         fog_g, bloom, threshold, rays, rays_decay, rays_length, light, sun, sun_distance, sun_soft,
         sun_face, sun_min, sun_direct, sun_dusk, sun_casters, sun_near, temporal, debug;
     float ao_quality; /* the occlusion's taps a pixel a frame: 0 low (6), 1 medium (10), 2 high (16), 3 ultra (24), 4 max (32);
@@ -1977,22 +1977,17 @@ static void draw_main(const GfxDraw* d)
         ID3D11ShaderResourceView* view = t ? t->srv : NULL;
         if (t && g_fxs.fx != 0.0f)
         {
-            /* the world's solid textures (not the interface's, not the sky's or effects' - which write
-             * no depth: the sky's clouds, mapped at steep angles near the horizon, flicker through an
-             * anisotropic filter as the camera turns), where every mip is there: trilinear and
-             * anisotropic, so ground and walls at a slant stay sharp and do not swim */
-            if (!d->vs.rhw && d->depth.zwrite && !d->fs.st[i].projected && g_fxs.aniso > 1.0f && t->levels > 1 &&
-                t->levels < 32 && t->filled == (1u << t->levels) - 1 && sk.min >= 2)
-                sk.min = 3, sk.mip = 2, sk.max_aniso = (uint8_t)(g_fxs.aniso > 16.0f ? 16.0f : g_fxs.aniso);
+            /* the world's solid textures: Texture Filtering's mode and sharpness (gfx.h gfx_world_filter) */
+            gfx_world_filter(&sk, d, i, t->scene, t->levels, t->filled, g_fxs.aniso, g_fxs.tex_sharp);
             /* the finished scene made smaller (FFXI's background onto the back buffer): through its
              * mips (scene_mips), anisotropic for a squeeze that differs across and down */
-            else if (t->scene && t->srv_mips)
+            if (t->scene && t->srv_mips)
                 sk.min = 3, sk.mag = 2, sk.mip = 2, sk.max_aniso = 16, sk.max_level = 0, view = t->srv_mips;
         }
         /* the world drawn smaller for FSR: its textures' mips chosen as at the size it's shown at (log2 of the render
          * size over the shown one), else they're a level or two blurrier than FSR makes the rest */
         if (t && !d->vs.rhw && sk.mip >= 1 && !t->scene)
-            sk.lod_bias = up_lod_bias();
+            sk.lod_bias = (int8_t)(sk.lod_bias + up_lod_bias()); /* (Texture Sharpness's with it) */
         samp[i] = stage_sampler(i, &sk);
         if (!t || !view || t == g_rt || (wanted == 2) != (t->type == GFX_TEX_CUBE))
             continue; /* unbound, or the target being drawn to */
@@ -2674,13 +2669,14 @@ static const struct
     { "sharpen", offsetof(FxSettings, sharpen), 0.3f },
     { "filter", offsetof(FxSettings, filter), 1.0f },
     { "aniso", offsetof(FxSettings, aniso), 16.0f },
-    { "fog", offsetof(FxSettings, fog), 0.004f },
+    { "tex_sharp", offsetof(FxSettings, tex_sharp), 0.0f }, /* Texture Sharpness: the world's mips 0 to 2 levels finer (gfx_world_filter) */
+    { "fog", offsetof(FxSettings, fog), 0.01f },
     { "fog_falloff", offsetof(FxSettings, fog_falloff), 0.08f },
     { "fog_height", offsetof(FxSettings, fog_height), 2.0f },
     { "fog_floor", offsetof(FxSettings, fog_floor), 4.0f },
-    { "fog_max", offsetof(FxSettings, fog_max), 0.5f },
-    { "fog_sun", offsetof(FxSettings, fog_sun), 0.5f },
-    { "fog_g", offsetof(FxSettings, fog_g), 0.6f },
+    { "fog_max", offsetof(FxSettings, fog_max), 0.6f },
+    { "fog_sunlight", offsetof(FxSettings, fog_sun), 2.5f }, /* (fog_sun till 2026-11-27, 0 to 2: now 0 to 10, as /vana shows it) */
+    { "fog_glow", offsetof(FxSettings, fog_g), 0.95f }, /* (fog_g till 2026-11-27; low, medium, high are graphics.cpp effect_word's) */
     { "bloom", offsetof(FxSettings, bloom), 1.5f },
     { "threshold", offsetof(FxSettings, threshold), 0.85f },
     { "rays", offsetof(FxSettings, rays), 0.6f },
@@ -5723,7 +5719,7 @@ void gfx_scene_done(GfxTex* color, const GfxScene* s)
             gfx_player_pool_keep(u.plight, u.plight2, u.up); /* for the world's draws after the effects (d3d8_casters.h late_pool) */
             memcpy(u.fogc, g_fx.fogc, 12);
             u.fogc[3] = g_fxs.fog * g_fx.fog_on * expf(-g_fxs.fog_falloff * g_fxs.fog_height);
-            u.fogp[0] = g_fxs.fog_falloff, u.fogp[1] = g_fxs.fog_max, u.fogp[2] = g_fxs.fog_sun;
+            u.fogp[0] = g_fxs.fog_falloff, u.fogp[1] = g_fxs.fog_max, u.fogp[2] = g_fxs.fog_sun * 0.2f; /* (fog_sunlight, 0 to 10) */
             u.fogp[3] = fminf(fmaxf(g_fxs.fog_g, 0.0f), 0.95f);
         }
         /* the sun, kept in the world: the zone's shader draws carry no light, so a frame gives one

@@ -19,6 +19,7 @@
 #include "gametext.hpp"
 #include "gameui.hpp"
 #include "gmicons.hpp"
+#include "hudwin.hpp"
 #include "image.hpp"
 #include "log.hpp"
 #include "outline.hpp"
@@ -1284,6 +1285,12 @@ bool outline(double* moved_x, double* moved_y)
         box.right = box.left + wide;
         box.bottom = box.top + g_seen_h;
     }
+    // target.scale (hudwin_scale.h): as big as the window is drawn, about its middle top
+    const double scale = hudwin::scale("target");
+    const int laid_w = box.right - box.left, shown_w = static_cast<int>(std::lround(laid_w * scale));
+    box.left += (laid_w - shown_w) / 2;
+    box.right = box.left + shown_w;
+    box.bottom = box.top + static_cast<int>(std::lround((box.bottom - box.top) * scale));
     outline::Drag drag;
     if (!outline::draw("target", box, 0, drag))
         return false;

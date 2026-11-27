@@ -108,6 +108,7 @@ load_module('draw')
 load_module('data')
 load_module('share') -- a preset as a string, and addons' windows fitted to another screen
 load_module('addons') -- the Addons and Plugins pages' list (in data.lua's place) and each one's help
+load_module('weatherpreview') -- Weather preview's weather held through the game too: its sky, fog and light
 load_module('install') -- the addon package prompt (a .vcaddon opened, or dropped in addons\install)
 load_module('debug') -- the Debug window (/vana debug): debug views, DLSS crash tests, frame recording
 load_module('gamepadtest') -- the Gamepad Test window (/gamepad test): buttons, sticks and stats of each controller
@@ -186,7 +187,7 @@ do
             -- Mods, after Game Options: the Graphics tab's Mass Grass and Snow Trails and Game Options' Loading Screen, moved
             -- here (MOVED_PANELS, MOVED_OPTIONS); a tab in the header
             local mods = { id = 'mods', name = 'Mods', icon = 'wand', tab = M.tab_named('graphics'), virtual = true,
-                           aliases = { 'grass', 'snow', 'loadscreen', 'zonelines', 'zones', 'zone', 'zonename' }, buttons = {}, preset_pick = true }
+                           aliases = { 'grass', 'snow', 'weather', 'loadscreen', 'zonelines', 'zones', 'zone', 'zonename' }, buttons = {}, preset_pick = true }
             PAGES[#PAGES + 1] = mods
             pages[#pages + 1] = mods
         end
@@ -197,7 +198,8 @@ end
 -- and Glow Effects: Graphics' own). Mass Grass and Snow Trails: the Mods page's (Mass Grass was Game Options' last sub-tab
 -- from 2026-11-06, the Experimental page's before)
 local MOVED_PANELS = { ['Water Shader (Experimental)'] = { 'experimental', 1 }, ['Normal maps (Experimental)'] = { 'experimental', 2 },
-                       ['Snow Trails (Experimental)'] = { 'mods', 2 }, ['Mass Grass'] = { 'mods', 1 } }
+                       ['Snow Trails'] = { 'mods', 2 }, ['Mass Grass'] = { 'mods', 1 },
+                       ['Weather Effects'] = { 'mods', 3 } } -- (Graphics' till 2026-11-27)
 -- the Game Options tab's sections shown on the Mods page instead, by their heading (after the Graphics tab's)
 local MOVED_OPTIONS = { ['Zones'] = true, ['Loading Screen'] = true, ['Sparkles'] = true }
 -- the pages showing them, which a Graphics preset reads too (preset_keys)
@@ -818,6 +820,36 @@ local function read_presets()
         end
     end
     file:close()
+    for _, e in ipairs(presets.list) do
+        M.old_preset_keys(e.values)
+    end
+end
+
+-- A preset's keys from before (2026-11-27) as they are now, as registry.cpp move_old_keys moves vanacore.ini's: the height
+-- fog's fog_sun (0 to 2) is fog_sunlight (0 to 10: times 5), fog_g fog_glow (low, medium or high where it's one of theirs)
+function M.old_preset_keys(values)
+    local function glow(v)
+        local n = tonumber(v)
+        if n == nil then
+            return v
+        end
+        return math.abs(n - 0.95) < 0.001 and 'low' or math.abs(n - 0.75) < 0.001 and 'medium'
+            or math.abs(n - 0.6) < 0.001 and 'high' or v
+    end
+    local function times5(v)
+        local n = tonumber(v)
+        return n ~= nil and string.format('%g', n * 5) or v
+    end
+    for _, m in ipairs({ { 'fog_sun', 'fog_sunlight', times5 }, { 'fog_g', 'fog_glow', glow } }) do
+        local old, new = 'graphics.effects.' .. m[1], 'graphics.effects.' .. m[2]
+        if values[old] ~= nil then
+            if values[new] == nil then
+                values[new] = m[3](values[old])
+            end
+            values[old] = nil
+        end
+    end
+    return values
 end
 
 -- the preset the account has loaded: [vana] preset in its settings file, kept across sessions. Nil if none, or if the
@@ -1441,7 +1473,7 @@ local function store_preset(data)
         st.presets.list[#st.presets.list + 1] = entry
     end
     entry.saved = data.saved
-    entry.values = data.values
+    entry.values = M.old_preset_keys(data.values)
     if write_presets() then
         st.flash = { name = entry.name, what = 'imported', at = clock() }
     end
@@ -1505,60 +1537,11 @@ local function pad_guid(text)
     return text:match('^(%b{})')
 end
 
--- `text` broken at word ends into lines that fit `room` pixels, kept on the row until the room changes
+-- a note's lines, one under the next (its text wrapped by draw.lua's M.wrap_lines; the banners are draw.lua's too)
 local NOTE_LINE = 20
-local function note_lines(row, room)
-    if row.wrap_room == room and row.wrap_lines ~= nil and row.wrap_text == row.text then
-        return row.wrap_lines
-    end
-    local lines, line = {}, ''
-    for word in tostring(row.text):gmatch('%S+') do
-        local try = line == '' and word or line .. ' ' .. word
-        if line ~= '' and M.measure(try, fonts.text, BODY - 1) > room then
-            lines[#lines + 1] = line
-            line = word
-        else
-            line = try
-        end
-    end
-    lines[#lines + 1] = line
-    row.wrap_room, row.wrap_lines, row.wrap_text = room, lines, row.text
-    return lines
-end
 
 -- the room a page's notes wrap to: its width less the margins and the icon's column, the same for the height and the draw
 local function note_width(w) return w - S(LEFT) - S(RIGHT) - S(20) end
--- THE BANNER STANDARD. Every notice on a page is this one banner (kinds warning, callout, alert, notice, hint; data.lua's
--- callout(title, text, tone) is the one to use): the rows' own width (lx to right), its tone's colour fading left to right
--- over the panel with a faint edge of it, no bar, no icon; a title in capitals in the tone's colour, the text wrapped under
--- it close up. Five tones (row.tone): 'warning' orange, 'success' green, 'basic' grey, 'notice' blue, 'danger' red. Don't
--- draw a box of any other style for a notice
-local BANNER_KINDS = { warning = true, callout = true, alert = true, notice = true, hint = true }
-local BANNER_TONES = { warning = 'amber', success = 'green', basic = 'dim', notice = 'accent', danger = 'rose' }
-local BANNER_OLD = { warn = 'warning', muted = 'basic', grey = 'basic' } -- the tones' old names
-local function banner_tone(row)
-    local t = BANNER_OLD[row.tone] or row.tone
-    if BANNER_TONES[t] then
-        return t
-    end
-    return (row.kind == 'warning' or row.kind == 'alert') and 'danger' or row.kind == 'hint' and 'basic'
-        or row.kind == 'notice' and 'notice' or 'warning'
-end
--- A banner that has a switch (row.switch: get, set) and a state (row.state() -> tone, text: Buttons' Enable): its tone and text
--- from the state, now, and its text's room less the switch's
-local function banner_state(row, room)
-    if row.state ~= nil then
-        local ok, tone, text = pcall(row.state)
-        if ok then
-            row.tone, row.text = tone, text
-        end
-    end
-    return row.switch ~= nil and room - S(M.SW_W) - S(20) or room
-end
-local function banner_height(row, room)
-    room = banner_state(row, room)
-    return math.max(1, #note_lines(row, room)) * S(NOTE_LINE) + (row.title and S(NOTE_LINE - 5) or 0) + S(18)
-end
 
 -- The notes without an icon that still show: what a page has or hasn't got right now, and a limit or warning that's true
 -- now, not an explanation (those are the rows' tooltips). By how they start.
@@ -1615,10 +1598,10 @@ local function row_height(row, sec, room)
         return S(PAD_ROW)
     elseif row.kind == 'note' and not shown_note(row) then
         return 0 -- explanations are the tooltips' (an iconed note stays, and the short state lines SHOWN_NOTES names)
-    elseif BANNER_KINDS[row.kind] then
-        return banner_height(row, room)
+    elseif M.BANNER_KINDS[row.kind] then
+        return M.banner_height(row, room)
     elseif row.kind == 'note' then
-        return math.max(1, #note_lines(row, room)) * S(NOTE_LINE) + S(7)
+        return math.max(1, #M.wrap_lines(row, room)) * S(NOTE_LINE) + S(7)
     elseif row.kind == 'controls' then
         return S(CONTROLS_H) + S(14)
     elseif row.kind == 'action' and row.big then
@@ -2928,7 +2911,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     local hovered = M.over(x, y, w, h)
     -- no hover band on a sub-panel's heading, nor on the Addons and Plugins pages' search row (controls, not a setting)
     if hovered and row.kind ~= 'subheader' and row.kind ~= 'extension_filter' and row.kind ~= 'controls' and row.kind ~= 'columns'
-        and not BANNER_KINDS[row.kind] and not row.big then
+        and not M.BANNER_KINDS[row.kind] and not row.big then
         M.fill(dl, x + S(4), y, w - S(8), h, P.hover, S(3), 0, 0.8)
         if row.window ~= nil and vana.layout ~= nil then
             vana.layout.highlight(row.window) -- a Layout window's row: it's outlined in the game
@@ -3041,52 +3024,15 @@ local function draw_row(page, sec, row, x, y, w, ctx)
         -- that one (DLSS 5's Advanced Settings while DLSS 5 is off); and while its own switch is off
         ctx.off = ctx.off == true or (row.switch ~= nil and sw_on == false)
         return h
-    elseif BANNER_KINDS[row.kind] then
-        -- the one banner (banner_tone, banner_height): the rows' own width (lx to right, as the Layers cards), its tone fading
-        -- left to right, a faint edge, the title in capitals over the wrapped text
-        local room = banner_state(row, note_width(w)) -- (also sets its tone and text from its state)
-        local tone = banner_tone(row)
-        local color = P[BANNER_TONES[tone]]
-        local lines = note_lines(row, room)
-        local bx, by, bw, bh, r = lx, y + S(4), right - lx, h - S(8), S(4)
-        local steps = 24
-        M.fill(dl, bx, by, r * 2, bh, color, r, M.CORNERS.left, 0.18 * alpha)
-        M.fill(dl, bx + bw - r * 2, by, r * 2, bh, color, r, M.CORNERS.right, 0.03 * alpha)
-        for k = 0, steps - 1 do
-            local x1 = bx + r * 2 + math.floor((bw - r * 4) * k / steps)
-            local x2 = bx + r * 2 + math.floor((bw - r * 4) * (k + 1) / steps)
-            M.fill(dl, x1, by, math.max(1, x2 - x1), bh, color, 0, 0, (0.18 - 0.15 * (k + 0.5) / steps) * alpha)
-        end
-        M.outline(dl, bx, by, bw, bh, color, r, 0, 1, 0.22 * alpha)
-        local tx = bx + S(10)
-        local ly = by + S(5) + S(NOTE_LINE) / 2
-        if row.title then
-            M.text_mid(dl, tx, ly, tostring(row.title):upper(), color, fonts.semi, BODY - 1, alpha)
-            ly = ly + S(NOTE_LINE - 5)
-        end
-        for _, line in ipairs(lines) do
-            M.text_mid(dl, tx, ly, line, P.text, fonts.text, BODY - 1, alpha)
-            ly = ly + S(NOTE_LINE)
-        end
-        if row.switch ~= nil then
-            -- its switch at the banner's right end, in the middle of its height
-            local ok, on = pcall(row.switch.get)
-            local new, flipped = M.switch(id, right - S(M.SW_W) - S(10), by + bh / 2, ok and on or false, true, alpha, nil, M.SW_GREEN)
-            if flipped then
-                M.flush()
-                pcall(row.switch.set, new)
-                M.rebuild()
-            end
-            if hovered and tip_of(row) ~= nil then
-                M.tooltip(tip_of(row))
-            end
-        end
+    elseif M.BANNER_KINDS[row.kind] then
+        -- the one banner (draw.lua's M.banner: THE BANNER STANDARD)
+        M.banner(dl, id, row, lx, right, y, h, note_width(w), alpha, hovered and tip_of(row) or nil)
         return h
     elseif row.kind == 'note' then
         -- an icon, then the text wrapped over as many lines as it takes
         local color = row.glyph_color == 'danger' and P.rose or row.glyph_color == 'experimental' and P.amber or P.dim
         local icon = row.glyph == 'warning' and 'warning' or row.glyph == 'favorite' and 'heart' or row.glyph == 'lock' and 'lock' or 'info'
-        local lines = note_lines(row, note_width(w))
+        local lines = M.wrap_lines(row, note_width(w))
         local ly = y + S(4) + S(NOTE_LINE) / 2
         M.icon_centred(dl, lx + S(6), ly, icon, color, 10)
         for _, line in ipairs(lines) do

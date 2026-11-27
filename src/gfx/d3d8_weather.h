@@ -16,13 +16,15 @@
  * It is no file of its own. */
 #pragma once
 
-static WeatherSettings g_wx_set = { 1, { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }, -1 };
+static WeatherSettings g_wx_set = { 1, { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }, -1, 40.0f, 1.0f, 1, 0 };
 
 void d3d8_set_weather_fx(const WeatherSettings* settings)
 {
     g_wx_set = *settings;
+    g_rain_preview = g_wx_set.preview >= 0;
     for (int i = 0; i < WX_KINDS; ++i)
         g_wx_set.amount[i] = g_wx_set.amount[i] < 0.0f ? 0.0f : g_wx_set.amount[i] > 3.0f ? 3.0f : g_wx_set.amount[i];
+    g_wx_set.wind = g_wx_set.wind < 0.0f ? 0.0f : g_wx_set.wind > 3.0f ? 3.0f : g_wx_set.wind;
 }
 
 enum { WX_DOT, WX_STREAK, WX_LEAF };
@@ -91,6 +93,8 @@ typedef struct WxPool
 static WxPool g_wx_pool[WX_KINDS][WX_LAYERS];
 static float g_wx_amt[WX_KINDS];    /* how much of each kind is in the air now, eased */
 static float g_wx_double[WX_KINDS]; /* 0 single to 1 double, eased with it */
+static float g_wx_heading[WX_KINDS]; /* each kind's wind, radians in the ground plane: picked as it comes (wx_tick) */
+static int g_wx_was_kind = -1, g_wx_was_zone = -1; /* the kind wanted last frame, and the zone */
 static double g_wx_clock;
 static uint64_t g_wx_last_ns;
 static uint32_t g_wx_seed = 0x2545F491u;
@@ -168,6 +172,11 @@ static void wx_tick(float dt)
 {
     const int weather = wx_weather();
     const int kind = g_wx_set.on && weather >= 0 && wx_zone_has(weather) ? wx_kind_of(weather) : -1;
+    /* a weather coming, or a new zone: its own heading (weather.wind.fixed off), so no two storms blow alike. The kind going
+     * keeps the one it had as it fades */
+    if (kind >= 0 && (kind != g_wx_was_kind || g_rain_zone != g_wx_was_zone))
+        g_wx_heading[kind] = wx_rand() * 6.2831853f;
+    g_wx_was_kind = kind, g_wx_was_zone = g_rain_zone;
     for (int k = 0; k < WX_KINDS; ++k)
     {
         const int dbl = kind == k && (weather & 1);
@@ -270,10 +279,14 @@ static uint32_t wx_layer(float* v, uint32_t room, int k, int li, float dt, float
     uint32_t want = (uint32_t)((float)l->count * amt);
     if (want > pool->cap)
         want = pool->cap;
-    /* the wind: a slow turn and gusts, the double weather's harder */
-    const float ang = 0.7f + 0.5f * sinf(t * 0.017f) + 0.25f * sinf(t * 0.053f + 1.3f);
+    /* the wind: the kind's own heading as it came (wx_tick), or weather.wind.direction for all with weather.wind.fixed;
+     * wandering some 45 degrees either side of it over minutes with weather.wind.drift; gusts; weather.wind.strength times
+     * the kind's own, the double weather's harder */
+    float ang = g_wx_set.fixed ? g_wx_set.wind_dir * 0.017453293f : g_wx_heading[k];
+    if (g_wx_set.drift)
+        ang += 0.5f * sinf(t * 0.017f) + 0.25f * sinf(t * 0.053f + 1.3f);
     const float gust = 1.0f + 0.35f * sinf(t * 0.31f) * sinf(t * 0.13f + 0.7f);
-    const float ws = kd->wind * (1.0f + (kd->gust - 1.0f) * g_wx_double[k]) * gust * l->wind;
+    const float ws = kd->wind * (1.0f + (kd->gust - 1.0f) * g_wx_double[k]) * gust * l->wind * g_wx_set.wind;
     const float wind[2] = { cosf(ang) * ws, sinf(ang) * ws };
     const float fade = saturate_f(amt); /* a kind coming or going: fainter as well as fewer */
     uint32_t n = 0;

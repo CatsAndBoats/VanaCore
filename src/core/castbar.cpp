@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "hudwin.hpp"
 #include "log.hpp"
 #include "menuplace.h"
 #include "outline.hpp"
@@ -190,15 +191,19 @@ bool outline(double* moved_x, double* moved_y)
     } else if (!wanted(g_move ? g_x : kDefaultX, g_move ? g_y : kDefaultY, g_seen_w, g_seen_h, box.left, box.top)) {
         return false;
     }
-    box.right = box.left + g_seen_w;
-    box.bottom = box.top + g_seen_h;
+    // castbar.scale (hudwin_scale.h): as big as the bar is drawn, about its middle top
+    const double scale = hudwin::scale("castbar");
+    const int shown_w = static_cast<int>(std::lround(g_seen_w * scale)), shown_h = static_cast<int>(std::lround(g_seen_h * scale));
+    box.left += (g_seen_w - shown_w) / 2;
+    box.right = box.left + shown_w;
+    box.bottom = box.top + shown_h;
     outline::Drag drag;
     if (!outline::draw("castbar", box, 0, drag))
         return false;
     // dragged: the bar goes where the box is taken to (castbar.move on) at once
     if (drag.held) {
         g_move = true;
-        g_x = std::clamp(std::round((drag.left + g_seen_w / 2.0 - area_left) * 10000.0 / area_w) / 100.0, 0.0, 100.0);
+        g_x = std::clamp(std::round((drag.left + shown_w / 2.0 - area_left) * 10000.0 / area_w) / 100.0, 0.0, 100.0);
         g_y = std::clamp(std::round((drag.top - area_top) * 10000.0 / area_h) / 100.0, 0.0, 100.0);
     }
     if (drag.released && moved_x != nullptr && moved_y != nullptr) {

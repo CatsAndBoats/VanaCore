@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 // The HUD Manager's game windows (/vana > HUD Manager) that have no module of their own (the Target window, cast bar,
 // map and chat have theirs), by their layouts' names:
@@ -182,6 +183,14 @@ struct Scaled {
 // The mouse's `point` (x, y, the interface's units) for window `window`, drawn scaled lately: taken back to where the game
 // laid the window out (for its IsOnButton), true with `mapped` set; false for a window drawn at its own size.
 bool map_point(const void* window, const int* point, int mapped[2]);
+
+// vana.chat.preview's [client] `key` (a table window's <id>.scale, percent) shown at once as /vana's slider is dragged,
+// vanacore.ini written when it's let go (the settings are read again at most every 100 ms: too slow for a drag)
+void preview(const std::string& key, double value);
+
+// [client] <id>.scale of a window another module places, drawn here at it ("castbar", "target"): its HUD Manager box is
+// that many times its size about its anchor point; 1 for any other
+double scale(const char* id);
 
 // The window `ctrl`'s frame is switched off by the game (its frame piece's fade mode 1, or its alpha 0, as it is after the
 // game's fade-out of a window flagged 0x8000: the help bar's three) and it has no buttons. Whether anything else is drawn in

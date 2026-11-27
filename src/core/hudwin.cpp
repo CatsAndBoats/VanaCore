@@ -1219,6 +1219,10 @@ void __fastcall button_rect_set_hook(char* handle, void* edx, short* rect)
 #include "hudwin_comment.h" // commentwin.keep: the bazaar message kept up over an item
 #include "hudwin_hide.h"    // hide.windows: any window by its layout's name
 
+namespace {
+void scale_reload(const wchar_t* ini); // (hudwin_scale.h: <id>.scale)
+} // namespace
+
 void reload(const wchar_t* ini)
 {
     hidden_read(ini);
@@ -1231,7 +1235,6 @@ void reload(const wchar_t* ini)
         w.y = number(id + L".y", w.default_y, 0, 100, ini);
         w.width = (w.can & kWidth) != 0 ? number(id + L".width", 0, 0, 100, ini) : 0;
         w.height = (w.can & kHeight) != 0 ? number(id + L".height", 0, 0, 100, ini) : 0;
-        w.scale = number(id + L".scale", 100, 50, 200, ini) / 100.0;
         w.frame = (w.can & kFrame) == 0 || GetPrivateProfileIntW(L"client", (id + L".background").c_str(), 1, ini) != 0;
         w.solid = (w.can & kFrame) != 0 && GetPrivateProfileIntW(L"client", (id + L".solid").c_str(), 0, ini) != 0;
         w.on_chat = (w.can & kChat) != 0 && GetPrivateProfileIntW(L"client", (L"chat." + id).c_str(), 0, ini) != 0;
@@ -1262,6 +1265,7 @@ void reload(const wchar_t* ini)
     g_hide_gil = GetPrivateProfileIntW(L"client", L"menucontent.hidegil", 0, ini) != 0;
     g_hide_titles = GetPrivateProfileIntW(L"client", L"titles.hide", 0, ini) != 0;
     g_keep_comment = GetPrivateProfileIntW(L"client", L"commentwin.keep", 0, ini) != 0;
+    scale_reload(ini);
 }
 
 void install(const wchar_t* ini)

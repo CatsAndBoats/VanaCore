@@ -77,9 +77,9 @@ constexpr std::uintptr_t kAspectField = 0x2F0;
 
 // [graphics.effects]: upstream's scene-effect settings, by the same keys (xi-on-mac fx.txt: the effects,
 // then the lighting and the sun's shadows), then the cel look's and depth of field's (VanaCore's own)
-constexpr const char* kEffectKeys[] = {"ao",      "radius",      "grade",      "sat",     "contrast", "brightness", "shadows", "highlights", "warmth", "sharpen",
+constexpr const char* kEffectKeys[] = {"ao", "tex_sharp",      "radius",      "grade",      "sat",     "contrast", "brightness", "shadows", "highlights", "warmth", "sharpen",
                                        "filter",  "aniso",       "fog",        "fog_falloff", "fog_height", "fog_floor", "fog_max",
-                                       "fog_sun", "fog_g",
+                                       "fog_sunlight", "fog_glow",
                                        "bloom",   "threshold",   "rays",       "rays_decay",  "rays_length", "debug",
                                        "light",   "sun",   "sun_distance", "sun_near", "sun_mid", "sun_handoff",
                                        "sun_soft", "sun_soft_chars", "sun_soft_zone", "sun_curved", "sun_face", "sun_min",    "sun_direct", "sun_dusk", "sun_moon", "sun_moon_strength", "sun_moon_casters", "sun_free", "sun_free_az", "sun_free_el", "sun_tilt", "sun_game_shading", "sun_centre", "sun_gate", "sun_seek", "sun_zone_mesh", "sun_cache", "sun_late", "sun_sharp", "sun_cull", "sun_casters", "moghouse", "temporal",
@@ -90,7 +90,7 @@ constexpr const char* kEffectKeys[] = {"ao",      "radius",      "grade",      "
                                        "outline_grass", "outline_width_grass", "outline_depth_grass", "outline_fade_grass",
                                        "bands",  "band_soft",   "smooth",
                                        "dof",     "dof_focus",   "dof_player", "dof_range",  "dof_far",  "dof_near", "dof_sky",
-                                       "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_bump_near", "refl_lift", "refl_rt", "refl_rt_res", "refl_rt_blur", "refl_rt_fx", "refl_rt_fx_level", "gi", "gi_radius", "gi_quality",
+                                       "refl",    "refl_wet",    "refl_rough", "refl_dist", "refl_quality", "refl_sun", "refl_floors", "refl_bump", "refl_bump_near", "refl_lift", "refl_rt", "refl_rt_res", "refl_rt_blur", "refl_rt_fx", "refl_rt_fx_level", "gi", "gi_radius", "gi_quality", "gi_night",
                                        "midtones", "whites", "rolloff", "light_tint", "hue",
                                        "clarity", "elight", "elight_radius", "elight_warp", "elight_lantern", "elight_dim", "elight_actor",
                                        "ao_quality", "ao_chars", "ao_soft_chars", "sun_rings", "sun_ring_spacing", "sun_detail", "sun_far_hold", "sun_near_hold", "sun_roll", "sun_plants", "sun_plants_still", "sun_fade", "normalmap", "normalmap_strength", "normalmap_view", "normalmap_refl", "normalmap_fx",
@@ -366,6 +366,15 @@ void read_damage_colours(damagetext::Settings& damage)
 bool effect_enabled(const wchar_t* key)
 {
     return read_int(L"graphics.effects", (std::wstring(key) + L".enabled").c_str(), 1) != 0;
+}
+
+// [graphics.effects] fog_glow=low|medium|high in place of a number (Henyey-Greenstein's g: 0.95 a small halo, 0.6 wide)
+bool effect_word(const char* key, const std::wstring& text, float& value)
+{
+    const wchar_t* t = text.c_str();
+    value = std::strcmp(key, "fog_glow") != 0 ? NAN : _wcsicmp(t, L"low") == 0 ? 0.95f : _wcsicmp(t, L"medium") == 0 ? 0.75f
+          : _wcsicmp(t, L"high") == 0 ? 0.6f : NAN;
+    return !std::isnan(value);
 }
 
 // An effect setting to the renderer, debug's kept as it has it (render_visual: the composite takes it as int(debug))
@@ -1268,8 +1277,8 @@ void apply_live(When when)
             continue;
         }
         wchar_t* end = nullptr;
-        const float value = wcstof(text.c_str(), &end);
-        if (end == text.c_str() || *end != L'\0') {
+        float value = wcstof(text.c_str(), &end);
+        if ((end == text.c_str() || *end != L'\0') && !effect_word(key, text, value)) {
             log::write(L"Graphics: [graphics.effects] %ls=%ls isn't a number; ignored", wide.c_str(), text.c_str());
             continue;
         }

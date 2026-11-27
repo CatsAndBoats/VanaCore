@@ -123,6 +123,8 @@ static uint32_t g_water_kept_n; /* of them, kept for the water pass (d3d8_water.
 static void water_pass(GfxTex* color, GfxTex* depth, const GfxScene* s);
 static void rain_pass(GfxTex* color, GfxTex* depth, const GfxScene* s);
 static void weather_pass(GfxTex* color, GfxTex* depth, const GfxScene* s); /* d3d8_weather.h: snow, dust, leaves, embers... */
+static void look_fog(GfxDraw* d);   /* d3d8_weather_look.h: a borrowed weather's fog */
+static void look_light(GfxDraw* d); /* ... and light */
 static void rain_set_zone(int zone);
 static void water_set_zone(int zone); /* d3d8_water_level.h: a ferry's zone (g_water_ship) */
 static int rain_game_skip(const GfxDraw* d, uint32_t tex0);
@@ -3919,8 +3921,11 @@ static void ui_squeeze(GfxDraw* d, uint32_t first, uint32_t n, uint32_t up_data,
 /* FFXI_DRAWLOG=<path>: while <path>.go exists, the next frame's draws are written to <path> (then
  * .go is removed): the game's return addresses on the guest stack, the texture, and the vertices'
  * box. For finding which of the game's code draws what. */
+static int fw_cap_once(void); /* d3d8_fightwatch.h */
 static void cap_present(void)
 {
+    if (fw_cap_once()) /* (the fight watch's frame, and its draw log of one frame) */
+        return;
     static int init;
     if (!init)
     {
@@ -4116,6 +4121,7 @@ static struct
     char end_desc[256], comp_desc[256];
     uint32_t composites;
 } g_scene;
+#include "d3d8_fightwatch.h" /* fw_draw, fw_scene, fw_cap_once: the fight watch's record of each frame's lighting */
 
 static uint32_t g_scene_shown[2]; /* d3d8_scene_shown */
 
@@ -4225,6 +4231,7 @@ static void scene_finish(const char* why)
         !g_scene.world_done)
     {
         g_wf.slots = d3d8_sun_pick(&g_scene.s, g_scene.frame);
+        fw_scene(&g_scene.s);
         memcpy(g_scene.s.focus, g_focus, sizeof g_focus);
         memcpy(g_scene.s.zonelines, g_zonelines, sizeof(float) * 8 * g_nzonelines);
         g_scene.s.nzonelines = g_nzonelines;
@@ -5709,6 +5716,7 @@ static void grass_hook(const GfxDraw* d, uint32_t prim, uint32_t count, uint32_t
 #include "d3d8_water.h" /* VanaCore's water: what it is (water_tile_shape, water_model), its draws (water_draw, water_shade) and its pass (water_pass) */
 #include "d3d8_rain.h" /* VanaCore's rain: the streaks, splashes and shelter (rain_pass) */
 #include "d3d8_weather.h" /* VanaCore's other weathers: snow, dust, leaves, embers, motes, ash (weather_pass) */
+#include "d3d8_weather_look.h" /* a weather's sky, fog and light borrowed from another zone's files (look_fog, look_light) */
 
 /* The game's own character shadow (Config > Shadows): the character drawn into a render target of the game's, then that
  * texture projected onto the ground round it - a blended 3D draw sampling, through projected coordinates, a texture the game
@@ -5898,10 +5906,13 @@ static void draw_packet(uint32_t prim, uint32_t count, uint32_t start, uint32_t 
     const uint32_t scene_was = g_scene.draws;
     const GfxTex* scene_rt_was = g_scene.rt;
 #endif
+    look_fog(d); /* a borrowed weather's fog, before the scene takes its fog from the draw (d3d8_weather_look.h) */
     scene_note(d, nverts);
     d->is_char = (uint8_t)world_character(d, up_data);
+    look_light(d);
     night_light(d);
     character_light(d, up_data);
+    fw_draw(d);
     if (rain_game_skip(d, g_dev.cur.tex[0])) /* the game's own rain left out under VanaCore's (rain.game) */
         return;
     if (water_keep(d, prim, count, water_kept)) /* VanaCore's water to keep: lit as the world is by now; drawn at the scene's end (water_pass) */

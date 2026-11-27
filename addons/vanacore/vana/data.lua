@@ -734,6 +734,13 @@ local function advanced_group(tip)
     sub.tip = tip
     return sub
 end
+-- the banner at the top of each Advanced Settings box (2026-11-27: "i dont wanna be messaged about stuff people mess
+-- about with"); callout is defined further down, so the row is made here as callout makes it
+local function advanced_warning()
+    return { kind = 'callout', title = 'At your own discretion', tone = 'warning', show_if = advanced_on,
+             text = 'You change these at your own risk. If something looks wrong, reset them '
+                    .. 'first (Client > VanaCore > Reset ALL Advanced Settings).' }
+end
 -- a sub-panel switched as an effect panel's heading is (effect): off writes <key>.enabled=0 and keeps the strength; on takes
 -- that out and sets the strength to `on` where it's 0. Marked an effect, so a reset keeps an effect that's on, on
 -- A strength slider that was an effect's switch and heading's (effect_sub) with no switch now: above 0 is on, 0 is off.
@@ -1477,6 +1484,22 @@ local function moved(row, switch)
     local key = row.key or ''
     local previewable = key:match('^chat2?%.') or key:match('^compass%.') or key:match('^clock%.') or key:match('^menus%.') or key:match('^input%.')
     if previewable and vana.chat ~= nil and vana.chat.preview ~= nil then
+        row.preview = function (value) vana.chat.preview(row.key, value) end
+    end
+    return row
+end
+
+-- A game window's Scale ([client] <id>.scale, hudwin_scale.h): drawn at it as it's dragged, written when it's let go.
+-- `with`: what it goes with while its Position is off (the main menu, Menu Content), its scale then that one's: locked
+local function scaled(id, with)
+    local row = slider('Scale', 'client', id .. '.scale', 100, 50, 200, 1, '%d%%')
+    if with ~= nil then
+        row.lock_if = function () return (tonumber(vana.config.get('client', id .. '.move') or '') or 0) == 0 end
+        row.tip = 'How big it is. While its Position is off, it goes with the ' .. with .. ' at its size.'
+    else
+        row.tip = function () return M.TIPS.rows['client.' .. id .. '.scale'] or 'How big it is, 100% its usual size.' end
+    end
+    if vana.chat ~= nil and vana.chat.preview ~= nil then
         row.preview = function (value) vana.chat.preview(row.key, value) end
     end
     return row
@@ -2236,15 +2259,16 @@ TIPS.rows = {
     -- Bounce light
     ['graphics.effects.gi'] = 'How much light bounces off surfaces onto their neighbours.',
     ['graphics.effects.gi_radius'] = 'How far the bounced light reaches.',
-    ['graphics.effects.gi_quality'] = 'Less grain costs more.',
+    ['graphics.effects.gi_quality'] = 'Soft: smooth and even, and cheaper. Sharp: finer detail, but grainier, and costs more.',
+    ['graphics.effects.gi_night'] = 'Fades bounce light out from 17:00 to 18:00 and back in from 05:30 to 06:30, Vana\'diel time. Outdoors only.',
     -- Height fog
     ['graphics.effects.fog'] = 'How thick the fog is.',
     ['graphics.effects.fog_falloff'] = 'How quickly the fog thins as you go higher.',
     ['graphics.effects.fog_height'] = 'How far below the camera the fog is thickest.',
     ['graphics.effects.fog_floor'] = 'How far below the camera the fog keeps thickening; lower down it stays that thick, so a harbour seen from above is not drowned.',
     ['graphics.effects.fog_max'] = 'The most fog that can ever cover something.',
-    ['graphics.effects.fog_sun'] = 'How much the sun lights up the fog.',
-    ['graphics.effects.fog_g'] = 'How bright the fog glows when you look toward the sun.',
+    ['graphics.effects.fog_sunlight'] = 'How much the sun lights up the fog.',
+    ['graphics.effects.fog_glow'] = 'How bright the fog glows when you look toward the sun.',
     ['graphics.effects.fog_color'] = 'The height fog\'s colour.\n'
         .. 'Zone\'s own: follows the zone\'s weather and time of day.\n'
         .. 'Match the sky: the colour of the sky you can see. DirectX 12.\n'
@@ -2277,7 +2301,8 @@ TIPS.rows = {
     ['graphics.effects.moon_brightness'] = 'How bright the moon is in the sky.',
     -- Texture filtering
     ['graphics.effects.filter'] = 'Smooths textures in the distance so they shimmer less.',
-    ['graphics.effects.aniso'] = 'Keeps textures sharp at a slant, such as the ground far ahead.',
+    ['graphics.effects.aniso'] = 'How the world\'s textures are filtered, over what the game asks for. Anisotropic keeps them sharp at a slant, such as the ground far ahead.',
+    ['graphics.effects.tex_sharp'] = 'Sharper textures far off: finer detail is used further away. Higher can shimmer a little as you move.',
     -- Water
     ['graphics.water.tint'] = 'Your own water colour. Game\'s means none picked.',
     ['graphics.water.detect'] = 'What counts as water: flat tiles, the game\'s water models, or all of it, with the water in the zone\'s own meshes told by where your footsteps splash.',
@@ -2313,7 +2338,14 @@ TIPS.rows = {
     ['graphics.rain.dry'] = 'How many seconds they take to dry once the rain stops.',
     ['graphics.rain.force'] = 'Shows the rain and the wet look whatever the weather.',
     ['graphics.weather'] = "VanaCore's own particles in the weathers other than rain, where the zone has that weather. None under roofs.",
-    ['graphics.weather.preview'] = "Shows a weather's particles whatever the weather. The sky and light stay the zone's. For this session only.",
+    ['graphics.weather.preview'] = "Shows a weather on your screen alone: the zone's own sky, fog and light for it, and VanaCore's rain or particles. Nothing goes to the server. For this session only.",
+    ['graphics.weather.sky'] = "A weather this zone has no sky for takes its sky, fog and light from a zone that has it: Xarcabard's snow, the Altepa deserts' sand storms. DirectX 12 for the sky.",
+    ['graphics.weather.wind.fixed'] = 'Every weather blows the way Direction says. Off, each weather picks its own way as it comes, and again in each zone.',
+    ['graphics.weather.wind.direction'] = 'Which way the snow, dust, leaves and ash blow with Fixed direction on, in degrees.',
+    ['graphics.weather.wind.drift'] = 'Lets the wind wander a little either side of its direction over a few minutes. Off holds it still.',
+    ['graphics.weather.wind.strength'] = 'How hard the wind blows them. 0 is still air; blizzards and sand storms blow harder.',
+    ['graphics.weather.random'] = "Each time you zone in outdoors, sometimes shows a random weather on your screen alone, with its own amount, wind and direction; otherwise the zone's own. Nothing goes to the server.",
+    ['graphics.weather.random.chance'] = 'How often a zone-in gets a random weather.',
     ['graphics.weather.fire'] = 'Embers in hot spells and heat waves. 0 is none.',
     ['graphics.weather.dust'] = 'Grit and dust clouds in dust and sand storms. 0 is none.',
     ['graphics.weather.wind'] = 'Leaves and streaks of wind in wind and gales. 0 is none.',
@@ -3139,7 +3171,7 @@ TIPS.panels = {
     ['Logging'] = 'What VanaCore writes to its log file.',
     ['Draw distance'] = 'How far away the game draws things.',
     ['Shadows'] = 'Shadows cast by the sun. Turns the game\'s own shadows off.',
-    ['Ambient occlusion'] = 'Darkens corners and creases to add depth.',
+    ['Ambient Occlusion'] = 'Darkens corners and creases to add depth.',
     ['Reflections'] = 'Reflections on floors and flat ground.',
     ['True Font'] = 'Fonts from your PC, drawn sharp at the screen\'s own size. Chat, Damage Numbers, Item Tooltips, Windows, Inventory and Nameplates have their own.',
     ['Inventory'] = 'The item lists\' letters and rows, the bag count, the item squares and the rarity box.',
@@ -3149,10 +3181,10 @@ TIPS.panels = {
     ['Equipment Squares'] = 'The squares behind the Equipment window\'s items.',
     ['Extended Stats'] = 'Your accuracy, attack, defense, evasion and what your gear adds, under the Equipment window.',
     ['Glow Effects'] = 'Fire, glows and spells light up what is near them.',
-    ['Bounce light'] = 'Light bouncing off surfaces onto the ones next to them.',
-    ['Height fog'] = 'Fog that is thicker near the ground.',
+    ['Bounce Lighting'] = 'Light bouncing off surfaces onto the ones next to them.',
+    ['Height Fog'] = 'Fog that is thicker near the ground.',
     ['Bloom'] = 'A soft glow round bright lights.',
-    ['God rays'] = 'Beams of light streaming from the sun.',
+    ['God Rays'] = 'Beams of light streaming from the sun.',
     ['Lighting'] = 'How the world is lit through the Vana\'diel day and night, and indoors.',
     ['Force ambient light'] = 'Everything gets at least this much light, day and night, indoors and out, so nothing is too dark to see. '
         .. 'As Windower\'s game_forceambientlight.',
@@ -3167,14 +3199,14 @@ TIPS.panels = {
         .. 'By day the world round you darkens a little instead, so the pool still shows.',
     ['Temperature'] = 'Tints the picture warmer by day and cooler at night, outdoors. It works through the Colour grade, so that must be on too.',
     ['Moon'] = 'The moon in the sky.',
-    ['Texture filtering'] = 'How sharp textures stay in the distance and at a slant.',
+    ['Texture Filtering'] = 'How sharp textures stay in the distance and at a slant.',
     ['Water Shader (Experimental)'] = 'VanaCore\'s own moving water, with the bed showing through where it is shallow.',
     ['Mass Grass'] = 'Adds lots of grass and flowers on the ground. West Ronfaure so far.',
-    ['Snow Trails (Experimental)'] = 'Footprints in the snow where characters walk. Shading only: the ground is not dug.',
+    ['Snow Trails'] = 'Footprints in the snow where characters walk. Shading only: the ground is not dug.',
     ['Colour grade'] = 'Changes the picture\'s colours and light, like a photo filter. On DirectX 12 it is applied last, over every other effect and after DLSS or FSR.',
-    ['Ink lines'] = 'Cartoon-style outlines round things.',
-    ['Brightness bands'] = 'Flattens the light into steps, for a cartoon look.',
-    ['Depth of field'] = 'Blurs things that are not in focus.',
+    ['Ink Lines'] = 'Cartoon-style outlines round things.',
+    ['Brightness Bands'] = 'Flattens the light into steps, for a cartoon look.',
+    ['Depth of Field'] = 'Blurs things that are not in focus.',
     ['Normal maps (Experimental)'] = 'Bump detail from a texture pack. Needs maps made with xi-tools.',
     ['Characters'] = 'Light on players, NPCs and monsters.',
     ['NPC effects'] = 'Glows and arrival effects on Trusts and avatars.',
@@ -4329,6 +4361,7 @@ local TABS = {
                 -- Graphics Settings is on. A group runs to the next heading (FSR's) or status row, so the DLSS panel's are placed last
                 advanced_group('Fine-tuning for DLSS: the upscaler model, how the picture is kept steady, and what gets its own '
                                .. 'motion. Most players never need these.'),
+                advanced_warning(),
                 -- DLSS's render preset: the transformer models cost more than the older CNN ones (E and F), which are softer
                 -- and cheaper; "Automatic" is NVIDIA's choice for the quality chosen above
                 needs_dx12(dropdown('Upscaler model', FX, 'dlss_preset', '0', { { '0', 'Automatic' }, { '11', 'K: transformer, best quality' },
@@ -4416,6 +4449,7 @@ local TABS = {
                 -- Advanced Settings (as DLSS's): the version and DLSS's Extras rows, the same keys: set on one page, it's set on both
                 advanced_group('Fine-tuning for FSR: which FSR runs, how the picture is kept steady, and what gets its own motion. '
                                .. 'Most players never need these.'),
+                advanced_warning(),
                 needs_dx(dropdown('Version', 'graphics', 'fsr.version', 'auto', { { 'auto', 'Automatic' }, { '4', 'FSR 4 (Radeon RX 7000, 9000)' },
                                                                                   { '3', 'FSR 3.1' }, { '1', 'FSR 1 (any card)' } })),
                 needs_dx12(toggle('Compare (FSR off, same size)', FX, 'dlss_compare', false)),
@@ -4448,6 +4482,7 @@ local TABS = {
                 custom_fog(shown_as(free(slider('Custom fog ends at', 'graphics', 'fog.end', 4, 1, 100, 1, '%d'), 0, 200), 0.01)),
                 advanced_group('Fine-tuning for the draw distance: filling in far ground that can be missing, the whole zone in view, '
                                .. 'and how the far scenery is drawn. Most players never need these.'),
+                advanced_warning(),
                 toggle('Fill in missing far ground', 'graphics', 'drawdistance.fill', false),
                 toggle('Draw the whole zone in view', 'graphics', 'drawdistance.full', false),
                 toggle('Off in large open zones', 'graphics', 'drawdistance.large_off', true),
@@ -4482,6 +4517,7 @@ local TABS = {
                 -- Shaders' Enable Advanced Graphics Settings is on (till 2026-11-23 a button over it showed it)
                 advanced_group('Fine-tuning for the shadows: plants, the sharp shadows near you, smoothing, the sun and weather, '
                                .. 'and how often they\'re redrawn. Most players never need these.'),
+                advanced_warning(),
                 -- two sub-panels only (2026-11-12: "a lot of subcategories"): the shadows' own rows under the heading
                 -- itself (Close-up and Look till then), Sun and weather (Conditions and Place the sun), GPU Redraw Options
                 needs_dx12(toggle('Plants cast shadows', FX, 'sun_plants', true)),
@@ -4547,7 +4583,7 @@ local TABS = {
                 M.unswitched(slider('Indoor Brightness', FX, 'indoor_bright', 0, 0, 5, 0.05), 'indoor_bright'),
                 -- the light on players, NPCs and monsters (VanaCore's renderer): they come up out of the dark, the zone stays as it is.
                 -- Under these since 2026-11-24 (they were the Characters sub-panel's rows)
-                needs_dx(free(slider('Character brightness', 'graphics', 'characters.brightness', 1, 0.5, 3, 0.05, '%.2fx'), 0, 10)),
+                needs_dx(free(slider('Character brightness', 'graphics', 'characters.brightness', 1, 0.5, 3, 0.05, '%.2f'), 0, 10)),
                 needs_dx(slider('Character ambient light', 'graphics', 'characters.ambient', 0, 0, 2, 0.1, '%.1f')),
                 -- Night: Off, Dark or Bright on its heading, their sliders side by side under it (see `night` above)
                 night.dark,
@@ -4565,7 +4601,7 @@ local TABS = {
                 subheader('Moon'),
                 slider('Size', FX, 'moon_size', 1, 0.25, 4, 0.05),
                 slider('Brightness', FX, 'moon_brightness', 1, 0, 2, 0.05),
-                effect('Ambient occlusion', 'ao', 1.0),
+                effect('Ambient Occlusion', 'ao', 1.0),
                 -- Strength and Character Strength 1 to 10, as 0.2 to 2.0 in vanacore.ini (shown = kept * 5); both default to 5 (1.0)
                 trimmed(shown_as(slider('Strength', FX, 'ao', 5, 1, 10, 1, '%d'), 5)),
                 trimmed(shown_as(slider('Character Strength', FX, 'ao_chars', 5, 1, 10, 1, '%d'), 5)),
@@ -4665,6 +4701,7 @@ local TABS = {
                 end)(),
                 advanced_group('Fine-tuning for the reflections: how far they reach, how far low rays are tilted up, and which ground '
                                .. 'reflects. Most players never need these.'),
+                advanced_warning(),
                 slider('Reflective Distance', FX, 'refl_dist', 150, 5, 150, 5, '%d'),
                 -- low rays tilted up (fx_ssr): from a low camera a true mirror shows only the walls' dark feet; 1 is the mirror
                 trimmed(shown_as(slider('Lift', FX, 'refl_lift', 1, 1, 10, 1, '%d'), 18, 1)),
@@ -4682,16 +4719,18 @@ local TABS = {
                 -- the detail the maps add goes into a per-pixel normal target, which these effects read in place of the normal worked out from depth
                 choice('Reflections follow them', FX, 'normalmap_refl', '1', { { '0', 'Off' }, { '1', 'On' } }),
                 choice('Occlusion and sun shadows follow them', FX, 'normalmap_fx', '1', { { '0', 'Off' }, { '1', 'On' } }),
-                effect('Bounce light', 'gi', 0, 0.5),
+                effect('Bounce Lighting', 'gi', 0, 0.5),
                 note('Light picked up from lit surfaces nearby: colour on what is beside them, fill in the corners. DirectX 12.'),
                 slider('Strength', FX, 'gi', 0, 0, 2, 0.05),
                 slider('Radius', FX, 'gi_radius', 5, 0.5, 12, 0.5, '%.1f'),
                 -- its samples a pixel (6 to 40; 4 to 14 a frame where the temporal pass gathers them) and its layer's size: more is
                 -- less grainy and costs more. Twelve places, Performance to Quality, kept as gi_quality 0 to 4 (a place is 4/11 of
-                -- it, so the old whole numbers 0 to 4 fall at places 1, 4, 6.5, 9 and 12)
-                marks(1, 12, { { 1, 'Performance' }, { 4, 'Balanced' }, { 12, 'Quality' } }),
+                -- it, so the old whole numbers 0 to 4 fall at places 1, 4, 6.5, 9 and 12). Detail, Soft to Sharp, since 2026-11-27 (it
+                -- was Quality, Performance to Quality, and "looks worse as it goes up"): low is a coarse layer smoothed twice as wide,
+                -- soft and even; high a layer up to twice as fine, smoothed less, sharper and grainier
+                marks(1, 12, { { 1, 'Soft' }, { 4, 'Balanced' }, { 12, 'Sharp' } }),
                 (function ()
-                    local row = slider('Quality', FX, 'gi_quality', 4, 1, 12, 1, '%d')
+                    local row = slider('Detail', FX, 'gi_quality', 4, 1, 12, 1, '%d')
                     row.get = function ()
                         local q = tonumber(vana.config.get(FX, 'gi_quality') or '')
                         if q == nil then
@@ -4705,29 +4744,69 @@ local TABS = {
                     end
                     return row
                 end)(),
-                effect('Height fog', 'fog', 0.004),
+                -- gi_night (2026-11-27): fades out 17:00-18:00 and back in 05:30-06:30 Vana'diel time, outdoors only (gfx_d3d12.c gi_by_clock)
+                choice('Off at Night', FX, 'gi_night', '1', { { '0', 'Off' }, { '1', 'On' } }),
+                effect('Height Fog', 'fog', 0.01),
                 subheader('Amount'),
-                slider('Density', FX, 'fog', 0.004, 0, 0.05, 0.001, '%.3f'),
-                slider('Thinning with height', FX, 'fog_falloff', 0.08, 0, 0.5, 0.01),
-                slider('Measured below the camera', FX, 'fog_height', 2.0, 0, 20, 0.5, '%.1f'),
-                slider('Thickening stops below', FX, 'fog_floor', 4.0, 0, 30, 0.5, '%.1f'),
-                slider('Most fog', FX, 'fog_max', 0.5, 0, 1, 0.05),
+                -- (2026-11-27) Density 0 to 100 as 0 to 0.05 in vanacore.ini (shown = kept * 2000: 20 is its 0.01 default);
+                -- Thinning 0 to 100 as 0 to 0.5 (* 200: 16 is 0.08), more typed in (the shader has no end: past 0.5 the fog
+                -- halves in under 1.4 yalms, a layer at the feet). Sunlight is fog_sunlight, 0 to 10 in vanacore.ini as here
+                -- (fog_sun, 0 to 2, till 2026-11-27: registry.cpp move_old_keys)
+                trimmed(shown_as(slider('Density', FX, 'fog', 20, 0, 100, 1, '%d'), 2000)),
+                slider('Thickness', FX, 'fog_max', 0.6, 0, 1, 0.05),
+                trimmed(free(shown_as(slider('Thinning', FX, 'fog_falloff', 16, 0, 100, 1, '%d'), 200), 0, 1000)),
+                slider('Distance from Camera', FX, 'fog_height', 2.0, 0, 20, 0.5, '%.1f'),
                 subheader('Light'),
-                slider('Sunlight in the fog', FX, 'fog_sun', 0.5, 0, 2, 0.05),
-                slider('Glow toward the sun', FX, 'fog_g', 0.6, 0, 0.95, 0.05),
+                trimmed(slider('Sunlight', FX, 'fog_sunlight', 2.5, 0, 10, 0.5, '%.1f')),
+                -- the glow's spread: fog_glow=low, medium or high (0.95, 0.75, 0.6: Henyey-Greenstein's g, graphics.cpp
+                -- effect_word); a number in vanacore.ini is that g, and shows as the nearest (fog_g till 2026-11-27)
+                (function ()
+                    local row = choice('Glow Towards Sun', FX, 'fog_glow', 'low', { { 'low', 'Low' }, { 'medium', 'Medium' }, { 'high', 'High' } })
+                    row.get = function ()
+                        local text = (vana.config.get(FX, 'fog_glow') or ''):lower()
+                        if text == 'low' or text == 'medium' or text == 'high' then
+                            return text
+                        end
+                        local value = tonumber(text)
+                        if value == nil then
+                            return row.default
+                        end
+                        return value >= 0.85 and 'low' or value >= 0.675 and 'medium' or 'high'
+                    end
+                    return row
+                end)(),
                 subheader('Colour'),
                 dropdown('Fog colour', FX, 'fog_color', 'game', { { 'game', "Zone's own" }, { 'sky', 'Match the sky' }, { 'custom', 'Custom' } }),
                 colour_pick('Custom colour', FX, 'fog_custom', '#B8C8DC'),
+                advanced_group('Fine-tuning for the height fog: how far below the camera it keeps thickening. Most players never need these.'),
+                advanced_warning(),
+                slider('Thickening stops below', FX, 'fog_floor', 4.0, 0, 30, 0.5, '%.1f'),
                 effect('Bloom', 'bloom', 1.5),
                 slider('Strength', FX, 'bloom', 1.5, 0, 5, 0.05),
                 slider('Threshold', FX, 'threshold', 0.85, 0, 1, 0.05),
-                effect('God rays', 'rays', 0.6),
+                effect('God Rays', 'rays', 0.6),
                 slider('Strength', FX, 'rays', 0.6, 0, 2, 0.05),
                 slider('Fade', FX, 'rays_decay', 0.965, 0.8, 1, 0.005, '%.3f'),
                 slider('Length', FX, 'rays_length', 0.85, 0, 2, 0.05),
-                header('Texture filtering'),
+                header('Texture Filtering'),
                 toggle('Less shimmer (scene mips)', FX, 'filter', true),
-                slider('Anisotropic', FX, 'aniso', 16, 1, 16, 1, '%dx'),
+                -- Texture Filtering's mode (aniso: 0 the game's own, 1 trilinear, 2 to 16 anisotropic), laid over whatever filter
+                -- the game asks for on the world's textures (gfx.h gfx_world_filter; 2026-11-27, a 1 to 16 slider till then, 1 off);
+                -- another number in vanacore.ini shows as the nearest
+                (function ()
+                    local row = dropdown('Filtering', FX, 'aniso', '16', { { '0', "Game's" }, { '1', 'Trilinear' }, { '2', 'Anisotropic 2x' },
+                                                                          { '4', 'Anisotropic 4x' }, { '8', 'Anisotropic 8x' }, { '16', 'Anisotropic 16x' } })
+                    row.get = function ()
+                        local v = tonumber(vana.config.get(FX, 'aniso') or '')
+                        if v == nil then
+                            return row.default
+                        end
+                        return v < 0.5 and '0' or v < 1.5 and '1' or v < 3 and '2' or v < 6 and '4' or v < 12 and '8' or '16'
+                    end
+                    return row
+                end)(),
+                -- the world's mips chosen up to 2 levels finer (tex_sharp 0 to 10, gfx.h gfx_world_filter; 2026-11-27)
+                slider('Texture Sharpness', FX, 'tex_sharp', 0, 0, 10, 1, '%d'),
                 -- the game's own Bump Mapping option, live (src/core/bumpmap.cpp): unset, [ffxi] bump_mapping decides
                 toggle('Bump mapping', 'graphics', 'bump', (vana.config.get('ffxi', 'bump_mapping') or '0') == '1'),
                 needs_dx(toggle('Untextured', 'graphics', 'untextured', false)),
@@ -4803,14 +4882,21 @@ local TABS = {
                 needs_dx(slider('Mirror ripple', 'graphics', 'water.mirror.waves', 1, 0, 4, 0.05)),
                 -- VanaCore's weathers other than rain (src/gfx/d3d8_weather.h): particles in the air round the camera in the server's
                 -- weather, in a zone that has it ([graphics] weather*; graphics_weather.h). weather.preview is this session's only
-                needs_dx({ kind = 'header', text = 'Weather Effects (Experimental)', section = 'graphics', key = 'weather',
+                -- shown on the Mods page (vana.lua's MOVED_PANELS; 2026-11-27, "(Experimental)" off its name, the banner instead)
+                needs_dx({ kind = 'header', text = 'Weather Effects', section = 'graphics', key = 'weather',
                            switch = { get = function () return (tonumber(vana.config.get('graphics', 'weather') or '') or 1) ~= 0 end,
                                       set = function (on) vana.config.set('graphics', 'weather', on and '1' or '0') end } }),
+                callout('Experimental', 'Still being worked on. Expect it to change.', 'warning'),
                 needs_dx(dropdown('Weather preview', 'graphics', 'weather.preview', '-1',
-                                  { { '-1', "Off (the zone's weather)" }, { '4', 'Hot spell' }, { '5', 'Heat wave' },
-                                    { '8', 'Dust storm' }, { '9', 'Sand storm' }, { '10', 'Wind' }, { '11', 'Gales' },
-                                    { '12', 'Snow' }, { '13', 'Blizzards' }, { '16', 'Auroras' }, { '17', 'Stellar glare' },
-                                    { '18', 'Gloom' }, { '19', 'Darkness' } })),
+                                  { { '-1', "Off (the zone's weather)" }, { '0', 'Clear' }, { '1', 'Sunshine' },
+                                    { '2', 'Clouds' }, { '3', 'Fog' }, { '4', 'Hot spell' }, { '5', 'Heat wave' },
+                                    { '6', 'Rain' }, { '7', 'Squall' }, { '8', 'Dust storm' }, { '9', 'Sand storm' },
+                                    { '10', 'Wind' }, { '11', 'Gales' }, { '12', 'Snow' }, { '13', 'Blizzards' },
+                                    { '14', 'Thunder' }, { '15', 'Thunderstorms' }, { '16', 'Auroras' },
+                                    { '17', 'Stellar glare' }, { '18', 'Gloom' }, { '19', 'Darkness' } })),
+                needs_dx(toggle('Borrowed skies', 'graphics', 'weather.sky', true)),
+                needs_dx(toggle('Randomise on zone in', 'graphics', 'weather.random', false)),
+                needs_dx(slider('Chance', 'graphics', 'weather.random.chance', 50, 0, 100, 1, '%d%%')),
                 subheader('Amount'),
                 needs_dx(slider('Embers', 'graphics', 'weather.fire', 1, 0, 3, 0.05)),
                 needs_dx(slider('Dust', 'graphics', 'weather.dust', 1, 0, 3, 0.05)),
@@ -4818,6 +4904,11 @@ local TABS = {
                 needs_dx(slider('Snow', 'graphics', 'weather.snow', 1, 0, 3, 0.05)),
                 needs_dx(slider('Light motes', 'graphics', 'weather.light', 1, 0, 3, 0.05)),
                 needs_dx(slider('Ash', 'graphics', 'weather.dark', 1, 0, 3, 0.05)),
+                subheader('Wind'),
+                needs_dx(toggle('Fixed direction', 'graphics', 'weather.wind.fixed', false)),
+                needs_dx(slider('Direction', 'graphics', 'weather.wind.direction', 40, 0, 360, 1, '%d deg')),
+                needs_dx(toggle('Drift', 'graphics', 'weather.wind.drift', true)),
+                needs_dx(slider('Strength', 'graphics', 'weather.wind.strength', 1, 0, 3, 0.05)),
                 -- Mass Grass (src/gfx/grass.c): tufts and flowers scattered on the zone's grass-textured ground round the player;
                 -- shown as Game Options' last sub-tab since 2026-11-06, it was the Experimental page's (vana.lua MOVED_PANELS)
                 -- reset_also: its settings no longer on the panel, taken out by its reset too (reset_rows). grass.tufts and grass.limit
@@ -4883,6 +4974,7 @@ local TABS = {
                 -- the amount of options"); a group runs to the next heading, Snow Trails'
                 advanced_group('Fine-tuning for the grass: how it thins with distance, where it may grow, the free camera, and how fast '
                                .. 'it fills in. Most players never need these.'),
+                advanced_warning(),
                 -- the rings (grass.ring.spacing: rings 1-3 at it, twice it and three times it, a share of the Range)
                 needs_dx(free(slider('Draw distance detail', 'graphics', 'grass.ring.spacing', 25, 10, 50, 1, '%d%%'), 1, 100)),
                 needs_dx(toggle('Follow free camera', 'graphics', 'grass.freecam', true)),
@@ -4920,10 +5012,11 @@ local TABS = {
                     return row
                 end)(slider('Path padding', 'graphics', 'grass.pathpad', 0.25, 0, 4, 0.25, '%.2f'))),
                 -- Snow Trails (src/gfx/snow.c): footprints pressed into ground the zone's collision calls snow, drawn as shading
-                warn(needs_dx({ kind = 'header', text = 'Snow Trails (Experimental)', section = 'graphics', key = 'snow',
-                                switch = { get = function () return tonumber(vana.config.get('graphics', 'snow') or '') == 1 end,
-                                           set = function (on) vana.config.set('graphics', 'snow', on and '1' or '0') end } })),
-                callout('In development', 'Super early stages. Expect it to change a lot.', 'warning'),
+                -- (2026-11-27: "(Experimental)" and its yellow heading off, the Experimental banner as Weather Effects has instead)
+                needs_dx({ kind = 'header', text = 'Snow Trails', section = 'graphics', key = 'snow',
+                           switch = { get = function () return tonumber(vana.config.get('graphics', 'snow') or '') == 1 end,
+                                      set = function (on) vana.config.set('graphics', 'snow', on and '1' or '0') end } }),
+                callout('Experimental', 'Still being worked on. Expect it to change.', 'warning'),
                 needs_dx(free(slider('Depth', 'graphics', 'snow.depth', 0.12, 0.03, 0.4, 0.01, '%.2f'), 0.02, 0.5)),
                 needs_dx(free(slider('Shading', 'graphics', 'snow.strength', 1, 0, 2, 0.05), 0, 2)),
                 needs_dx(slider('Softness', 'graphics', 'snow.soft', 0.6, 0, 1, 0.05)),
@@ -4977,7 +5070,7 @@ local TABS = {
                 slider('Clarity', FX, 'clarity', 0, 0, 2, 0.05),
                 slider('Sharpening', FX, 'sharpen', 0.3, 0, 1, 0.05),
                 slider('Smoothing', FX, 'smooth', 0, 0, 1, 0.05),
-                effect('Ink lines', 'outline', 0, 1),
+                effect('Ink Lines', 'outline', 0, 1),
                 slider('Darkness', FX, 'outline', 0, 0, 1, 0.05),
                 slider('Line width', FX, 'outline_width', 1, 0.5, 4, 0.25),
                 needs_dx12(slider('Character line width', FX, 'outline_width_chars', 0, 0, 4, 0.25)),
@@ -4993,10 +5086,10 @@ local TABS = {
                 grass_lines(slider('Grass line width', FX, 'outline_width_grass', 0, 0, 4, 0.25), 'Same', '%.2f'),
                 grass_lines(slider('Grass edge sensitivity', FX, 'outline_depth_grass', 0, 0, 0.5, 0.01), 'Same', '%.2f'),
                 grass_lines(slider('Grass lines fade by', FX, 'outline_fade_grass', 0, 0, 200, 5, '%d'), 'Same', '%d'),
-                effect('Brightness bands', 'bands', 0, 4),
+                effect('Brightness Bands', 'bands', 0, 4),
                 slider('Bands', FX, 'bands', 0, 0, 8, 1, '%d'),
                 slider('Band softness', FX, 'band_soft', 0.15, 0, 1, 0.05),
-                effect('Depth of field', 'dof', 0, 12),
+                effect('Depth of Field', 'dof', 0, 12),
                 slider('Blur', FX, 'dof', 0, 0, 40, 1, '%d'),
                 slider('Sharp zone', FX, 'dof_range', 0.5, 0, 3, 0.05),
                 slider('Blur builds over', FX, 'dof_far', 3, 0.2, 10, 0.1, '%.1f'),
@@ -5408,78 +5501,91 @@ local TABS = {
                 placed('Position', 'chat.action', 'action.move', 'Game, on the chat at its own left; Chat, at the chat\'s left; or X (its left edge) and Y (its top edge).',
                        { slider('X', 'client', 'action.x', 1.7, 0, 100, 0.5, '%.1f%%'),
                          slider('Y', 'client', 'action.y', 60, 0, 100, 0.5, '%.1f%%') }, 'action'),
+                scaled('action'),
                 anchor('action'),
                 element('Action Menu: Magic Sub-Menu', 'Action Menu'), -- (the list Magic opens to its right: Black Magic, Songs, Ninjutsu...)
                 toggle('Hide', 'client', 'actionmagic.hide', false),
                 toggle('Show the frame', 'client', 'actionmagic.background', true),
                 subheader('Position'),
                 place('Position', 'actionmagic', 'X: its left edge. Y: its top edge. The list the Action Menu\'s Magic opens (Black Magic, Songs, Ninjutsu...). Off, it is the Interaction Menu\'s.', 0.8, 70.5, 'actionmagic'),
+                scaled('actionmagic'),
                 anchor('actionmagic'),
                 element('Action Menu: Abilities Sub-Menu', 'Action Menu'), -- (the list Abilities opens: Job Abil., Weapon Skl., Mount...)
                 toggle('Hide', 'client', 'actionability.hide', false),
                 toggle('Show the frame', 'client', 'actionability.background', true),
                 subheader('Position'),
                 place('Position', 'actionability', 'X: its left edge. Y: its top edge. The list the Action Menu\'s Abilities opens (Job Abil., Weapon Skl., Mount...). Off, it is the Interaction Menu\'s.', 0.8, 70.5, 'actionability'),
+                scaled('actionability'),
                 anchor('actionability'),
                 element('Action Menu: Magic/Abilities', 'Action Menu'), -- (the spell and ability lists, at the bottom left over the chat)
                 toggle('Hide', 'client', 'actionlist.hide', false),
                 toggle('Show the frame', 'client', 'actionlist.background', true),
                 subheader('Position'),
                 place('Position', 'actionlist', 'X: its left edge. Y: its bottom edge. The lists the Action Menu\'s Magic and Abilities open (the spells, the abilities). Off, they are the Interaction Menu\'s.', 0.8, 95.8, 'actionlist'),
+                scaled('actionlist'),
                 anchor('actionlist'),
                 element('Action Menu: Mounts', 'Action Menu'), -- (the list Mounts opens, at the bottom left over the chat)
                 toggle('Hide', 'client', 'actionmount.hide', false),
                 toggle('Show the frame', 'client', 'actionmount.background', true),
                 subheader('Position'),
                 place('Position', 'actionmount', 'X: its left edge. Y: its bottom edge. The list the Action Menu\'s Mounts opens (Raptor, Tiger, Coeurl...). Off, it is the Interaction Menu\'s.', 0.8, 95.8, 'actionmount'),
+                scaled('actionmount'),
                 anchor('actionmount'),
                 element('Alliance List 1', 'Party'),
                 hides(toggle('Hide', 'client', 'alliance1.hide', false), 'alliance_lists'),
                 toggle('Show the frame', 'client', 'alliance1.background', true),
                 subheader('Position'),
                 place('Position', 'alliance1', 'X: its right edge. Y: its bottom edge.', 99.4, 80, 'alliance1'),
+                scaled('alliance1'),
                 anchor('alliance1', true),
                 element('Alliance List 2', 'Party'),
                 hides(toggle('Hide', 'client', 'alliance2.hide', false), 'alliance_lists'),
                 toggle('Show the frame', 'client', 'alliance2.background', true),
                 subheader('Position'),
                 place('Position', 'alliance2', 'X: its right edge. Y: its bottom edge.', 99.4, 60, 'alliance2'),
+                scaled('alliance2'),
                 anchor('alliance2', true),
                 element('Auction Menu', 'Windows'),
                 toggle('Hide', 'client', 'auction.hide', false),
                 toggle('Show the frame', 'client', 'auction.background', true),
                 subheader('Position'),
                 place('Position', 'auction', 'X: its right edge. Y: its top edge.', 99.2, 4, 'auction'),
+                scaled('auction'),
                 anchor('auction', true),
                 element('Battle Timer', 'Combat'), -- (the time left in a battlefield or an instance: an hourglass and 29:27)
                 toggle('Hide', 'client', 'battletimer.hide', false),
                 toggle('Show the frame', 'client', 'battletimer.background', true),
                 subheader('Position'),
                 place('Position', 'battletimer', 'X: its left edge. Y: its top edge. The time left in a battlefield or an instance. Off, it goes with Menu Content.', 0.6, 6, 'battletimer'),
+                scaled('battletimer', 'Menu Content'),
                 anchor('battletimer'),
                 element('Besieged: Orders', 'Maps'), -- (the Besieged map's Orders and Battle Status, at the left)
                 toggle('Hide', 'client', 'besorders.hide', false),
                 toggle('Show the frame', 'client', 'besorders.background', true),
                 subheader('Position'),
                 place('Position', 'besorders', 'X: its left edge. Y: its top edge. Off, it goes with Menu Content.', 0.6, 3, 'besorders'),
+                scaled('besorders', 'Menu Content'),
                 anchor('besorders'),
                 element('Besieged: Standing', 'Maps'), -- (the Besieged map's Imperial Standing, at the bottom right)
                 toggle('Hide', 'client', 'besstanding.hide', false),
                 toggle('Show the frame', 'client', 'besstanding.background', true),
                 subheader('Position'),
                 place('Position', 'besstanding', 'X: its right edge. Y: its bottom edge.', 99.4, 96.5, 'besstanding'),
+                scaled('besstanding'),
                 anchor('besstanding', true),
                 element('Cast Bar', 'Combat'),
                 toggle('Hide', 'client', 'castbar.hide', false),
                 toggle('Show the frame', 'client', 'castbar.background', true),
                 subheader('Position'),
                 place('Position', 'castbar', 'X: its middle. Y: its top edge.', 4.2, 3.9, 'castbar'),
+                scaled('castbar'),
                 anchor('castbar'),
                 element('Change Jobs', 'Windows'), -- (the job list the Mog House's moogle opens)
                 toggle('Hide', 'client', 'jobchange.hide', false),
                 toggle('Show the frame', 'client', 'jobchange.background', true),
                 subheader('Position'),
                 place('Position', 'jobchange', 'X: its left edge. Y: its top edge. The job list the Mog House\'s moogle opens. Off, it is the Interaction Menu\'s.', 0.8, 54, 'jobchange'),
+                scaled('jobchange'),
                 anchor('jobchange'),
                 element('Chat: Input Line', 'Chat'),
                 hides(toggle('Hide', 'client', 'input.hide', false), 'chat_input'),
@@ -5493,6 +5599,7 @@ local TABS = {
                 toggle('Hide', 'client', 'fulllog.hide', false),
                 subheader('Position'),
                 place('Position', 'fulllog', 'X: its left edge. Y: its top edge.', 0.8, 4, 'fulllog'),
+                scaled('fulllog'),
                 slider('Height', 'client', 'fulllog.height', 80, 10, 100, 0.5, '%.1f%%'),
                 anchor('fulllog'),
                 element('Chat: Window 1 (Main)', 'Chat'),
@@ -5516,6 +5623,7 @@ local TABS = {
                 toggle('Show the frame', 'client', 'checkwin.background', true),
                 subheader('Position'),
                 place('Position', 'checkwin', 'X: its left edge. Y: its top edge. Off, it goes with Menu Content.', 0.6, 3, 'checkwin'),
+                scaled('checkwin', 'Menu Content'),
                 anchor('checkwin'),
                 element('Check Window Stats', 'Windows'), -- (equipstats_check.h: what a /checked player's gear adds, under the Check window or in a box of their own)
                 (function (row) -- equip.stats.check (Stats under /check, on by default) the other way round, as every other window's Hide
@@ -5531,12 +5639,14 @@ local TABS = {
                 toggle('Show the frame', 'client', 'colobayld.background', true),
                 subheader('Position'),
                 place('Position', 'colobayld', 'X: its right edge. Y: its bottom edge.', 99.4, 96.5, 'colobayld'),
+                scaled('colobayld'),
                 anchor('colobayld', true),
                 element('Colonization: Rank', 'Maps'), -- (the Colonization map's Coalition Rank, at the left)
                 toggle('Hide', 'client', 'colorank.hide', false),
                 toggle('Show the frame', 'client', 'colorank.background', true),
                 subheader('Position'),
                 place('Position', 'colorank', 'X: its left edge. Y: its top edge. Off, it goes with Menu Content.', 0.6, 3, 'colorank'),
+                scaled('colorank', 'Menu Content'),
                 anchor('colorank'),
                 element('Comment Window', 'Windows'), -- (the box at the bottom left: a checked player's bazaar message, a search comment)
                 toggle('Hide', 'client', 'commentwin.hide', false),
@@ -5544,6 +5654,7 @@ local TABS = {
                 toggle('Keep open over items', 'client', 'commentwin.keep', false),
                 subheader('Position'),
                 place('Position', 'commentwin', 'X: its left edge. Y: its bottom edge. A checked player\'s bazaar message under the Check window, and a search result\'s comment. Off, the game puts it at the bottom left.', 0.8, 87.3, 'commentwin'),
+                scaled('commentwin'),
                 anchor('commentwin'),
                 element('Compass'),
                 toggle('Hide', 'client', 'compass.hide', false),
@@ -5569,18 +5680,21 @@ local TABS = {
                 toggle('Show the frame', 'client', 'conqbalance.background', true),
                 subheader('Position'),
                 place('Position', 'conqbalance', 'X: its right edge. Y: its top edge.', 99.4, 3, 'conqbalance'),
+                scaled('conqbalance'),
                 anchor('conqbalance', true),
                 element('Conquest: Points', 'Maps'), -- (the conquest map's Conquest Points, at the bottom right)
                 toggle('Hide', 'client', 'conqpoints.hide', false),
                 toggle('Show the frame', 'client', 'conqpoints.background', true),
                 subheader('Position'),
                 place('Position', 'conqpoints', 'X: its right edge. Y: its bottom edge.', 99.4, 96.5, 'conqpoints'),
+                scaled('conqpoints'),
                 anchor('conqpoints', true),
                 element('Conquest: Regional Control', 'Maps'), -- (the box a zone under the conquest map's cursor shows)
                 toggle('Hide', 'client', 'conqcontrol.hide', false),
                 toggle('Show the frame', 'client', 'conqcontrol.background', true),
                 subheader('Position'),
                 place('Position', 'conqcontrol', 'X: its left edge. Y: its top edge. Off, it goes with Menu Content.', 0.6, 3, 'conqcontrol'),
+                scaled('conqcontrol', 'Menu Content'),
                 anchor('conqcontrol'),
                 element('Equipment', 'Windows'), -- (the Status and gil windows the Equipment window opens beside it: hide.windows)
                 hide_window('Hide the Status window', 'persona@equip'),
@@ -5599,6 +5713,7 @@ local TABS = {
                 toggle('Show the frame', 'client', 'expwin.background', true),
                 subheader('Position'),
                 place('Position', 'expwin', 'X: its left edge. Y: its top edge. Off, it sits under the Status window and goes with it.', 0.6, 13, 'expwin'),
+                scaled('expwin'),
                 anchor('expwin'),
                 element('Gil', 'Windows'), -- (the gil window: on the Status and Equipment screens, under a shop's list)
                 hide_window('Hide', 'money'),
@@ -5611,6 +5726,7 @@ local TABS = {
                 toggle('Show the "Help" caption', 'client', 'helpbar.label', true),
                 subheader('Position'),
                 place('Position', 'helpbar', 'X: its left edge. Y: its top edge.', 4.5, 1, 'helpbar'),
+                scaled('helpbar'),
                 slider('Width', 'client', 'helpbar.width', 91, 10, 100, 0.5, '%.1f%%'),
                 element('Help Bar: Title Box', 'Help Bar'), -- (the small box at the help bar's left with the page's name)
                 (function (row) -- helpbar.title=0 hid it before helptitle.hide: read as hidden, and cleared once Hide is set
@@ -5627,11 +5743,13 @@ local TABS = {
                 toggle('Show the frame', 'client', 'helptitle.background', true),
                 subheader('Position'),
                 place('Position', 'helptitle', 'X: its left edge. Y: its top edge.', 0.6, 1, 'helptitle'),
+                scaled('helptitle'),
                 element('HP Gauge', 'Combat'), -- (your HP, MP and TP the Commands menu shows while you fight)
                 toggle('Hide', 'client', 'hpgauge.hide', false),
                 toggle('Show the frame', 'client', 'hpgauge.background', true),
                 subheader('Position'),
                 place('Position', 'hpgauge', 'X: its left edge. Y: its top edge. Your HP, MP and TP that the Commands menu shows while you fight. Off, it goes with Menu Content.', 0.6, 3, 'hpgauge'),
+                scaled('hpgauge', 'Menu Content'),
                 anchor('hpgauge'),
                 element('Interaction Menu', 'Windows'), -- (the menus over the chat: an NPC's, a target's, the Action menu's lists)
                 toggle('Hide', 'client', 'menus.hide', false),
@@ -5646,12 +5764,14 @@ local TABS = {
                 toggle('Show the frame', 'client', 'inventory.background', true),
                 subheader('Position'),
                 place('Position', 'inventory', 'X: its left edge. Y: its top edge. The Items list from the main menu, its item descriptions with it.', 0.6, 3, 'inventory'),
+                scaled('inventory'),
                 anchor('inventory'),
                 element('Item Details', 'Windows'), -- (an item's description: under a list, the Check window's, a shop's...)
                 toggle('Hide', 'client', 'itemdetails.hide', false),
                 toggle('Show the frame', 'client', 'itemdetails.background', true),
                 subheader('Position'),
                 place('Position', 'itemdetails', 'X: its left edge. Y: its top edge. Every item\'s description, wherever it comes up. Off, it goes with its list.', 0.6, 20, 'itemdetails'),
+                scaled('itemdetails', 'Menu Content'),
                 anchor('itemdetails'),
                 element('Macro Bar', 'Combat'),
                 hides(toggle('Hide', 'client', 'macrobar.hide', false), 'macro_bar'),
@@ -5665,12 +5785,14 @@ local TABS = {
                 toggle('Solid buttons', 'client', 'macroeditoptions.solid', false),
                 subheader('Position'),
                 place('Position', 'macroeditoptions', 'X: its right edge. Y: its top edge. The box at the right while macros are edited (Button Edit: Copy, Paste, Delete; a macro\'s own). Off, where the game puts it.', 99.2, 11.5, 'macroeditoptions'),
+                scaled('macroeditoptions'),
                 anchor('macroeditoptions', true),
                 element('Macro Bar: Editing', 'Combat'),
                 toggle('Hide', 'client', 'macroedit.hide', false),
                 toggle('Show the frame', 'client', 'macroedit.background', true),
                 subheader('Position'),
                 place('Position', 'macroedit', 'X: its left edge. Y: its top edge. The macro bar while Edit Macro edits it (Ctrl and Alt) and the editor a macro opens in its place. Off, it goes with Menu Content.', 0.8, 4, 'macroedit'),
+                scaled('macroedit', 'Menu Content'),
                 anchor('macroedit'),
                 element('Main Menu', 'Main Menu'),
                 toggle('Hide', 'client', 'mainmenu.hide', false),
@@ -5680,43 +5802,50 @@ local TABS = {
                 subheader('Position'),
                 place('Position', 'mainmenu', 'X: its right edge. Y: its top edge. The menus it opens go there too.', 99.4, 3, 'mainmenu'),
                 anchor('mainmenu', true),
-                slider('Scale', 'client', 'mainmenu.scale', 100, 50, 200, 5, '%d%%'),
+                scaled('mainmenu'),
                 element('Main Menu: Status Sub-Menu', 'Main Menu'),
                 toggle('Hide', 'client', 'statusmenu.hide', false),
                 toggle('Show the frame', 'client', 'statusmenu.background', true),
                 toggle('Solid buttons', 'client', 'statusmenu.solid', false),
                 subheader('Position'),
                 place('Position', 'statusmenu', 'X: its right edge. Y: its top edge. The list Status opens (Combat Skl., Magic Skl., Currencies...), Unity\'s and Merit Points\'. Off, it goes with the main menu.', 99.4, 3, 'statusmenu'),
+                scaled('statusmenu', 'main menu'),
                 anchor('statusmenu', true),
                 element('Main Menu: Mission', 'Main Menu'),
                 toggle('Hide', 'client', 'missions.hide', false),
                 subheader('Position'),
                 place('Position', 'missions', 'X: its right edge. Y: its top edge. The list Missions opens (Nations, Zilart...). Off, it goes with the main menu.', 99.4, 3, 'missions'),
+                scaled('missions', 'main menu'),
                 anchor('missions', true),
                 element('Main Menu: Magic', 'Main Menu'),
                 toggle('Hide', 'client', 'magicmenu.hide', false),
                 subheader('Position'),
                 place('Position', 'magicmenu', 'X: its right edge. Y: its top edge. The list Magic opens (White Magic, Black Magic...). Off, it goes with the main menu.', 99.4, 3, 'magicmenu'),
+                scaled('magicmenu', 'main menu'),
                 anchor('magicmenu', true),
                 element('Main Menu: Abilities', 'Main Menu'),
                 toggle('Hide', 'client', 'abilitymenu.hide', false),
                 subheader('Position'),
                 place('Position', 'abilitymenu', 'X: its right edge. Y: its top edge. The list Abilities opens (Job Traits, Job Abil....). Off, it goes with the main menu.', 99.4, 3, 'abilitymenu'),
+                scaled('abilitymenu', 'main menu'),
                 anchor('abilitymenu', true),
                 element('Main Menu: Synthesis', 'Main Menu'),
                 toggle('Hide', 'client', 'synthmenu.hide', false),
                 subheader('Position'),
                 place('Position', 'synthmenu', 'X: its right edge. Y: its top edge. The list Synthesis opens (Crystal Synthesis, History). Off, it goes with the main menu.', 99.4, 3, 'synthmenu'),
+                scaled('synthmenu', 'main menu'),
                 anchor('synthmenu', true),
                 element('Main Menu: Party', 'Main Menu'),
                 toggle('Hide', 'client', 'partymenu.hide', false),
                 subheader('Position'),
                 place('Position', 'partymenu', 'X: its right edge. Y: its top edge. The list Party opens (Seek Party, Find Member...). Off, it goes with the main menu.', 99.4, 3, 'partymenu'),
+                scaled('partymenu', 'main menu'),
                 anchor('partymenu', true),
                 element('Main Menu: Options', 'Main Menu'),
                 toggle('Hide', 'client', 'sortmenu.hide', false),
                 subheader('Position'),
                 place('Position', 'sortmenu', 'X: its right edge. Y: its top edge. The sort options beside the Magic, Abilities and Items lists. Off, it goes with the main menu.', 99.4, 3, 'sortmenu'),
+                scaled('sortmenu', 'main menu'),
                 anchor('sortmenu', true),
                 element('Main Menu: Options Commands', 'Main Menu'),
                 toggle('Hide', 'client', 'sortconfirm.hide', false),
@@ -5724,31 +5853,37 @@ local TABS = {
                 toggle('Solid buttons', 'client', 'sortconfirm.solid', false),
                 subheader('Position'),
                 place('Position', 'sortconfirm', 'X: its right edge. Y: its top edge. The Yes/No the Options box\'s Auto asks before it sorts. Off, it stays where the game puts it.', 99.2, 10.3, 'sortconfirm'),
+                scaled('sortconfirm'),
                 anchor('sortconfirm', true),
                 element('Main Menu: Search', 'Main Menu'),
                 toggle('Hide', 'client', 'searchmenu.hide', false),
                 subheader('Position'),
                 place('Position', 'searchmenu', 'X: its right edge. Y: its top edge. The list Search opens (Area, Name, Job...) and the lists it opens. Off, it goes with the main menu.', 99.4, 3, 'searchmenu'),
+                scaled('searchmenu', 'main menu'),
                 anchor('searchmenu', true),
                 element('Main Menu: Region Info', 'Main Menu'),
                 toggle('Hide', 'client', 'regionmenu.hide', false),
                 subheader('Position'),
                 place('Position', 'regionmenu', 'X: its right edge. Y: its top edge. The list Region Info opens (Conquest, Besieged, Campaign, Colonization). Off, it goes with the main menu.', 99.4, 3, 'regionmenu'),
+                scaled('regionmenu', 'main menu'),
                 anchor('regionmenu', true),
                 element('Main Menu: View House', 'Main Menu'),
                 toggle('Hide', 'client', 'housemenu.hide', false),
                 subheader('Position'),
                 place('Position', 'housemenu', 'X: its right edge. Y: its top edge. The list View House opens (Mog Safe ... Mog Wardrobe 8). Off, it goes with the main menu.', 99.4, 3, 'housemenu'),
+                scaled('housemenu', 'main menu'),
                 anchor('housemenu', true),
                 element('Main Menu: Bazaar', 'Main Menu'),
                 toggle('Hide', 'client', 'bazaarmenu.hide', false),
                 subheader('Position'),
                 place('Position', 'bazaarmenu', 'X: its right edge. Y: its top edge. The list Bazaar opens (Set Prices, Edit Comment). Off, it goes with the main menu.', 99.4, 3, 'bazaarmenu'),
+                scaled('bazaarmenu', 'main menu'),
                 anchor('bazaarmenu', true),
                 element('Main Menu: Macro', 'Main Menu'),
                 toggle('Hide', 'client', 'macromenu.hide', false),
                 subheader('Position'),
                 place('Position', 'macromenu', 'X: its right edge. Y: its top edge. The list Macros opens (Edit Macro, Edit Equip Set) and its books\' and equip sets\' lists. Off, it goes with the main menu.', 99.4, 3, 'macromenu'),
+                scaled('macromenu', 'main menu'),
                 anchor('macromenu', true),
                 element('Main Menu: Macro Options', 'Main Menu'),
                 toggle('Hide', 'client', 'macrooptions.hide', false),
@@ -5757,12 +5892,14 @@ local TABS = {
                 toggle('Equip first', 'client', 'macrooptions.equipfirst', false),
                 subheader('Position'),
                 place('Position', 'macrooptions', 'X: its right edge. Y: its top edge. The box an equip set or a macro book opens beside its list (Name, Equipment...). Off, it opens at the chosen row, on the list\'s other side when there\'s no room.', 94.2, 4.6, 'macrooptions'),
+                scaled('macrooptions'),
                 anchor('macrooptions', true),
                 element('Main Menu: Config', 'Main Menu'),
                 toggle('Hide', 'client', 'configmenu.hide', false),
                 toggle('Enable extended game settings', 'client', 'gamesettings.extended', false),
                 subheader('Position'),
                 place('Position', 'configmenu', 'X: its right edge. Y: its top edge. The list Config opens (Gameplay, Chat Filters...). Off, it goes with the main menu.', 99.4, 3, 'configmenu'),
+                scaled('configmenu', 'main menu'),
                 anchor('configmenu', true),
                 element('Map', 'Maps'),
                 subheader('Layout'),
@@ -5787,11 +5924,13 @@ local TABS = {
                 toggle('Hide', 'client', 'mapcontrols.hide', false),
                 subheader('Position'),
                 place('Position', 'mapcontrols', 'X: its right edge. Y: its top edge. Off, it goes with the main menu.', 99.4, 3, 'mapcontrols'),
+                scaled('mapcontrols', 'main menu'),
                 anchor('mapcontrols', true),
                 element('Menu Content', 'Windows'),
                 toggle('Show the frames', 'client', 'menucontent.background', true),
                 subheader('Position'),
                 place('Position', 'menucontent', 'X: the left edge of the first menu (Status, Items, Quests). Y: its top edge. The others keep their places from it.', 0, 0, 'menucontent'),
+                scaled('menucontent'),
                 anchor('menucontent'),
                 element('Network Window'),
                 (function (row) -- network.panel the other way round, as every other window's Hide
@@ -5803,6 +5942,7 @@ local TABS = {
                 toggle('Show the frame', 'client', 'network.background', true),
                 subheader('Position'),
                 place('Position', 'netwin', 'X: its right edge. Y: its top edge.', 99.4, 1, 'netwin'),
+                scaled('netwin'),
                 pair('Contents', 'Moves what is drawn in it. X: left or right. Y: up or down. Dot: the size of the Dot icon.',
                      { slider('X', 'client', 'network.x', 0, -40, 40, 1, '%+d'),
                        slider('Y', 'client', 'network.y', 0, -10, 10, 1, '%+d'),
@@ -5813,7 +5953,7 @@ local TABS = {
                 subheader('Position'),
                 place('Position', 'party', 'X: its right edge. Y: its bottom edge.', 99.4, 99, 'party'),
                 anchor('party', true),
-                slider('Scale', 'client', 'party.scale', 100, 50, 200, 5, '%d%%'),
+                scaled('party'),
                 element('Region Map', 'Maps'),
                 subheader('Layout'),
                 (function (row) row.rebuild = true return row end)( -- the rows below lock and unlock by it
@@ -5837,12 +5977,14 @@ local TABS = {
                 toggle('Show the frame', 'client', 'shopconfirm.background', true),
                 subheader('Position'),
                 place('Position', 'shopconfirm', 'X: its left edge. Y: its top edge. A shop\'s Yes/No before it sells or buys. Off, it stays where the game puts it.', 0.6, 40, 'shopconfirm'),
+                scaled('shopconfirm', 'Menu Content'),
                 anchor('shopconfirm'),
                 element('Spell Info', 'Action Menu'), -- (the box beside the Magic and Abilities lists: a spell's MP, the recast)
                 toggle('Hide', 'client', 'spellinfo.hide', false),
                 toggle('Show the frame', 'client', 'spellinfo.background', true),
                 subheader('Position'),
                 place('Position', 'spellinfo', 'X: its right edge. Y: its top edge. The box beside the Magic and Abilities lists with the MP and recast.', 99.2, 1.3, 'spellinfo'),
+                scaled('spellinfo'),
                 anchor('spellinfo', true),
                 element('Status Icons', 'Combat'),
                 hides(toggle('Hide', 'client', 'buffs.hide', false), 'status_icons'),
@@ -5873,12 +6015,14 @@ local TABS = {
                 toggle('Show the frame', 'client', 'storagemenu.background', true),
                 subheader('Position'),
                 place('Position', 'storagemenu', 'X: its right edge. Y: its top edge. The list of bags Equipment and Items open beside them (Inventory, Mog Wardrobe...).', 99.4, 3, 'storagemenu'),
+                scaled('storagemenu'),
                 anchor('storagemenu', true),
                 element('Target Window', 'Combat'),
                 hides(toggle('Hide', 'client', 'target.hide', false), 'target_window'),
                 toggle('Show the frame', 'client', 'target.background', true),
                 subheader('Layout'),
                 place('Position', 'target', 'X: its middle. Y: its top edge.', 50, 4, 'target'),
+                scaled('target'),
                 anchor('target'),
                 slider('Width', 'client', 'target.width', 112, 80, 600, 4, '%d'),
                 pair('Padding', 'Room added round what\'s in the window: Across at its left and right, Down at its top and bottom.',
@@ -7326,8 +7470,8 @@ local layers = {
         { 'Less shimmer', FX, 'filter' },
         { 'Bump mapping', 'graphics', 'bump' },
         { 'Ink lines', FX, 'outline' },
-        { 'Brightness bands', FX, 'bands' },
-        { 'Depth of field', FX, 'dof' },
+        { 'Brightness Bands', FX, 'bands' },
+        { 'Depth of Field', FX, 'dof' },
     },
     info = nil, info_at = -1,
 }
@@ -8035,7 +8179,7 @@ M.TABS, M.TIPS, M.tab_named = TABS, TIPS, tab_named
 M.DEBUG_VIEW = needs_dx(choice('Debug view', FX, 'debug', '0', {
     { '0', 'Off' },
     { header = 'Effects' },
-    { '3', 'Bloom' }, { '8', 'Bounce light' }, { '7', 'Depth of field' }, { '2', 'Fog' }, { '9', 'Glow effects' }, { '4', 'God rays' },
+    { '3', 'Bloom' }, { '8', 'Bounce light' }, { '7', 'Depth of Field' }, { '2', 'Fog' }, { '9', 'Glow effects' }, { '4', 'God rays' },
     { '6', 'Ink lines' }, { '1', 'Occlusion' },
     { header = 'Rain & Water' },
     { '30', 'Puddles' }, { '31', 'Rain' }, { '18', 'Reflection ground' }, { '14', 'Reflection mask' }, { '17', 'Reflections' }, { '33', 'Ray-traced reflections' }, { '11', 'Water' }, { '34', 'Water triangles' },

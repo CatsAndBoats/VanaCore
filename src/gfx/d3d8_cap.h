@@ -68,6 +68,16 @@ static void cap_draw(GfxDraw* d, uint32_t prim, uint32_t count, uint32_t first, 
                 u2f(m[0]), u2f(m[1]), u2f(m[2]), u2f(m[3]), u2f(m[4]), u2f(m[5]), u2f(m[6]), u2f(m[7]), u2f(m[8]), u2f(m[9]),
                 u2f(m[10]), u2f(m[12]), u2f(m[13]), u2f(m[14]), u2f(m[16]), crs[141], crs[145], crs[146], crs[147], crs[148],
                 crs[142], crs[29]);
+            /* ... and the light as drawn (after night_light and character_light): the ambient, then each light's type, diffuse,
+             * ambient, range, attenuation and distance from the camera */
+            fprintf(f, "\n  ambient %.2f %.2f %.2f", d->u.ambient[0], d->u.ambient[1], d->u.ambient[2]);
+            for (int i = 0; i < d->vs.nlights; ++i)
+            {
+                const GfxLight* L = &d->u.light[i];
+                fprintf(f, " | light%d t%u d %.2f %.2f %.2f a %.2f %.2f %.2f r %.1f att %g %g %g at %.1f", i, d->vs.light_type[i],
+                    L->diffuse[0], L->diffuse[1], L->diffuse[2], L->ambient[0], L->ambient[1], L->ambient[2], L->pos[3], L->att[0],
+                    L->att[1], L->att[2], sqrtf(L->pos[0] * L->pos[0] + L->pos[1] * L->pos[1] + L->pos[2] * L->pos[2]));
+            }
         }
         fprintf(f, "\n  tfactor %08x", crs[60]);
         /* each stage's texture transform that's on: its matrix's rows */

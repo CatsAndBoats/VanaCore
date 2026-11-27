@@ -109,6 +109,7 @@ exit /b 0</Command>
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="framepacing.cpp" />
     <ClCompile Include="gearload.cpp" />
+    <ClCompile Include="fightwatch.cpp" />
     <ClCompile Include="hideui.cpp" />
     <ClCompile Include="itemcount.cpp" />
     <ClCompile Include="itemlist.cpp" />
@@ -271,6 +272,7 @@ exit /b 0</Command>
     <ClCompile Include="water.cpp" />
     <ClCompile Include="window.cpp" />
     <ClCompile Include="zoneweather.cpp" />
+    <ClCompile Include="weatherlook.cpp" />
     <ClCompile Include="zonefloor.cpp" />
     <ClCompile Include="zonemesh.cpp" />
     <ClCompile Include="zone_casters.cpp" />
@@ -379,6 +381,7 @@ exit /b 0</Command>
     <ClInclude Include="camera_walls.h" />
     <ClInclude Include="framepacing.hpp" />
     <ClInclude Include="gearload.hpp" />
+    <ClInclude Include="fightwatch.hpp" />
     <ClInclude Include="hideui.hpp" />
     <ClInclude Include="itemcount.hpp" />
     <ClInclude Include="itemlist.hpp" />

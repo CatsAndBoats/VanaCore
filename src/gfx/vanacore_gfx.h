@@ -362,8 +362,25 @@ typedef struct VanaWeather
     int on;
     float amount[6];
     int preview;
+    float wind_dir; /* the wind's heading, degrees in the ground plane (weather.wind.direction) */
+    float wind;     /* its strength, times (weather.wind.strength, 0 still to 3) */
+    int drift;      /* 1: the heading wanders some 45 degrees either side of wind_dir (weather.wind.drift) */
+    int fixed;      /* 1: every weather blows along wind_dir; 0 each new weather picks its own (weather.wind.fixed) */
 } VanaWeather;
 void vanacore_gfx_set_weather_fx(const VanaWeather* settings);
+/* a weather's look borrowed from another zone's files (core/weatherlook.cpp), each frame, for a weather the zone has none of:
+ * the fog's colour (0 to 1) and its distance's ratio, the ambient and sun or moon light's ratios for the terrain (_t) and the
+ * characters (_m), and the dome's 8 slices (colours 0 to 1, heights 0 the horizon to 1 the zenith; sky 0 none). active 0: none,
+ * the last one fades out */
+typedef struct VanaWeatherLook
+{
+    int active;
+    float fog[3], fog_ratio;
+    float amb_t[3], sun_t[3], amb_m[3], sun_m[3];
+    int sky;
+    float slice[8][3], elev[8];
+} VanaWeatherLook;
+void vanacore_gfx_set_weather_look(const VanaWeatherLook* look);
 
 typedef struct VanaWater
 {
@@ -1006,6 +1023,41 @@ int vanacore_gfx_helper_lost(char* why, int size);
  * asked; 0 with no helper running (Direct3D 12, with DLSS or FSR on), why into why */
 int vanacore_gfx_dlss_crash_test(int kind, char* why, int size);
 const char* vanacore_gfx_scope_name(int i);
+
+/* Game thread. The fight watch (core fightwatch.cpp; d3d8_fightwatch.h): while on, each frame's lighting as the game's lit
+ * 3D draws were given it (after VanaCore's night and characters.brightness), for the world washing white or pink in a fight.
+ * vanacore_gfx_fight_frame: the last whole frame's with a world scene, 1 when there's one (0 while off). */
+#define VANA_GFX_FIGHT_LIGHTS 16
+typedef struct VanaGfxFightLight
+{
+    uint8_t type;         /* 1 point, 2 spot, 3 directional */
+    float diffuse[3], ambient[3];
+    float range, att[3];  /* (a point or spot light's) */
+    float nearest;        /* the nearest it was to the camera, in the game's units (a point or spot light's) */
+    uint32_t draws, char_draws; /* the lit draws it lit, and of them the characters' */
+} VanaGfxFightLight;
+typedef struct VanaGfxFight
+{
+    uint32_t frame;       /* Presents since the watch was turned on */
+    uint32_t lit_draws;
+    float lit_max;        /* the most a lit draw's light could add to, in its brightest channel: its ambient + every light's
+                           * ambient and diffuse (the game's scale: 1 is white, and MODULATE2X shows 0.5 as the texture is) */
+    int lit_max_char;     /* ... and whether that draw was a character's */
+    uint32_t nonfinite;   /* lit draws whose light added up to NaN or infinity */
+    float emissive_max, diffuse_max; /* the materials' emissive and diffuse at their brightest channel */
+    int scene;            /* the world's scene was seen (what's below is its) */
+    float ambient[3];     /* D3DRS_AMBIENT of the draw the camera came from */
+    float fog_color[3], fog_start, fog_end;
+    int fog_on;
+    float sun_color[3];   /* the directional light the world used most */
+    int sun_on;
+    uint32_t nlights, lights_dropped; /* distinct lights, and those past VANA_GFX_FIGHT_LIGHTS */
+    VanaGfxFightLight light[VANA_GFX_FIGHT_LIGHTS];
+} VanaGfxFight;
+void vanacore_gfx_fight_watch(int on);
+int vanacore_gfx_fight_frame(VanaGfxFight* out);
+/* The draw log ([graphics] drawlog's) of the next frame alone into path, whatever [graphics] drawlog says. */
+void vanacore_gfx_drawlog_once(const char* path);
 
 #ifdef __cplusplus
 }

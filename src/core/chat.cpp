@@ -2929,6 +2929,7 @@ void preview(const std::string& key, double value)
         g_input_x = within(0, 100);
     else if (key == "input.y")
         g_input_y = within(0, 100);
+    hudwin::preview(key, value); // <id>.scale
 }
 
 namespace {

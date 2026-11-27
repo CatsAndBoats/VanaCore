@@ -24,6 +24,7 @@ static double g_rain_clock;         /* the drops' time, seconds, wrapped at 600 
 static uint64_t g_rain_last_ns;     /* when the wetness last moved on */
 static uint32_t g_rain_frame;       /* ... in which frame (g_scene.frame): once a frame */
 static float g_rain_dt;             /* the last frame's length, seconds (the spatter's step) */
+static int g_rain_preview;          /* weather.preview is on (d3d8_set_weather_fx): it rains as previewed wherever */
 
 void d3d8_set_rain(const RainSettings* settings)
 {
@@ -50,7 +51,7 @@ void d3d8_set_zone_weathers(uint32_t mask) { g_rain_zone_weathers = mask; }
  * so rain as given. */
 static int rain_zone_dry(void)
 {
-    return g_rain_zone_weathers != 0 && (g_rain_zone_weathers & (1u << 6 | 1u << 7)) == 0;
+    return !g_rain_preview && g_rain_zone_weathers != 0 && (g_rain_zone_weathers & (1u << 6 | 1u << 7)) == 0;
 }
 
 /* Thunder weathers (14, 15) where rain would be wrong, left dry (rain.thunder): a zone whose DAT has no rain (rain_zone_dry) -

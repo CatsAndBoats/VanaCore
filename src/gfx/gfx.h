@@ -308,6 +308,40 @@ typedef struct GfxDraw
     const GfxInst* inst;
 } GfxDraw;
 
+/* Texture Filtering ([graphics.effects] aniso: 0 the game's own, 1 trilinear, 2 to 16 anisotropic), laid over what the game
+ * asked for on the world's solid textures (not the interface's, not the sky's or effects' - which write no depth: the sky's
+ * clouds, mapped at steep angles near the horizon, flicker through an anisotropic filter as the camera turns), whatever filter
+ * it asked for; down a texture's chain only as far as it has been filled without a gap, so a level never uploaded isn't sampled
+ * (2026-11-27: it took only textures the game asked a linear filter for with every level filled). Texture Sharpness (tex_sharp,
+ * 0 to 10): the mips chosen up to 2 levels finer. Stage i of draw d; the scene's own target is left to the back end's scene
+ * filter. PROBE (2026-11-27, to come out): which of these the ground fails, five lines in the log. */
+void rt_log(const char* fmt, ...);
+static inline void gfx_world_filter(GfxSampler* sk, const GfxDraw* d, int i, int scene, uint32_t levels, uint32_t filled,
+                                    float aniso, float sharp)
+{
+    static uint32_t n[7], said; /* (PROBE) binds: not depth-writing, projected, scene, one level, gap at level 1, taken, all */
+    if (d->vs.rhw)
+        return;
+    const int why = !d->depth.zwrite ? 0 : d->fs.st[i].projected ? 1 : scene ? 2 : levels < 2 ? 3 : !(filled & 2u) ? 4 : 5;
+    ++n[why];
+    if (++n[6] % 200000 == 0 && said++ < 5)
+        rt_log("[recomp] Texture Filtering probe: of %u world binds, no depth write %u, projected %u, scene %u, one level %u, "
+               "level 1 never filled %u, filtered %u\n", n[6], n[0], n[1], n[2], n[3], n[4], n[5]);
+    if (why < 5)
+        return;
+    uint32_t ready = 0;
+    while (ready < levels && ready < 32 && ((filled >> ready) & 1u))
+        ++ready;
+    if (sharp > 0.0f)
+        sk->lod_bias = (int8_t)(-(sharp > 10.0f ? 10.0f : sharp) * 3.2f); /* (sixteenths of a level: 10 is 2 levels) */
+    if (!(aniso >= 1.0f))
+        return;
+    sk->mag = 2, sk->mip = 2, sk->min = aniso > 1.0f ? 3 : 2;
+    sk->max_aniso = (uint8_t)(aniso > 16.0f ? 16.0f : aniso);
+    if (ready < levels && (sk->lod_cap == 0 || sk->lod_cap > ready))
+        sk->lod_cap = (uint8_t)ready;
+}
+
 /* A piece's own part of a batched draw (GfxDraw.inst): GfxU's wvp, wv and wvit as they lie there (column after column, as
  * the HLSL reads a matrix), then GfxDraw.anchor. The vertex function reads the matrices by SV_InstanceID (gfx_hlsl.c), 208
  * bytes a piece */
@@ -378,7 +412,7 @@ int gfx_player_pool(float m[16]);
  * layers, drawn after them, had none and stood out unfogged against the fogged shore). The back ends keep it from the
  * composite's uniforms (fogc, fogp, up, sun, suncol: the same as FxU's), gfx_scene_done forgets it first (with the pool).
  * gfx_height_fog gives it as a draw's texture matrix 4 (GfxFsKey.hfog): fog colour and density at the camera's height;
- * falloff, most fog, scattering g, then the sun glow's colour (suncol times sun.w times fog_sun) in the 4th of each of the
+ * falloff, most fog, scattering g, then the sun glow's colour (suncol times sun.w times fog_sunlight / 5) in the 4th of each of the
  * last three rows; up; the sun's direction. 0 and nothing written when this frame's composite laid no fog. */
 void gfx_height_fog_keep(const float fogc[4], const float fogp[4], const float up[3], const float sun[4], const float suncol[3]);
 int gfx_height_fog(float m[16]);

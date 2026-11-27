@@ -779,10 +779,17 @@ void vanacore_gfx_set_weather(unsigned weather, int known) { d3d8_set_weather(we
 void vanacore_gfx_set_zone_weathers(uint32_t mask) { d3d8_set_zone_weathers(mask); }
 void vanacore_gfx_set_weather_fx(const VanaWeather* in)
 {
-    WeatherSettings s = { in->on, { 0 }, in->preview };
+    WeatherSettings s = { in->on, { 0 }, in->preview, in->wind_dir, in->wind, in->drift, in->fixed };
     for (int i = 0; i < WX_KINDS; ++i)
         s.amount[i] = in->amount[i];
     d3d8_set_weather_fx(&s);
+}
+void vanacore_gfx_set_weather_look(const VanaWeatherLook* in)
+{
+    _Static_assert(sizeof(VanaWeatherLook) == sizeof(WeatherLook), "VanaWeatherLook and WeatherLook are field for field");
+    WeatherLook l;
+    memcpy(&l, in, sizeof l);
+    d3d8_set_weather_look(&l);
 }
 void vanacore_gfx_set_water(const VanaWater* in)
 {

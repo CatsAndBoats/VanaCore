@@ -59,6 +59,7 @@
 #include "gamewin.hpp"
 #include "graphics.hpp"
 #include "gearload.hpp"
+#include "fightwatch.hpp"
 #include "backdrop.hpp"
 #include "gui.hpp"
 #include "hideui.hpp"
@@ -988,6 +989,7 @@ HRESULT __stdcall present(void* device, const RECT* source, const RECT* dest, HW
         packetwatch::on_frame(); // [client] packets.watch: the setting read, the line of counts
         itemcount::on_frame();
         gearload::on_frame(); // gear parts that don't load, logged
+        fightwatch::on_frame(); // near an Aern: the frame's lighting and the scene's colour, logged (the white-out reports)
         itemlist::on_frame();
         hudwin::raise_moved(); // [client] itemdetails.move: the item details drawn over every menu
         spelllist::on_frame();

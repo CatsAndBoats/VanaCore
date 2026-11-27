@@ -4,11 +4,41 @@
  * letters) and what the game asks of the mouse about it is asked back at the place the game laid it out: IsOnWindow (the
  * pointer over a window: its keys, the lists' mouse blocks) and IsOnButton (chat.cpp's on_button_hook: the row or button
  * under the pointer). The main menu's lists that go with it (kFollow, their Position off) and the windows laid out in its
- * place that aren't the table's (its second page, Linkshell's...) take mainmenu.scale. hudwin.cpp includes this inside its
- * namespace after main_menu_list (hudwin_up.h), whose name it uses. It is no file of its own. */
+ * place that aren't the table's (its second page, Linkshell's...) take mainmenu.scale. Every table window with a Position
+ * (kMove) has one: the Status Icons have their own Size (buffs.scale, buffwin.cpp) and the macro bar no place of its own.
+ * Menu Content's windows (content_member, and a kContent one with its Position off) take menucontent.scale about its box's
+ * corner, so they stay laid out as they were together; the Items list with inventory.move on, inventory.scale about its top
+ * left. Two windows another module places are here too (g_extras: the cast bar, the target window), their boxes scaled
+ * there (castbar.cpp, targetwin.cpp: scale). hudwin.cpp includes this inside its namespace after main_menu_list
+ * (hudwin_up.h), whose name it uses. It is no file of its own. */
 #pragma once
 
 namespace {
+
+// A window another module places, with an <id>.scale of its own here: its layout and its anchor point (its X and Y's)
+struct Extra {
+    const char* id;
+    char layout[16 + 1];
+    double anchor_x, anchor_y;
+    double scale = 1;
+};
+Extra g_extras[] = {
+    {"castbar", "menu    casttime", 0.5, 0}, // (castbar.cpp: X its middle, Y its top)
+    {"target", "menu    targetwi", 0.5, 0},  // (targetwin.cpp: X its middle, Y its top)
+};
+
+double percent_scale(const std::wstring& id, const wchar_t* ini)
+{
+    return number(id + L".scale", 100, 50, 200, ini) / 100.0;
+}
+
+void scale_reload(const wchar_t* ini)
+{
+    for (auto& w : g_windows)
+        w.scale = (w.can & kMove) != 0 ? percent_scale(std::wstring(w.id, w.id + std::strlen(w.id)), ini) : 1.0;
+    for (auto& e : g_extras)
+        e.scale = percent_scale(std::wstring(e.id, e.id + std::strlen(e.id)), ini);
+}
 
 // IsOnWindow (FUN_10118810, __thiscall window, point; ret 4): the point (x, y, int) inside the window's frame (+0x3A..+0x40),
 // read live 2026-11-27: mov edx,[esp+4]; push esi; movsx esi,[ecx+3Ch]; mov eax,[edx+4]; cmp esi,eax; jg; movsx esi,[ecx+40h]
@@ -55,6 +85,8 @@ const Window* scale_window(const char* layout, bool& follows)
                 follows = true;
                 return window_named("mainmenu");
             }
+            if ((w.can & kContent) != 0 && !w.move)
+                return nullptr; // (Menu Content's while its Position is off: content_scale)
             return &w;
         }
     if (main_menu_list(layout)) {
@@ -62,6 +94,23 @@ const Window* scale_window(const char* layout, bool& follows)
         return window_named("mainmenu");
     }
     return nullptr;
+}
+
+// Menu Content's scale for window `window` of `layout`, one of its windows, about its box's corner (where its first window
+// goes: the game's 16, 48 in the area, or Menu Content's box with its Position on)
+bool content_scale(const void* window, const char* layout, double& s, double& ox, double& oy)
+{
+    const Window* content = window_named("menucontent");
+    if (content == nullptr || content->scale == 1.0 || g_manager == nullptr || !content_member(window, layout))
+        return false;
+    int area_left = 0, area_top = 0, area_w = 0, area_h = 0;
+    if (!area(area_left, area_top, area_w, area_h))
+        return false;
+    int left = area_left + kItemsX, top = area_top + kItemsY;
+    if (content->move && !wanted(*content, true, kContentW, kContentH, left, top))
+        return false;
+    s = content->scale, ox = left, oy = top;
+    return true;
 }
 
 // Window `ctrl`'s scale (other than 1) and its anchor point, the interface's units
@@ -74,17 +123,26 @@ bool scale_of(const void* ctrl, double& s, double& ox, double& oy)
         const char* layout = *reinterpret_cast<const char* const*>(window + kWindowLayout);
         if (layout == nullptr)
             return false;
-        bool follows = false;
-        const Window* w = scale_window(layout, follows);
-        if (w == nullptr || w->scale == 1.0)
-            return false;
         const short* frame = reinterpret_cast<const short*>(window + kWinFrame);
         if (frame[2] <= frame[0] || frame[3] <= frame[1])
             return false;
-        s = w->scale;
-        ox = frame[0] + w->anchor_x * (frame[2] - frame[0]); // (one that goes with the main menu: its anchor, the top right)
-        oy = frame[1] + w->anchor_y * (frame[3] - frame[1]);
-        return true;
+        // about its anchor point, `ax` and `ay` of the way across it
+        const auto about = [&](double scale, double ax, double ay) {
+            s = scale;
+            ox = frame[0] + ax * (frame[2] - frame[0]);
+            oy = frame[1] + ay * (frame[3] - frame[1]);
+            return scale != 1.0;
+        };
+        bool follows = false;
+        if (const Window* w = scale_window(layout, follows))
+            return about(w->scale, w->anchor_x, w->anchor_y); // (one that goes with the main menu: its anchor, the top right)
+        const Window* items = window_named("inventory");
+        if (items != nullptr && items->move && std::memcmp(layout + kLayoutName, kItemsName, 16) == 0)
+            return about(items->scale, 0, 0);
+        for (const auto& e : g_extras)
+            if (std::memcmp(layout + kLayoutName, e.layout, 16) == 0)
+                return about(e.scale, e.anchor_x, e.anchor_y);
+        return content_scale(ctrl, layout, s, ox, oy);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
@@ -128,6 +186,29 @@ bool map_point(const void* window, const int* point, int mapped[2])
         return true;
     }
     return false;
+}
+
+void preview(const std::string& key, double value)
+{
+    const double s = (std::min)((std::max)(value, 50.0), 200.0) / 100.0;
+    for (auto& w : g_windows)
+        if ((w.can & kMove) != 0 && key == std::string(w.id) + ".scale") {
+            w.scale = s;
+            return;
+        }
+    for (auto& e : g_extras)
+        if (key == std::string(e.id) + ".scale") {
+            e.scale = s;
+            return;
+        }
+}
+
+double scale(const char* id)
+{
+    for (const auto& e : g_extras)
+        if (id != nullptr && std::strcmp(e.id, id) == 0)
+            return e.scale;
+    return 1.0;
 }
 
 Scaled::Scaled(const void* ctrl)

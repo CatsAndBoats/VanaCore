@@ -1563,3 +1563,114 @@ function M.pill(dl, x, cy, label, alpha)
     text_centred(dl, x, cy - ph / 2, pw, ph, label, P.accent2, fonts.semi, SMALL - 2, alpha)
     return pw, ph
 end
+
+-------------------------------------------------------------------------------
+-- The banner
+-------------------------------------------------------------------------------
+
+-- `text` (row.text) broken at word ends into lines that fit `room` pixels, kept on the row until the room or text changes
+-- (a page's notes and the banners)
+function M.wrap_lines(row, room)
+    if row.wrap_room == room and row.wrap_lines ~= nil and row.wrap_text == row.text then
+        return row.wrap_lines
+    end
+    local lines, line = {}, ''
+    for word in tostring(row.text):gmatch('%S+') do
+        local try = line == '' and word or line .. ' ' .. word
+        if line ~= '' and measure(try, fonts.text, BODY - 1) > room then
+            lines[#lines + 1] = line
+            line = word
+        else
+            line = try
+        end
+    end
+    lines[#lines + 1] = line
+    row.wrap_room, row.wrap_lines, row.wrap_text = room, lines, row.text
+    return lines
+end
+
+-- THE BANNER STANDARD. Every notice on a page is this one banner (kinds warning, callout, alert, notice, hint; data.lua's
+-- callout(title, text, tone) is the one to use): the rows' own width (lx to right), its tone's colour fading left to right
+-- over the panel with a faint edge of it, no bar, no icon; a title in capitals in the tone's colour, the text wrapped under
+-- it close up. Five tones (row.tone): 'warning' orange, 'success' green, 'basic' grey, 'notice' blue, 'danger' red. Don't
+-- draw a box of any other style for a notice. Its spacing, in pixels before the scale:
+M.BANNER = {
+    TOP = 15,   -- from the box's top to the middle of its first line
+    TITLE = 15, -- from the title's middle to the first text line's (2026-11-27, 20 till then)
+    LINE = 17,  -- from one text line's middle to the next's ("the line height ... a bit too much", 20 till then)
+    BOTTOM = 15, -- from the last line's middle to the box's bottom
+    INSET = 10, -- the text in from the box's left edge
+}
+M.BANNER_KINDS = { warning = true, callout = true, alert = true, notice = true, hint = true }
+M.BANNER_TONES = { warning = 'amber', success = 'green', basic = 'dim', notice = 'accent', danger = 'rose' }
+M.BANNER_OLD = { warn = 'warning', muted = 'basic', grey = 'basic' } -- the tones' old names
+
+function M.banner_tone(row)
+    local t = M.BANNER_OLD[row.tone] or row.tone
+    if M.BANNER_TONES[t] then
+        return t
+    end
+    return (row.kind == 'warning' or row.kind == 'alert') and 'danger' or row.kind == 'hint' and 'basic'
+        or row.kind == 'notice' and 'notice' or 'warning'
+end
+
+-- A banner that has a switch (row.switch: get, set) and a state (row.state() -> tone, text: Buttons' Enable): its tone and text
+-- from the state, now, and its text's room less the switch's
+function M.banner_room(row, room)
+    if row.state ~= nil then
+        local ok, tone, text = pcall(row.state)
+        if ok then
+            row.tone, row.text = tone, text
+        end
+    end
+    return row.switch ~= nil and room - S(M.SW_W) - S(20) or room
+end
+
+-- its height in a page's rows (4 px above and below the box), `room` the width its text wraps to
+function M.banner_height(row, room)
+    local B = M.BANNER
+    local lines = math.max(1, #M.wrap_lines(row, M.banner_room(row, room)))
+    return S(4) + S(B.TOP) + (row.title and S(B.TITLE) or 0) + (lines - 1) * S(B.LINE) + S(B.BOTTOM) + S(4)
+end
+
+-- draws it: the row at y, `h` its height (banner_height), from lx to right; `room` the width its text wraps to; `tip` its
+-- tooltip while hovered (or nil). Its switch's change is set at once and the page built again
+function M.banner(dl, id, row, lx, right, y, h, room, alpha, tip)
+    local B = M.BANNER
+    room = M.banner_room(row, room) -- (also sets its tone and text from its state)
+    local color = P[M.BANNER_TONES[M.banner_tone(row)]]
+    local lines = M.wrap_lines(row, room)
+    local bx, by, bw, bh, r = lx, y + S(4), right - lx, h - S(8), S(4)
+    local steps = 24
+    fill(dl, bx, by, r * 2, bh, color, r, CORNERS.left, 0.18 * alpha)
+    fill(dl, bx + bw - r * 2, by, r * 2, bh, color, r, CORNERS.right, 0.03 * alpha)
+    for k = 0, steps - 1 do
+        local x1 = bx + r * 2 + math.floor((bw - r * 4) * k / steps)
+        local x2 = bx + r * 2 + math.floor((bw - r * 4) * (k + 1) / steps)
+        fill(dl, x1, by, math.max(1, x2 - x1), bh, color, 0, 0, (0.18 - 0.15 * (k + 0.5) / steps) * alpha)
+    end
+    outline(dl, bx, by, bw, bh, color, r, 0, 1, 0.22 * alpha)
+    local tx = bx + S(B.INSET)
+    local ly = by + S(B.TOP)
+    if row.title then
+        text_mid(dl, tx, ly, tostring(row.title):upper(), color, fonts.semi, BODY - 1, alpha)
+        ly = ly + S(B.TITLE)
+    end
+    for _, line in ipairs(lines) do
+        text_mid(dl, tx, ly, line, P.text, fonts.text, BODY - 1, alpha)
+        ly = ly + S(B.LINE)
+    end
+    if row.switch ~= nil then
+        -- its switch at the banner's right end, in the middle of its height
+        local ok, on = pcall(row.switch.get)
+        local new, flipped = M.switch(id, right - S(M.SW_W) - S(10), by + bh / 2, ok and on or false, true, alpha, nil, M.SW_GREEN)
+        if flipped then
+            M.flush()
+            pcall(row.switch.set, new)
+            M.rebuild()
+        end
+        if tip ~= nil then
+            tooltip(tip)
+        end
+    end
+end

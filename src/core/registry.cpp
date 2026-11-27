@@ -562,7 +562,30 @@ void read_settings(const wchar_t* ini)
 
 // The keys a vanacore.ini from before has where they no longer are: moved to where they are now,
 // where it doesn't have them already, or taken out. The window's size in the windowed modes is
-// resolution.game's now, so size is gone.
+// resolution.game's now, so size is gone. The height fog's fog_sun (0 to 2) is fog_sunlight (0 to 10, as /vana shows
+// it: times 5) and fog_g fog_glow (low, medium or high where it was one of theirs, else the number as it was).
+enum class Convert { Copy, Times5, GlowWord };
+
+// `value` as the key it moves to has it (Convert): false where it isn't a number to convert
+bool convert_moved(Convert how, wchar_t (&value)[256])
+{
+    if (how == Convert::Copy)
+        return true;
+    wchar_t* end = nullptr;
+    const double number = std::wcstod(value, &end);
+    if (end == value || *end != L'\0')
+        return false;
+    if (how == Convert::Times5) {
+        std::swprintf(value, 256, L"%g", number * 5.0);
+        return true;
+    }
+    const wchar_t* word = std::fabs(number - 0.95) < 0.001 ? L"low" : std::fabs(number - 0.75) < 0.001 ? L"medium"
+                          : std::fabs(number - 0.6) < 0.001  ? L"high" : nullptr;
+    if (word != nullptr)
+        wcscpy_s(value, word);
+    return true;
+}
+
 void move_old_keys(const wchar_t* ini)
 {
     struct Move {
@@ -570,6 +593,7 @@ void move_old_keys(const wchar_t* ini)
         const wchar_t* key;
         const wchar_t* to_section; // nullptr: taken out
         const wchar_t* to_key;
+        Convert how = Convert::Copy;
     };
     constexpr Move kMoves[] = {
         {L"window", L"mode", L"ffxi", L"mode"},
@@ -577,6 +601,8 @@ void move_old_keys(const wchar_t* ini)
         {L"ffxi", L"resolution.window", L"graphics", L"resolution"},
         {L"window", L"size", nullptr, nullptr},
         {L"ffxi", L"size", nullptr, nullptr},
+        {L"graphics.effects", L"fog_sun", L"graphics.effects", L"fog_sunlight", Convert::Times5},
+        {L"graphics.effects", L"fog_g", L"graphics.effects", L"fog_glow", Convert::GlowWord},
     };
     constexpr wchar_t kMissing[] = L"\x1F<none>\x1F";
     for (const Move& move : kMoves) {
@@ -591,11 +617,14 @@ void move_old_keys(const wchar_t* ini)
             continue;
         }
         GetPrivateProfileStringW(move.to_section, move.to_key, kMissing, now, 256, ini);
-        const bool moved = std::wcscmp(now, kMissing) == 0 && value[0] != L'\0';
+        wchar_t to_value[256] = {};
+        wcscpy_s(to_value, value);
+        const bool moved = std::wcscmp(now, kMissing) == 0 && value[0] != L'\0' && convert_moved(move.how, to_value);
         if (moved)
-            WritePrivateProfileStringW(move.to_section, move.to_key, value, ini);
-        log::write(L"Settings: [%ls] %ls=%ls %ls [%ls] %ls", move.section, move.key, value,
-                   moved ? L"moved to" : L"taken out: its place is", move.to_section, move.to_key);
+            WritePrivateProfileStringW(move.to_section, move.to_key, to_value, ini);
+        log::write(L"Settings: [%ls] %ls=%ls %ls [%ls] %ls%ls%ls", move.section, move.key, value,
+                   moved ? L"moved to" : L"taken out: its place is", move.to_section, move.to_key, moved ? L"=" : L"",
+                   moved ? to_value : L"");
     }
 }
 
