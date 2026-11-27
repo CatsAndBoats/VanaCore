@@ -29,7 +29,9 @@ share stays open source too.
 
 > In active testing
 
-[Download the latest installer](https://github.com/CatsAndBoats/VanaCore/releases/latest/download/VanaCoreInstaller.exe)
+<p align="center">
+  <a href="https://github.com/CatsAndBoats/VanaCore/releases/latest/download/VanaCoreInstaller.exe"><img src="assets/download_retail.png" alt="Download the Retail Installer" width="280"></a>
+</p>
 
 ## Core Features
 
