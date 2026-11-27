@@ -42,6 +42,8 @@ jobs:
     concurrency:
       group: r2-publish
       cancel-in-progress: false
+    outputs:
+      tag: ${{ steps.draft.outputs.tag }}
 
     steps:
       - name: Checkout the scripts
@@ -148,3 +150,13 @@ jobs:
         shell: pwsh
         run: |
           "## vcdev promoted to vanacore$(if ('${{ inputs.deploy }}' -ne 'push') { ' (dry run: nothing changed)' })" >> $env:GITHUB_STEP_SUMMARY
+
+  # The published release's VanaCoreInstaller.exe made again (installer.yaml): its zip may have a newer App now
+  installer:
+    name: Installer
+    needs: promote
+    if: inputs.deploy == 'push' && inputs.release
+    uses: ./.github/workflows/installer.yaml
+    with:
+      tag: ${{ needs.promote.outputs.tag }}
+    secrets: inherit

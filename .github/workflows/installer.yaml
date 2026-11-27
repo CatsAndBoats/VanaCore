@@ -1,0 +1,118 @@
+name: Build Installer
+run-name: Build Installer (${{ inputs.tag || 'latest' }})
+
+# VanaCore's setup exe (installer/vanacore.iss, Inno Setup), made from a VanaCore release's own zip (the files released,
+# signed as they were, VanaCore App in them), signed, and put on that release as VanaCoreInstaller.exe: the same name on
+# every release, so https://github.com/<repo>/releases/latest/download/VanaCoreInstaller.exe is always the newest.
+#
+# The setup has the whole package in it, so it's made again for each VanaCore, never carried from one release to the
+# next (it would install the old one):
+#   release.yaml   on its draft release, once it's made
+#   promote.yaml   on the release it publishes (promote puts the newest App into the zip, so it's made again from that)
+#   by hand        any release by its tag (none: the latest published)
+#
+# Secrets: release.yaml's signing ones (AZURE_*). Without them it stops: an unsigned setup is never put on a release.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag (v0.9.9); empty for the latest published
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    name: Installer for ${{ inputs.tag || 'latest' }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout the installer
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            installer
+            app/res/VanaCore.ico
+          sparse-checkout-cone-mode: false
+
+      # The release (a draft too: release.yaml's), and its VanaCore-<version>.zip unzipped
+      - name: Get the release's zip
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ inputs.tag }}'
+          $releases = @(gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json)
+          $release = if ($tag) { $releases | Where-Object tag_name -eq $tag | Select-Object -First 1 }
+                     else { gh api "repos/${{ github.repository }}/releases/latest" | ConvertFrom-Json }
+          if (-not $release) { throw "No release $tag" }
+          $asset = @($release.assets | Where-Object name -like 'VanaCore-*.zip')[0]
+          if (-not $asset) { throw "$($release.name) has no VanaCore-*.zip" }
+          $version = $release.tag_name -replace '^v', ''
+          $zip = Join-Path $env:RUNNER_TEMP $asset.name
+          Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' } `
+            -Uri "https://api.github.com/repos/${{ github.repository }}/releases/assets/$($asset.id)" -OutFile $zip
+          $package = Join-Path $env:RUNNER_TEMP package
+          Expand-Archive -Path $zip -DestinationPath $package
+          foreach ($file in 'VanaCore.exe', 'VanaCore.Core.dll', 'VanaCoreApp.exe', 'VanaCoreApp.dll', 'scripts/boot.txt') {
+            if (-not (Test-Path (Join-Path $package "VanaCore/$file"))) { throw "$($asset.name) has no $file" }
+          }
+          "tag=$($release.tag_name)" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "package=$(Join-Path $package VanaCore)" >> $env:GITHUB_OUTPUT
+          "## VanaCore $version's installer$(if ($release.draft) { ' (draft release)' })" >> $env:GITHUB_STEP_SUMMARY
+
+      # Inno Setup 6.6 or newer (the dark style and background image): the runner's may be older, or none
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          choco upgrade innosetup -y --no-progress
+          if ($LASTEXITCODE) { throw 'Could not install Inno Setup' }
+
+      # Built and signed in one: Inno signs the setup and the uninstaller it puts in (SignTool=azure, vanacore.iss's Sign)
+      - name: Build and sign
+        shell: pwsh
+        env:
+          KVU: ${{ secrets.AZURE_KEY_VAULT_URL }}
+          KVI: ${{ secrets.AZURE_CLIENT_ID }}
+          KVT: ${{ secrets.AZURE_TENANT_ID }}
+          KVS: ${{ secrets.AZURE_CLIENT_SECRET }}
+          KVC: ${{ secrets.AZURE_CERT_NAME }}
+        run: |
+          if (-not ($env:KVU -and $env:KVI -and $env:KVT -and $env:KVS -and $env:KVC)) {
+            throw 'The AZURE_* signing secrets are missing: an unsigned setup is never put on a release'
+          }
+          $tools = Join-Path $env:RUNNER_TEMP tools
+          dotnet tool install AzureSignTool --version 7.0.1 --tool-path $tools
+          if ($LASTEXITCODE) { throw 'Could not install AzureSignTool' }
+          $sign = "`"$(Join-Path $tools azuresigntool.exe)`" sign -kvu $env:KVU -kvi $env:KVI -kvt $env:KVT -kvs $env:KVS -kvc $env:KVC " +
+                  '-tr http://timestamp.digicert.com -td sha256 -fd sha256 $f'
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          $out = Join-Path $env:RUNNER_TEMP out
+          & $iscc /Q "/Sazure=$sign" /DSign "/DVersion=${{ steps.release.outputs.version }}" `
+            "/DSource=${{ steps.release.outputs.package }}" "/O$out" /FVanaCoreInstaller installer/vanacore.iss
+          if ($LASTEXITCODE) { throw 'Inno Setup failed' }
+          $setup = Join-Path $out VanaCoreInstaller.exe
+          $status = (Get-AuthenticodeSignature -LiteralPath $setup).Status
+          if ($status -ne 'Valid') { throw "The setup's signature isn't valid ($status)" }
+          "setup=$setup" >> $env:GITHUB_OUTPUT
+        id: build
+
+      - name: Put it on the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload '${{ steps.release.outputs.tag }}' '${{ steps.build.outputs.setup }}' --clobber --repo '${{ github.repository }}'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $size = [math]::Round((Get-Item '${{ steps.build.outputs.setup }}').Length / 1MB, 1)
+          "VanaCoreInstaller.exe ($size MB, signed) is on ${{ steps.release.outputs.tag }}." >> $env:GITHUB_STEP_SUMMARY

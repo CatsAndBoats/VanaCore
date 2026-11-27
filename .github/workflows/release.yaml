@@ -276,3 +276,13 @@ jobs:
             --target (git rev-parse HEAD) --title "VanaCore $version" --notes-file build/package/notes.md
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "Draft release VanaCore $version made: promote.yaml publishes it when it promotes this build." >> $env:GITHUB_STEP_SUMMARY
+
+  # The draft release's VanaCoreInstaller.exe (installer.yaml), made from the zip just put on it
+  installer:
+    name: Installer
+    needs: [version, release]
+    if: inputs.deploy == 'push' && inputs.release
+    uses: ./.github/workflows/installer.yaml
+    with:
+      tag: v${{ needs.version.outputs.version }}
+    secrets: inherit
