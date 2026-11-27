@@ -509,9 +509,6 @@ local function load_settings()
     if ok and type(saved) == 'table' and saved.sidebar == false then
         st.sidebar = false
     end
-    if ok and type(saved) == 'table' and saved.layout == 'hybrid' then
-        st.hybrid = true -- the header-and-tabs layout (/vana3), kept until /vana classic
-    end
     if ok and type(saved) == 'table' and type(saved.size) == 'table' and tonumber(saved.size[1]) and tonumber(saved.size[2]) then
         st.size = { tonumber(saved.size[1]), tonumber(saved.size[2]) }
     end
@@ -555,9 +552,6 @@ local function save_settings()
     f:write("-- The /vana window's settings (written by it)\nreturn {\n")
     if not st.sidebar then
         f:write('    -- the list of pages hidden\n    sidebar = false,\n')
-    end
-    if st.hybrid then
-        f:write("    -- the layout with the pages as tabs in a header (/vana3; /vana classic is the old one)\n    layout = 'hybrid',\n")
     end
     if st.size ~= nil then
         f:write(string.format("    -- the window's size, dragged at its resize corner (at 100%%)\n    size = { %d, %d },\n", st.size[1], st.size[2]))
@@ -1608,7 +1602,7 @@ local function row_height(row, sec, room)
     elseif row.kind == 'action' and (row.action == 'gamepad_rescan' or row.action == 'reset_all') then
         return 0 -- the icon beside the Gamepad choice; no reset of everything here
     elseif row.kind == 'subheader' and row.headline then
-        return S(8 + 36 + 2) + (st.hybrid and S(M.hy.TITLE_PAD) or 0) -- drawn as a section's heading, HEAD_H high (M.draw_headline); the hybrid layout's with room under
+        return S(8 + 36 + 2) + S(M.hy.TITLE_PAD) -- drawn as a section's heading, HEAD_H high (M.draw_headline), with room under
     elseif row.kind == 'subheader' and row.text == 'Reset' then
         return 0 -- the heading of that reset
     elseif row.kind == 'subheader' then
@@ -2918,7 +2912,7 @@ local function draw_row(page, sec, row, x, y, w, ctx)
     end
 
     if row.kind == 'subheader' and row.headline then
-        M.draw_headline(row, id, x, y, w, alpha, enabled, ctx.panel_head == true and st.hybrid == true)
+        M.draw_headline(row, id, x, y, w, alpha, enabled, ctx.panel_head == true)
         return h
     elseif row.kind == 'subheader' then
         -- a sub-panel's heading (sub_room below the row above, 8 above the next: row_height): its title in capitals, semibold
@@ -2982,8 +2976,8 @@ local function draw_row(page, sec, row, x, y, w, ctx)
                 after = true
             end
         end
-        -- (the hybrid layout's green headings have no reset: the section's own resets them all; the red ones, a group's, keep theirs)
-        local no_reset = st.hybrid == true and not (row.danger or row.group)
+        -- (the green headings have no reset: the section's own resets them all; the red ones, a group's, keep theirs)
+        local no_reset = not (row.danger or row.group)
         for _, other in ipairs(M.ROW_RESETS and not M.hide_resets and not no_reset and sub_rows or {}) do
             if M.resettable(other) or other.reset ~= nil then
                 local reset_clicked, reset_hovered = M.icon_button(id .. '.reset', line_end - S(8), cy, 'reset', 9, P.text, P.faint)
@@ -2999,8 +2993,8 @@ local function draw_row(page, sec, row, x, y, w, ctx)
             end
         end
         local tx = lx
-        -- (a card's heading in the hybrid layout, M.hy.row: the line across under it in place of the one after the title)
-        local card_head = ctx.panel_head == true and st.hybrid == true
+        -- (a card's heading, M.hy.row: the line across under it in place of the one after the title)
+        local card_head = ctx.panel_head == true
         tx = tx + M.text_spaced(dl, tx, cy, title, color, sub_font, SMALL, alpha, spacing) + S(10)
         if row.tag ~= nil then
             M.text_mid(dl, tx, cy, row.tag, P.dim, fonts.text, SMALL - 0.5, alpha)
@@ -3562,12 +3556,12 @@ local function draw_heading(page, sec, x, y, w, over_title)
     local tx = x + S(LEFT)
     local title_color = head.danger and P.rose or head.warn and P.amber or P.white
     local head_face, head_size = head_font()
-    -- the hybrid layout's panel (M.hy.card): a line under the heading in a card's (a page's title, 'title' mode, is a card of its
+    -- the panel (M.hy.card): a line under the heading in a card's (a page's title, 'title' mode, is a card of its
     -- own with only the title in it: no line)
-    local card = st.hybrid == true and M.hy.mode ~= nil
+    local card = M.hy.mode ~= nil
     local titled = card and M.hy.mode == 'title'
     local function title_draw(px, text, colour)
-        text = M.hy.caps(text) -- (the hybrid layout's titles in capitals)
+        text = M.hy.caps(text) -- (titles in capitals)
         M.text_mid(dl, px, cy, text, colour, head_face, head_size, alpha)
         return M.measure(text, head_face, head_size)
     end
@@ -3615,7 +3609,7 @@ local function draw_heading(page, sec, x, y, w, over_title)
     if hovered and not over_pill and M.TIPS.panels[sec.title] ~= nil then
         M.tooltip(M.TIPS.panels[sec.title])
     end
-    if not card and line_end > tx then -- (the hybrid layout's main titles have no line)
+    if not card and line_end > tx then -- (main titles have no line)
         M.hline(dl, tx, line_end, cy, P.line)
     end
     return off
@@ -3667,7 +3661,7 @@ M.draw_headline = function (row, id, x, y, w, alpha, enabled, carded)
     end
     local head_face, head_size = head_font()
     local tx = x + S(LEFT)
-    local title = M.hy.caps(row.text) -- (the hybrid layout's titles in capitals)
+    local title = M.hy.caps(row.text) -- (titles in capitals)
     local title_w = M.measure(title, head_face, head_size)
     local hovered = M.over(tx, cy - S(12), title_w, S(24))
     -- (green_on: its title green while its switch is on)
@@ -3677,7 +3671,7 @@ M.draw_headline = function (row, id, x, y, w, alpha, enabled, carded)
     if hovered and M.TIPS.panels[row.text] ~= nil then
         M.tooltip(M.TIPS.panels[row.text])
     end
-    if not carded and line_end > tx then -- (carded, the hybrid layout's: no line)
+    if not carded and line_end > tx then -- (carded: no line)
         M.hline(dl, tx, line_end, cy, P.line)
     end
 end
@@ -3712,7 +3706,7 @@ M.draw_group = function (page, sec, list, a, b, x, y, w, ctx)
     return math.max(ry, by + bh) + S(6)
 end
 
--- `hy`: in the hybrid layout, where the sections are panels (M.hy.begin: ctx.cards)
+-- `hy`: where the sections are panels (M.hy.begin: ctx.cards)
 local function draw_section(page, sec, x, y, w, over_title, rows, hy)
     local ry = y
     M.hide_resets = sec.title == 'DLSS' -- (no reset icons beside the DLSS panel's settings: draw.lua reset_icon)
@@ -3800,7 +3794,7 @@ local function draw_section(page, sec, x, y, w, over_title, rows, hy)
         else
             local rh = draw_row(page, sec, row, x, ry, w, ctx)
             ry = ry + rh
-            -- (a panel's rows in the hybrid layout: a faint line between one and the next)
+            -- (a panel's rows: a faint line between one and the next)
             if cards ~= nil and cards.cur ~= nil and rh > 0 and i < #list and not M.hy.NOSEP[row.kind] and list[i + 1].kind ~= 'subheader' then
                 M.hline(imgui.GetWindowDrawList(), x + S(LEFT), x + w - S(RIGHT), ry, M.hy.LINE, 0.07)
             end
@@ -3835,10 +3829,7 @@ local function draw_bundled_presets(x, y, w)
     local at = y
     local title = M.hy.caps('Bundled presets')
     M.text_mid(dl, lx, at + S(HEAD_H) / 2 + S(2), title, P.white, head_font())
-    if not st.hybrid then
-        M.hline(dl, lx + M.measure(title, head_font()) + S(8), right, at + S(HEAD_H) / 2 + S(2), P.line)
-    end
-    at = at + S(HEAD_H) + S(2) + (st.hybrid and S(M.hy.TITLE_PAD) or 0)
+    at = at + S(HEAD_H) + S(2) + S(M.hy.TITLE_PAD)
     local now_at = quality_now()
     local enabled = M.effects_available()
     for i, name in ipairs(QUALITY.names) do
@@ -4292,10 +4283,7 @@ local function draw_presets_page(page, x, y, w)
     at = at + S(SAVE_H) + S(14)
     local title = M.hy.caps('Saved presets')
     M.text_mid(dl, lx, at + S(HEAD_H) / 2 + S(2), title, P.white, head_font())
-    if not st.hybrid then
-        M.hline(dl, lx + M.measure(title, head_font()) + S(8), right, at + S(HEAD_H) / 2 + S(2), P.line)
-    end
-    at = at + S(HEAD_H) + S(2) + (st.hybrid and S(M.hy.TITLE_PAD) or 0)
+    at = at + S(HEAD_H) + S(2) + S(M.hy.TITLE_PAD)
     if #st.presets.list == 0 then
         M.icon_centred(dl, lx + S(6), at + S(ROW_H) / 2, 'info', P.dim, 10)
         M.text_mid(dl, lx + S(20), at + S(ROW_H) / 2, 'No presets yet: name the settings you have now and save them.', P.text2, fonts.text, BODY - 1)
@@ -4364,21 +4352,20 @@ local WIN_W, WIN_H = 651, 540 -- SIDE_W + the page's 492: the window's size unti
 -- laid out for 492), MIN_H down
 local RESIZE = { GRIP = 18, MIN_H = 400 }
 local MARGIN = 6
-local TITLE_H = 36
 local TILE = 64              -- the minimized window's tile, a square with the logo in it
 local SEARCH_H = 30
 
--- The hybrid layout (/vana3): the pages are the tabs of a header across the top (M.hy.header), so the list at the left is the
+-- The layout: the pages are the tabs of a header across the top (M.hy.header), so the list at the left is the
 -- shown tab's own sub-tabs, drawn as they are under a page in the list of pages (the same rows, the same scrollbar). The
 -- System pages (Plugins, Addons, Pivot) are Client's: its list goes on with a line, then them with their icons, then the tools
-M.hy = { H = 44, PAD = 11 } -- H: the header's height; PAD: the list's margin at the left (the classic layout's is PAD)
+M.hy = { H = 44, PAD = 11 } -- H: the header's height; PAD: the list's margin at the left
 -- the panels' lines (M.hy.card, at a low alpha) and the kinds of row that have no line under them
 M.hy.LINE = '#96C3FF'
 M.hy.FLAT = true -- no box round a panel, only its heading's line (false: the cards)
 M.hy.TITLE_PAD = 6 -- the room under a main title (a section's, a headline's, the presets' lists), where it has no line
--- a main title (a page's section, a headline, the presets' lists) in the hybrid layout is in capitals
+-- a main title (a page's section, a headline, the presets' lists) is in capitals
 function M.hy.caps(text)
-    return st.hybrid == true and text:upper() or text
+    return text:upper()
 end
 M.hy.NOSEP = {}
 for kind in ('subheader banner warning callout alert notice hint note tabs layers transfer textfile status controls columns extension_filter header'):gmatch('%S+') do
@@ -4548,7 +4535,7 @@ end
 
 local function draw_sidebar(x, y, w, h)
     local dl = imgui.GetWindowDrawList()
-    local pad = S(st.hybrid and M.hy.PAD or PAD)
+    local pad = S(M.hy.PAD)
 
     -- the search box at the top (the name and version are Client > VanaCore's): what's typed finds settings on every
     -- page. A well with a shadow drawn here; ImGui's field sits in it, see-through, left of the red × that clears it
@@ -4583,164 +4570,11 @@ local function draw_sidebar(x, y, w, h)
         end
     end
 
-    if st.hybrid then -- (the tools are icons in the header, the pages its tabs: only this page's sub-tabs are listed)
-        M.hy.nav(x, sy + S(SEARCH_H) + S(8), w, y + h - S(36), searching) -- (a strip under it for the hide button: a child takes the mouse over it)
-        return
-    end
-
-    -- the tools at the bottom: Stats and Graphs (the old window's Frame stats and Performance graph: /vana stats and
-    -- /vana graph)
-    local TOOLS = {
-        { 'Stats', 'stats', '/vana stats', 'Where a frame goes (/vana stats)' },
-        { 'Graphs', 'chart', '/vana graph', 'FPS and more, 1 minute (/vana graph)' },
-        { 'Debug', 'bug', '/vana debug', 'DLSS crash tests, frame recording (/vana debug)' },
-    }
-    local ih = S(25)
-    local tools_h = S(18) + #TOOLS * ih + S(10)
-    local ty = y + h - tools_h
-    M.hline(dl, x + pad, x + w - pad, ty, P.border, 0.8)
-    M.text_mid(dl, x + pad, ty + S(14), 'TOOLS', P.faint, fonts.semi, SMALL - 1.5)
-    local ry = ty + S(22)
-    for i, tool in ipairs(TOOLS) do
-        local hov, clicked = M.hit('##tool.' .. i, x, ry, w, ih)
-        if hov then
-            M.fill(dl, x, ry, w, ih, P.hover, 0, 0, 0.7)
-            M.tooltip(tool[4])
-        end
-        M.icon_centred(dl, x + pad + S(6), ry + ih / 2, tool[2], hov and P.accent or P.faint, 10.5)
-        M.text_mid(dl, x + pad + S(19), ry + ih / 2, tool[1], P.white, fonts.text, BODY + 0.5)
-        if clicked then
-            vana.chat.run(tool[3])
-        end
-        ry = ry + ih
-    end
-
-    -- the pages, in their groups' order, the page shown with its sub-tabs under it; they scroll, the rows narrowed by
-    -- the scrollbar when it's there
-    local ny0 = sy + S(SEARCH_H) + S(8)
-    imgui.SetCursorScreenPos({ x, ny0 })
-    if imgui.BeginChild('##nav', { w, ty - ny0 - S(6) }, 0, M.NO_NAV) then
-        local cdl = imgui.GetWindowDrawList()
-        local _, ny = imgui.GetCursorScreenPos()
-        w = (imgui.GetContentRegionAvail())
-        local sh = S(22)
-        for gi, group in ipairs(GROUPS) do
-            for _, page in ipairs(group.pages) do
-                local active = st.page == page and not searching
-                local subs, shown = subtabs_of(page)
-                -- the chevron opens or shuts its sub-tabs in the list, any number of pages' at once; the page shown,
-                -- clicked again, does too, and another page clicked opens its own. Never set: open only while shown
-                local cw = subs ~= nil and S(22) or 0
-                local hov, clicked = M.hit('##nav.' .. page.id, x, ny, w - cw, ih)
-                local chov, cclick = false, false
-                if subs ~= nil then
-                    chov, cclick = M.hit('##navopen.' .. page.id, x + w - cw, ny, cw, ih)
-                end
-                hov = hov or chov
-                local open = subs ~= nil and (st.navopen[page.id] == true or (st.navopen[page.id] == nil and active))
-                if cclick or (clicked and active and subs ~= nil) then
-                    open = not open
-                    st.navopen[page.id] = open
-                    save_settings()
-                elseif clicked and not active then
-                    if subs ~= nil and not open then
-                        open = true
-                        st.navopen[page.id] = true
-                        save_settings()
-                    end
-                    st.page = page
-                    st.search[1] = ''
-                    st.picker = nil
-                end
-                local t = M.ease('nav.' .. page.id, active and 1 or 0, 20)
-                -- the page shown is lit only while no sub-tab under it shows it
-                local lit = M.ease('nav.lit.' .. page.id, active and not (open and shown ~= nil) and 1 or 0, 20)
-                if lit > 0.01 then
-                    M.fill(cdl, x, ny, w, ih, P.accent_bg, 0, 0, lit * 0.9)
-                    M.fill(cdl, x, ny, S(2), ih, P.accent, 0, 0, lit)
-                end
-                if hov and not active then
-                    M.fill(cdl, x, ny, w, ih, P.hover, 0, 0, 0.7)
-                end
-                -- the names in white (Experimental in light purple), the icon lit in the accent on the page shown
-                local color = page.color or P.white
-                M.icon_centred(cdl, x + pad + S(6), ny + ih / 2, page.icon, page.color or M.mix(P.faint, P.accent, t), 10.5)
-                M.text_mid(cdl, x + pad + S(19), ny + ih / 2, page.name, color, fonts.text, BODY + 0.5)
-                if subs ~= nil then
-                    M.icon_centred(cdl, x + w - pad - S(4), ny + ih / 2, open and 'down' or 'right', chov and P.text or (hov and P.dim or P.faint), 6)
-                end
-                ny = ny + ih
-                -- its sub-tabs: its sections by their headings, on a line down from its icon; the one shown lit (a
-                -- click on another page's shows that page at it)
-                if open then
-                    local gx = x + pad + S(6)
-                    M.vline(cdl, gx, ny + S(2), ny + S(2) + #subs * sh, P.line)
-                    ny = ny + S(2)
-                    for _, sec in ipairs(subs) do
-                        local on = active and sec == shown
-                        local shov, sclick = M.hit('##sub.' .. page.id .. '.' .. sec.title, x, ny, w, sh)
-                        if sclick and sec.run ~= nil then -- (not a section: the HUD's Open Manager)
-                            sec.run()
-                        elseif sclick and not on then
-                            st.sub[page.id] = sec.title
-                            st.page = page
-                            st.search[1] = ''
-                            st.picker = nil
-                            -- (List is the addons' list; an addon's windows are on Layout)
-                            local want = sec == ADDONS_ALL and 'list' or 'layout'
-                            if page.id == 'addons' and M.layout.page ~= want then
-                                M.layout.page = want
-                                M.rebuild()
-                            end
-                            save_settings()
-                        end
-                        if shov and not on then
-                            M.fill(cdl, x, ny, w, sh, P.hover, 0, 0, 0.7)
-                        end
-                        if on then
-                            M.fill(cdl, gx - S(1), ny + S(4), S(3), sh - S(8), P.cyan, S(1.5))
-                        end
-                        local full = sec.nav or sec.title
-                        local an_addon = page.id == 'addons' and sec ~= ADDONS_ALL
-                        -- a heading's own icon and colour (the HUD's Settings: a bullet, in yellow; its Open Manager: an
-                        -- open-in-a-window icon)
-                        local nav_icon = sec.head ~= nil and sec.head.nav_icon or nil
-                        local font = an_addon and fonts.italic or fonts.text
-                        local sub_color = on and P.cyan or (shov and P.text or P.dim)
-                        local tx = x + pad + S(19)
-                        if an_addon then
-                            -- an addon's: a small cube before its name (on the line's middle, as the page icons: there its
-                            -- middle is level with the name's capitals', where S(1) lower sat it 1.5 px low at a 4K scale)
-                            M.icon_centred(cdl, tx + S(4), ny + sh / 2, 'cube', on and P.cyan or (shov and P.dim or P.faint), 8)
-                            tx = tx + S(13)
-                        elseif nav_icon ~= nil then
-                            sub_color = sec.head.nav_color or sub_color
-                            if nav_icon == 'bullet' then -- a dot, as a list's bullet (on the line's middle: a glyph's pixel lower is too low)
-                                M.circle(cdl, tx + S(4), ny + sh / 2, S(2.5), sub_color)
-                            else
-                                M.icon_centred(cdl, tx + S(4), ny + sh / 2, nav_icon, sub_color, 8) -- (as the cube)
-                            end
-                            tx = tx + S(10) -- (the icon's 8 wide: a small gap before the title)
-                        end
-                        local name = M.fit(full, w - (tx - x) - S(4), font, BODY - 0.5)
-                        M.text_mid(cdl, tx, ny + sh / 2, name, sub_color, font, BODY - 0.5)
-                        if shov and (name ~= full or sec.tip ~= nil) then
-                            M.tooltip(sec.tip or full)
-                        end
-                        ny = ny + sh
-                    end
-                    ny = ny + S(4)
-                end
-            end
-            ny = ny + (gi < #GROUPS and S(6) or 0)
-        end
-        imgui.SetCursorScreenPos({ x, ny })
-        imgui.Dummy({ 1, S(4) })
-    end
-    imgui.EndChild()
+    -- (the tools are icons in the header, the pages its tabs: only this page's sub-tabs are listed)
+    M.hy.nav(x, sy + S(SEARCH_H) + S(8), w, y + h - S(36), searching) -- (a strip under it for the hide button: a child takes the mouse over it)
 end
 
--- THE PANELS, in the hybrid layout (/vana3): a section is drawn as cards, a faint fill with a hairline edge, 6 round, 8 in from
+-- THE PANELS: a section is drawn as cards, a faint fill with a hairline edge, 6 round, 8 in from
 -- the page's edges. A section with sub-panels (its subheaders that aren't a group's or a headline: Client > Game's Display,
 -- Resolution ...) is a title and a card for each sub-panel; any other is one card, its heading and rows in it, and a headline
 -- (DLSS 5, FSR beside DLSS) starts another. What isn't in a card (the rows before the first sub-panel, a section with no
@@ -4861,7 +4695,7 @@ function M.hy.finish(cards, ry)
     M.hy.mode = nil
 end
 
-local function draw_page(x, y, w, h, hy)
+local function draw_page(x, y, w, h)
     local dl = imgui.GetWindowDrawList()
     local page = st.page
     local pad = S(PAD)
@@ -4877,111 +4711,17 @@ local function draw_page(x, y, w, h, hy)
     local on_presets = shown ~= nil and shown.presets == true
     use_presets(page)
 
-    -- the hybrid layout: the header above has the title line's jobs, but the page's own buttons (Refresh ...) are drawn in a
-    -- line at the top of the page
+    -- the header above has the title line's jobs, but the page's own buttons (Refresh ...) are drawn in a line at the top
+    -- of the page
     local hy_buttons = {}
-    if hy and not searching and page.tab ~= nil then
+    if not searching and page.tab ~= nil then
         for _, b in ipairs(page.buttons or page.tab.buttons or {}) do
             if b[1] ~= 'Frame stats' and b[1] ~= 'Performance graph' then -- (those are Client's tools)
                 hy_buttons[#hy_buttons + 1] = b
             end
         end
     end
-    local title_h = hy and (#hy_buttons > 0 and S(34) or 0) or S(TITLE_H)
-    -- the title line: the switch for the list of pages, the page's name, its note, its tab's buttons, Reset at the
-    -- right, a line under
-    if not hy then
-        local cy = y + S(TITLE_H) / 2
-        -- the list of pages hidden or shown again (the window narrows by it; a search is cleared with the box it's typed in)
-        local switched, over_switch = M.icon_button('##sidebar', x + S(15), cy, 'bars', 10.5, P.text, P.dim)
-        if switched then
-            st.sidebar = not st.sidebar
-            if not st.sidebar then
-                st.search[1] = ''
-            end
-            save_settings()
-        end
-        if over_switch then
-            M.tooltip(st.sidebar and 'Hide the list of pages' or 'Show the list of pages')
-        end
-        local tx = x + S(30)
-        local title = searching and 'Search' or page.name
-        M.text_mid(dl, tx, cy, title, P.white, fonts.semi, BODY + 3)
-        local title_w = M.measure(title, fonts.semi, BODY + 3)
-        local note = nil
-        if searching then
-            note = #results == 0 and 'Nothing matches.' or string.format('%d section%s', #results, #results == 1 and '' or 's')
-        elseif on_presets then
-            note = preset_kind.note
-        else
-            note = page.note
-        end
-        local rx = x + w - pad - S(48) -- (the minimize and close buttons at the right)
-        if not searching and page.tab ~= nil then
-            -- (no reset for the whole page: each section has its own)
-            rx = rx + S(8)
-            -- the tab's buttons: Frame stats, Performance graph, Refresh
-            local buttons = {}
-            for _, b in ipairs(page.buttons or page.tab.buttons or {}) do
-                if b[1] ~= 'Frame stats' and b[1] ~= 'Performance graph' then -- those are the sidebar's Stats and Graphs
-                    buttons[#buttons + 1] = b
-                end
-            end
-            for i = #buttons, 1, -1 do
-                local b = buttons[i]
-                local icon = b[3] == 'refresh' and 'reload' or b[3] == 'show_chart' and 'chart' or b[3] == 'account_tree' and 'stats' or b[3] == 'eye' and 'eye' or b[3] == 'hud' and 'hud' or nil
-                local bw = M.button_width(b[1], icon)
-                rx = rx - S(8) - bw
-                local clicked2 = M.button('##tabbutton.' .. page.id .. i, rx, cy, b[1], icon, 'ghost')
-                if imgui.IsItemHovered() and b[4] then
-                    M.tooltip(b[4])
-                end
-                if clicked2 then
-                    if b[2] ~= nil then
-                        pcall(b[2])
-                    else
-                        M.rebuild()
-                    end
-                end
-            end
-        end
-        if note then
-            local nx = tx + title_w + S(10)
-            local room = rx - S(12) - nx
-            if room > S(40) then
-                M.text_mid(dl, nx, cy, M.fit(note, room, fonts.text, SMALL), P.faint, fonts.text, SMALL)
-            end
-        end
-        if page.preset_pick and not searching and not on_presets then
-            -- "Preset:" and the saved presets to pick from: the one picked is loaded
-            if not st.presets.read then
-                read_presets()
-            end
-            local px = tx + title_w + S(24)
-            M.text_mid(dl, px, cy, 'Preset:', P.dim, fonts.text, SMALL + 0.5)
-            px = px + M.measure('Preset:', fonts.text, SMALL + 0.5) + S(8)
-            local options = {}
-            for _, entry in ipairs(st.presets.list) do
-                options[#options + 1] = { entry.name, entry.name }
-            end
-            local none = #options == 0
-            if none then
-                options[1] = { '', 'No presets saved' }
-            end
-            local shown = current_preset() or (none and '' or nil)
-            local value = shown or 'None'
-            local pick_w = math.min(S(220), rx - S(12) - px)
-            local picked, moved = M.dropdown('##preset.pick', px, cy, pick_w, options, value, not none, nil, true)
-            if moved then
-                for _, entry in ipairs(st.presets.list) do
-                    if entry.name == picked then
-                        load_preset(entry)
-                    end
-                end
-            end
-        end
-        M.hline(dl, x, x + w, y + S(TITLE_H), P.border)
-    end
+    local title_h = #hy_buttons > 0 and S(34) or 0
     if #hy_buttons > 0 then
         local by, bx = y + title_h / 2, x + w - pad
         for i = #hy_buttons, 1, -1 do
@@ -5007,7 +4747,7 @@ local function draw_page(x, y, w, h, hy)
     -- the sections, scrolling: with sub-tabs, the one picked (and any rows before the first heading), each its own scroll.
     -- They stop above the resize corner (a child over it would take its mouse)
     local bottom = y + h - S(RESIZE.GRIP) - S(2)
-    if hy and not st.sidebar then
+    if not st.sidebar then
         bottom = y + h - S(36) -- (the hide button's strip at the bottom left, which a child would take the mouse from)
     end
     imgui.SetCursorScreenPos({ x, y + title_h + 1 })
@@ -5016,13 +4756,10 @@ local function draw_page(x, y, w, h, hy)
     if imgui.BeginChild('##page.' .. child, { w, bottom - y - title_h - 1 }, 0, M.NO_NAV) then
         local cx, cy0 = imgui.GetCursorScreenPos()
         local cw = (imgui.GetContentRegionAvail())
-        local at = cy0 + S(hy and 8 or 3)
-        -- (the hybrid layout's sections are panels: M.hy.card)
+        local at = cy0 + S(8)
+        -- (the sections are panels: M.hy.card)
         local function section(pg, sec, over, rws)
-            if hy then
-                return M.hy.card(pg, sec, cx, at, cw, over, rws)
-            end
-            return draw_section(pg, sec, cx, at, cw, over, rws)
+            return M.hy.card(pg, sec, cx, at, cw, over, rws)
         end
         if searching then
             for _, r in ipairs(results) do
@@ -5240,7 +4977,7 @@ function M.hy.gradient(dl, x, y, w, h, left, right, radius)
     strip(top + r, top + rows - r, 0)
 end
 
--- The hybrid layout's header (/vana3), across the top: the pages as tabs (as the /vana2 prototype's categories were), the
+-- The header, across the top: the pages as tabs (as the /vana2 prototype's categories were), the
 -- System pages left to Client's list, and at the right minimize and close. A tab shows its icon and name; with no room for
 -- all of them, the ones not shown keep their icon.
 function M.hy.header(dl, x, y, pw, radius)
@@ -5401,12 +5138,11 @@ local function draw_window()
         M.fill(dl, x - 1, y, pw + 2, ph + 2, '#000000', radius + 1, 0, 0.35)
         M.fill(dl, x, y, pw, ph, P.bg, radius)
         local px = x
-        -- the hybrid layout (/vana3): a header across the top, the list of pages and the page under it
-        local hy = st.hybrid == true
-        local top = hy and S(M.hy.H) or 0
+        -- a header across the top, the list of pages and the page under it
+        local top = S(M.hy.H)
         if side > 0 then
             -- shaded left to right, darker to lighter: the rounded corners in the left colour, the rest one gradient
-            M.fill(dl, x, y + top, math.min(side, radius * 2), ph - top, P.side_l, radius, hy and 64 or M.CORNERS.left)
+            M.fill(dl, x, y + top, math.min(side, radius * 2), ph - top, P.side_l, radius, 64)
             if side > radius then
                 local l, r = M.u32(P.side_l), M.u32(P.side)
                 dl:AddRectFilledMultiColor({ x + radius, y + top }, { x + side, y + ph }, l, r, r, l)
@@ -5414,7 +5150,7 @@ local function draw_window()
             M.vline(dl, x + side, y + top, y + ph, P.border)
             px = x + side + 1
         end
-        if hy and not st.sidebar then -- the list hidden: the strip at the bottom in the header's colour
+        if not st.sidebar then -- the list hidden: the strip at the bottom in the header's colour
             M.fill(dl, x, y + ph - S(36), pw, S(36), P.side, radius, M.CORNERS.bottom)
         end
         M.outline(dl, x, y, pw, ph, P.border, radius)
@@ -5422,9 +5158,9 @@ local function draw_window()
         if side >= S(SIDE_W) then
             draw_sidebar(x, y + top, side, ph - top)
         end
-        draw_page(px, y + top, x + pw - px, ph - top, hy)
+        draw_page(px, y + top, x + pw - px, ph - top)
         RESIZE.corner(dl, x, y, pw, ph, side, screen_w, screen_h)
-        if hy then -- the list at the left hidden or shown again, in the window's bottom-left corner (a search is cleared with it)
+        do -- the list at the left hidden or shown again, in the window's bottom-left corner (a search is cleared with it)
             if not st.sidebar then -- (the list hidden: a line across above the strip, between the page and the button)
                 M.hline(dl, x + S(1), x + pw - S(1), y + ph - S(36), P.border)
             end
@@ -5445,19 +5181,7 @@ local function draw_window()
         end
         st.hover_seen = false
 
-        if hy then
-            M.hy.header(dl, x, y, pw, radius) -- (with its minimize and close)
-        else
-            local minimised, over_minimise = M.icon_button('##minimise', x + pw - S(PAD) - S(22), y + S(TITLE_H) / 2, 'minus', 11, P.accent)
-            if over_minimise then
-                M.tooltip('Minimize: a tile that opens the window again')
-            end
-            if M.icon_button('##close', x + pw - S(PAD), y + S(TITLE_H) / 2, 'close', 11, P.rose) then
-                st.open = false
-            elseif minimised then
-                minimise()
-            end
-        end
+        M.hy.header(dl, x, y, pw, radius) -- (with its minimize and close)
         if st.dialog == nil or st.dialog.host ~= 'hud' then -- (the HUD Manager's Presets window has its own: hud.presets_body)
             draw_dialog(x, y, pw, ph) -- Export and Import over the window, if one is open
         end
@@ -6680,28 +6404,12 @@ vana.events.on('command', function (e)
         end
         return true
     end
-    -- /vana3: the window in the hybrid layout (a header with the pages as tabs: M.hy.header), opened, or closed when it's up.
-    -- The layout is kept (settings.lua): /vana opens it that way until /vana classic
-    if command == '//vana3' or command == '/vana3' then
-        if st.hybrid and st.open and not st.minimised then
-            close()
-        else
-            st.hybrid = true
-            save_settings()
-            open()
-        end
-        return true
-    end
     if command ~= '//vana' and command ~= '/vana' then
         return false
     end
     local what = words[2] and words[2]:lower() or nil
     if what == nil then
         if st.open and not st.minimised then close() else open() end -- (minimized: its tile's click, opened again)
-    elseif what == 'classic' then -- the old layout, kept
-        st.hybrid = false
-        save_settings()
-        open()
     elseif what == 'open' then -- opened, never closed (the game's Config > VanaCore, configmenu.cpp)
         if not st.open or st.minimised then open() end
     elseif what == 'close' then
