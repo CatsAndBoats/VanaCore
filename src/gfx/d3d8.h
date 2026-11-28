@@ -84,6 +84,8 @@ void d3d8_set_fill_mode(int mode);
 /* [graphics] untextured: the world's opaque draws take a plain white texel for their base texture (stage 0), so only their
  * light and vertex colours show; cut-outs and blended draws keep theirs (vanacore_gfx_set_untextured) */
 void d3d8_set_untextured(int on);
+/* [graphics] relief: a pack's paving depth, kerbs and world-laid paving on (vanacore_gfx_set_relief) */
+void d3d8_set_relief(int on);
 /* While VanaCore's caster pass has the game draw a piece of the zone whatever its camera sees (vanacore_gfx_seek), the piece
  * (nonzero), else 0: its draws go to the sun's maps alone (GfxDraw.sought, seek_note), never into the scene, each marked with the
  * piece and its place among the piece's draws (GfxDraw.piece, piece_draw) */

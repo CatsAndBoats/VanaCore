@@ -1062,6 +1062,17 @@ void apply_live(When when)
         said = plain;
         vanacore_gfx_set_untextured(plain ? 1 : 0);
     }
+    // [graphics] relief=0|1 (Stone Relief, experimental): a texture pack's paving given depth (the parallax, from its .h.dds height
+    // maps, with [graphics.effects] pom), kerbs where one paving meets another (kerbs_<zone>.bin) and its paving laid by the world
+    // (<hash>_<w>x<h>.uv) - all of them off by default; the pack's textures and normal maps show either way
+    {
+        const bool relief = flag(L"relief", false);
+        static bool said = false;
+        if (relief != said && when != When::Quiet)
+            log::write(relief ? L"Graphics: stone relief on (relief)" : L"Graphics: stone relief off (relief)");
+        said = relief;
+        vanacore_gfx_set_relief(relief ? 1 : 0);
+    }
     // [graphics] grass*: Mass Grass (apply_grass)
     apply_grass(when);
     // [graphics] snow=0|1 (off by default): footprints pressed into ground the zone's collision calls snow, where players, NPCs and

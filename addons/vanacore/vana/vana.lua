@@ -197,7 +197,8 @@ end
 -- from 2026-11-06, the Experimental page's before)
 local MOVED_PANELS = { ['Snow Trails'] = { 'mods', 2 }, ['Mass Grass'] = { 'mods', 1 },
                        ['Weather Effects'] = { 'mods', 3 }, -- (Graphics' till 2026-11-27)
-                       ['Water Shader'] = { 'mods', 4 } } -- (the Experimental page's till 2026-11-27)
+                       ['Water Shader'] = { 'mods', 4 }, -- (the Experimental page's till 2026-11-27)
+                       ['Stone Relief (WIP)'] = { 'mods', 5 } }
 -- the Game Options tab's sections shown on the Mods page instead, by their heading (after the Graphics tab's)
 local MOVED_OPTIONS = { ['Zones'] = true, ['Loading Screen'] = true, ['Sparkles'] = true }
 -- the pages showing them, which a Graphics preset reads too (preset_keys)

@@ -457,6 +457,7 @@ typedef struct FxSettings
     float normalmap_view;     /* ... 0 lit, 1 the bent normal as the colour, 2 lit with the maps' Y turned over */
     float normalmap_refl;     /* ... reflections follow them (the detail target, nout_begin) */
     float normalmap_fx;       /* ... so do the occlusion and the sun's shadows */
+    GFX_POM_FX_FIELDS         /* ... with their height maps (.h.dds), the parallax (gfx_pom.h) */
     float moghouse;           /* how much of the sun's shadows stay indoors (GfxScene.indoors: a Mog House, a zone lit by a fixed
                                * light), 0 none to 1 all */
 #ifdef VANACORE
@@ -3641,9 +3642,10 @@ static ID3D12PipelineState* pipeline(const GfxDraw* d, GfxTex* ds)
         k.lib.fs.nmap = (uint8_t)(1 + (g_fxs.normalmap_view >= 1.5f ? 2 : g_fxs.normalmap_view >= 0.5f ? 1 : 0));
         k.lib.vs.cpos = k.lib.fs.prog != 0;
     }
+    gfx_pom_key(&k.lib.fs, g_fxs.pom, g_fxs.pom_depth, g_fxs.pom_shadow); /* the parallax, with the map (gfx_pom.h) */
     if (g_nout && k.lib.fs.nmap) /* the detail pass: the bent normal and z into the detail target, tested against the scene's depth */
     {
-        k.lib.fs.nmap = k.lib.fs.nmap == 3 ? 5 : 4; /* (5: the maps' Y turned over, as lit) */
+        k.lib.fs.nmap = k.lib.fs.nmap == 3 ? 5 : 4, k.lib.fs.pom = k.lib.fs.pom_shadow = 0; /* (5: the maps' Y turned over, as lit) */
         k.color = (uint32_t)DXGI_FORMAT_R16G16B16A16_FLOAT;
         memset(&k.pipe, 0, sizeof k.pipe);
         k.pipe.write_mask = 15;
@@ -3655,7 +3657,7 @@ static ID3D12PipelineState* pipeline(const GfxDraw* d, GfxTex* ds)
                  * the draw was (an opaque one's own depth, which it drew: equal), lit by nothing */
     {
         k.lib.vs.motion = g_mo_key;
-        k.lib.vs.pixel = 0, k.lib.vs.cpos = 0, k.lib.fs.nmap = 0;
+        k.lib.vs.pixel = 0, k.lib.vs.cpos = 0, k.lib.fs.nmap = 0, k.lib.fs.pom = k.lib.fs.pom_shadow = 0;
         k.color = (uint32_t)(g_maskout ? DXGI_FORMAT_R16G16_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT);
         memset(&k.pipe, 0, sizeof k.pipe);
         k.pipe.write_mask = 15;
@@ -3695,14 +3697,14 @@ static ID3D12PipelineState* pipeline(const GfxDraw* d, GfxTex* ds)
         /* lit per pixel, still building: lit per vertex meanwhile (a new mix of the game's lights
          * would blink the object out for a few frames) */
         k.lib.vs.pixel = 0;
-        k.lib.fs.nmap = 0;
+        k.lib.fs.nmap = k.lib.fs.pom = k.lib.fs.pom_shadow = 0;
         p = pipeline_for(&k, d->vs_tokens, d->ps_tokens);
     }
     else if (!p && k.lib.vs.cpos)
     {
         /* the shader draw's normal-map variant is still building: drawn without it meanwhile, not left out */
         k.lib.vs.cpos = 0;
-        k.lib.fs.nmap = 0;
+        k.lib.fs.nmap = k.lib.fs.pom = k.lib.fs.pom_shadow = 0;
         p = pipeline_for(&k, d->vs_tokens, d->ps_tokens);
     }
     return p;
@@ -4282,7 +4284,7 @@ static void draw_encode(const GfxDraw* d)
 #ifdef VANACORE
         t = dlss_sampled(t);
 #endif
-        int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && (d->fs.nmap || d->fs.rain == 2)) ? d->fs.st[i].tex : 0;
+        int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && (d->fs.nmap || d->fs.rain == 2)) || (i == 6 && d->fs.pom) ? d->fs.st[i].tex : 0;
         bind[i] = wanted == 2 ? SRV_NULL_CUBE : SRV_NULL_2D;
         bind[8 + i] = g_present_samp;
         if (!wanted)
@@ -4549,7 +4551,7 @@ static void caster_only_textures(const GfxDraw* d, Caster* rec)
 {
     for (int i = 0; i < 8; ++i)
     {
-        const int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && d->fs.nmap) ? d->fs.st[i].tex : 0;
+        const int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && d->fs.nmap) || (i == 6 && d->fs.pom) ? d->fs.st[i].tex : 0;
         rec->bind[i] = wanted == 2 ? SRV_NULL_CUBE : SRV_NULL_2D;
         rec->bind[8 + i] = g_present_samp;
         if (!wanted)
@@ -7320,6 +7322,7 @@ static const char FX_HLSL_2[] =
     "    pl = player_light(i.pos.xy, view_pos(i.pos.xy, z), c.rgb, pm);\n"
     "    pm = lerp(1.0 - u.plight2.w, 1.0, pm);\n"
     "  }\n"
+    GFX_FX_NM_SHADOW_HLSL /* the bumps' sun light taken off where the shadows have the sun blocked (gfx_pom.h) */
     "  c.rgb *= lerp(1.0, o, u.ao.y) * (sun + pl) * pm;\n"
     /* the cel look's bands on the world (the sky's gradient stays), then its lines, under the fog */
     "  if (z != 0.0 && u.toon2.y > 0.0) c.rgb = band(c.rgb);\n"
@@ -8238,6 +8241,7 @@ static const struct
     { "normalmap_view", offsetof(FxSettings, normalmap_view), 0.0f },
     { "normalmap_refl", offsetof(FxSettings, normalmap_refl), 1.0f },
     { "normalmap_fx", offsetof(FxSettings, normalmap_fx), 1.0f },
+    GFX_POM_FX_KEYS
     { "debug", offsetof(FxSettings, debug), 0.0f },
 #ifdef VANACORE
     { "outline", offsetof(FxSettings, outline), 0.0f },

@@ -677,6 +677,7 @@ void vanacore_gfx_set_vana_minute(float minute) { d3d8_set_vana_minute(minute); 
 void vanacore_gfx_set_hide_game_shadows(int on) { d3d8_set_hide_game_shadows(on); }
 void vanacore_gfx_set_fill_mode(int mode) { d3d8_set_fill_mode(mode); }
 void vanacore_gfx_set_untextured(int on) { d3d8_set_untextured(on); }
+void vanacore_gfx_set_relief(int on) { d3d8_set_relief(on); }
 void vanacore_gfx_set_grass(const VanaGrass* in)
 {
     GrassSettings s = { in->enabled, in->textures, in->radius, in->density, in->height, in->width, in->variation,

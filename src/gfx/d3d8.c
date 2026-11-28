@@ -206,16 +206,30 @@ typedef struct Obj
     uint32_t repl_pad_min; /* ... when they are at least this many texels tall */
     const struct PackEntry* repl_entry; /* ... and its glyph table, if it has one */
     GfxTex* nrm;         /* textures: a texture pack's normal map for it (<hash>_<w>x<h>.n.dds), BC5 */
+    GfxTex* hgt;         /* ... and its height map (<hash>_<w>x<h>.h.dds, the height in a DXT5's alpha), for the parallax */
     uint8_t fwd;         /* textures: ZBIAS steps added to what's drawn with it (kForward) */
     uint32_t pw, ph;     /* render targets drawn at another size than the game's (the window's, the scene's
                           * multiple of it): gpu's size, where the game sees width x height; 0 when the same */
     uint8_t grow;        /* GROW_*: what pw x ph follows */
     uint64_t hash;       /* textures: the hash of the first level (texture_hash), 0 until the grass asked */
+    const struct UvwEntry* uvw; /* textures: a texture pack's world mapping for it (<hash>_<w>x<h>.uv, d3d8_kerb.h uvw_*) */
     uint8_t water;       /* vertex buffers: made while the game loaded a water model (d3d8_water_loading) */
 } Obj;
 #ifdef VANACORE
 static uint64_t texture_hash(Obj* t);
 #endif
+/* VanaCore's kerbs where the paving changes (d3d8_kerb.h) */
+static void kerb_add_dir(const char* dir);
+static void kerb_set_zone(int zone);
+static void kerb_present(void);
+static void kerb_lost(void);
+static void kerb_after(const GfxDraw* d);
+static void uvw_add(const char* path, uint64_t hash, uint32_t w, uint32_t h);
+static void uvw_upload(Obj* t, uint64_t hash);
+static void uvw_begin(void);
+static void uvw_end(GfxDraw* d);
+static int relief_build_draw(GfxDraw* d);
+static uint64_t g_repl_hash; /* texture_replacement: the hash of the level it was just asked about (0 none) */
 
 /* A render target (a texture's or a standalone surface: the back buffer, its depth buffer) drawn at the size the
  * frame is shown at (GROW_SCREEN), or the frame's 3D scene at a multiple of it ([graphics] background, DLSS:
@@ -457,6 +471,7 @@ typedef struct NormEntry
     char* path;
     GfxTex* tex;
     uint8_t tried;
+    uint8_t height; /* a height map (.h.dds: DXT5, the height in its alpha, 1 the top), not a normal map */
 } NormEntry;
 static NormEntry* g_nrm;
 static uint32_t g_nnrm;
@@ -480,6 +495,7 @@ void d3d8_texture_pack(const char* dir)
         return;
     }
     uint32_t added = 0;
+    kerb_add_dir(dir); /* its kerbs_<zone>.bin, if it has them (d3d8_kerb.h) */
     for (const char* name; (name = plat_dir_next(d));)
     {
         unsigned long long hash;
@@ -490,13 +506,20 @@ void d3d8_texture_pack(const char* dir)
             (pad_min = 0, sscanf(name, "%16llx_%ux%u_pad%u.%7s", &hash, &w, &h, &pad, ext) != 5) &&
             (pad = 0, sscanf(name, "%16llx_%ux%u.%7s", &hash, &w, &h, ext) != 4))
             continue;
-        if (!strcmp(ext, "n.dds") && strlen(name) >= 16 && !pad && !pad_min)
+        if (!strcmp(ext, "uv") && !pad && !pad_min)
+        {
+            char up[1100];
+            snprintf(up, sizeof up, "%s%c%s", dir, plat_path_sep, name);
+            uvw_add(up, hash, w, h);
+            continue;
+        }
+        if ((!strcmp(ext, "n.dds") || !strcmp(ext, "h.dds")) && strlen(name) >= 16 && !pad && !pad_min)
         {
             size_t pn = strlen(dir) + strlen(name) + 2;
             char* np = (char*)malloc(pn);
             snprintf(np, pn, "%s%c%s", dir, plat_path_sep, name);
             g_nrm = (NormEntry*)realloc(g_nrm, (g_nnrm + 1) * sizeof *g_nrm);
-            g_nrm[g_nnrm++] = (NormEntry){ hash, w, h, np, NULL, 0 };
+            g_nrm[g_nnrm++] = (NormEntry){ hash, w, h, np, NULL, 0, (uint8_t)(ext[0] == 'h') };
             continue;
         }
         if (strcmp(ext, "dds") || strlen(name) < 16)
@@ -561,9 +584,9 @@ static GfxTex* load_dds(const char* path)
 
 /* The replacement for a texture whose first level was just uploaded, or NULL; *pad its entry's, *fwd its kForward steps. */
 static GfxTex* texture_replacement(const Obj* t, const Obj* level0, uint32_t* pad, uint32_t* pad_min, const PackEntry** entry,
-    GfxTex** nrm, uint8_t* fwd)
+    GfxTex** nrm, GfxTex** hgt, uint8_t* fwd)
 {
-    *pad = *pad_min = 0, *entry = NULL, *nrm = NULL, *fwd = 0;
+    *pad = *pad_min = 0, *entry = NULL, *nrm = *hgt = NULL, *fwd = 0;
     if (g_texlog < 0)
         g_texlog = getenv("FFXI_TEXLOG") && getenv("FFXI_TEXLOG")[0] == '1';
     if (t->kind != O_TEXTURE)
@@ -583,6 +606,7 @@ static GfxTex* texture_replacement(const Obj* t, const Obj* level0, uint32_t* pa
     uint64_t hash = 0xcbf29ce484222325ull;
     for (size_t i = 0; i < n; ++i)
         hash = (hash ^ p[i]) * 0x100000001b3ull;
+    g_repl_hash = hash;
     for (size_t i = 0; i < sizeof kForward / sizeof kForward[0]; ++i)
         if (kForward[i].hash == hash && kForward[i].w == t->width && kForward[i].h == t->height)
         {
@@ -600,10 +624,10 @@ static GfxTex* texture_replacement(const Obj* t, const Obj* level0, uint32_t* pa
             e->tried = 1;
             e->tex = load_dds(e->path);
             if (e->tex)
-                rt_log("[recomp] textures: %ux%u %016llx has the normal map %s\n", t->width, t->height, (unsigned long long)hash, e->path);
+                rt_log("[recomp] textures: %ux%u %016llx has the %s map %s\n", t->width, t->height, (unsigned long long)hash,
+                    e->height ? "height" : "normal", e->path);
         }
-        *nrm = e->tex;
-        break;
+        *(e->height ? hgt : nrm) = e->tex; /* (a normal map and a height map: both) */
     }
     for (uint32_t i = 0; i < g_npack; ++i)
     {
@@ -656,7 +680,11 @@ static GfxTex* texture_for_draw(uint32_t p, int* kind)
             {
                 gfx_tex_upload(t->gpu, s->face, s->level, GUEST_PTR(s->mem), fmt_pitch(s->format, s->width));
                 if (i == 0)
-                    t->repl = texture_replacement(t, s, &t->repl_pad, &t->repl_pad_min, &t->repl_entry, &t->nrm, &t->fwd);
+                {
+                    g_repl_hash = 0;
+                    t->repl = texture_replacement(t, s, &t->repl_pad, &t->repl_pad_min, &t->repl_entry, &t->nrm, &t->hgt, &t->fwd);
+                    uvw_upload(t, g_repl_hash);
+                }
             }
             if (s)
                 s->dirty = 0;
@@ -818,6 +846,7 @@ static int g_fill_mode;
 /* [graphics] untextured (d3d8_set_untextured): the world's opaque draws take a plain white texel for their base texture
  * (world_look); g_plain is that texel's texture, made at the first such draw and let go with the device */
 static int g_untextured;
+static int g_relief; /* [graphics] relief (Stone Relief, experimental): the parallax, kerbs and world-laid paving (d3d8_kerb.h) */
 static GfxTex* g_plain;
 /* ... into this layer of the window's size (ui_layer_bound) */
 static GfxTex* g_ui_layer;
@@ -1389,6 +1418,7 @@ static void IDirect3DDevice8_Present(Guest* g)
     wc_present();
     g_glow_laid = 0; /* tinted copies with no shrinking or solid copy after them: the next frame's are another glow's */
     cap_present();
+    kerb_present();
     scene_present();
     ui_present();
     chatfont_present();
@@ -3162,6 +3192,14 @@ static int build_draw(GfxDraw* d)
             d->fs.nmap = (uint8_t)normal_map_mode();
             d->samp[7] = d->samp[0];
             d->samp[7].mag = d->samp[7].min = d->samp[7].mip = 2, d->samp[7].max_level = 0, d->samp[7].lod_cap = 0;
+            if (n0->hgt && g_relief && (shaders || nst <= 6)) /* its height map rides in stage 6 (the parallax, gfx_hlsl.c emit_pom): the back
+                                                   * end's [graphics.effects] pom turns it on, pom_depth its depth */
+            {
+                d->tex[6] = n0->hgt;
+                d->fs.st[6].tex = 1;
+                d->fs.pom = 1;
+                d->samp[6] = d->samp[7];
+            }
             if (shaders) /* the shader's own constants stay; these the draw's functions don't read otherwise */
             {
                 memcpy(d->u.tfactor, g_sun_view, sizeof g_sun_view);
@@ -3564,7 +3602,7 @@ void d3d8_device_lost(void)
         water_kept_drop(o->gpu, o->gbuf);
         gfx_tex_destroy(o->gpu), o->gpu = NULL;
         gfx_buf_destroy(o->gbuf), o->gbuf = NULL;
-        o->repl = o->nrm = NULL, o->repl_entry = NULL, o->repl_pad = o->repl_pad_min = 0; /* the packs', below */
+        o->repl = o->nrm = o->hgt = NULL, o->repl_entry = NULL, o->repl_pad = o->repl_pad_min = 0; /* the packs', below */
         o->gpu_locked = 0; /* a GPU-owned surface locked across the loss: nothing left to write back to */
     }
     /* the packs' textures: read from disk again at the next upload of a texture they replace (texture_replacement) */
@@ -3588,6 +3626,7 @@ void d3d8_device_lost(void)
     floors_device_lost();
     snow_device_lost();
     zonemesh_device_lost();
+    kerb_lost();
     rt_log("[recomp] d3d8: the device lost: %u objects' textures and buffers let go, made again on the new device\n", objects);
 }
 
@@ -5549,6 +5588,7 @@ void d3d8_set_grass(const GrassSettings* settings)
 void d3d8_set_grass_zone(int zone)
 {
     grass_set_zone(zone);
+    kerb_set_zone(zone); /* the zone's kerbs (d3d8_kerb.h) */
     rain_set_zone(zone); /* the thunder weathers' dry zones (d3d8_rain.h) */
     water_set_zone(zone); /* ... and a ferry's sea (d3d8_water_level.h) */
 }
@@ -5736,6 +5776,7 @@ void d3d8_set_hide_game_shadows(int on) { g_hide_game_shadows = on; }
 void d3d8_set_fill_mode(int mode) { g_fill_mode = mode == 1 || mode == 2 ? mode : 0; }
 
 void d3d8_set_untextured(int on) { g_untextured = on != 0; }
+void d3d8_set_relief(int on) { g_relief = on != 0; }
 
 static uint32_t g_seek;   /* the piece the caster pass is drawing (d3d8_set_seek), 0 none */
 static uint16_t g_seek_n; /* ... the draws of it so far */
@@ -5806,6 +5847,7 @@ static void window_look(GfxDraw* d, int window_scaled, int window_tinted)
 }
 
 #include "d3d8_chatfont.h" /* chatfont_keep, _cover, _laid: [client] chat.font's glyphs, at the screen's own pixels */
+#include "d3d8_kerb.h"     /* kerb_after: VanaCore's kerbs where the paving changes, drawn after the frame's first relief paving */
 
 /* d3d8_drop_draws: how deep in windows drawn into nothing (gamewin.cpp) the game is */
 static int g_drop_draws;
@@ -5865,7 +5907,7 @@ static void draw_packet(uint32_t prim, uint32_t count, uint32_t start, uint32_t 
     if (drop_draw())
         return;
     GfxDraw* d = &g_draw;
-    if (!build_draw(d))
+    if (!relief_build_draw(d)) /* build_draw, with a texture pack's paving laid by the world (d3d8_kerb.h) */
         return;
     if (game_shadow_hidden(d))
         return;
@@ -5990,6 +6032,7 @@ static void draw_packet(uint32_t prim, uint32_t count, uint32_t start, uint32_t 
         gfx_draw(d);
     chatfont_laid(d);
     tips_gradient(d, prim, n, up_data, up_stride); /* [client] tips.rarity.gradient: over an item's details' background */
+    kerb_after(d); /* last: it draws again, through g_draw */
 }
 
 /* --- resources: IDirect3DResource8, textures, buffers, surfaces ------------------------------------------ */
