@@ -158,6 +158,9 @@ void vanacore_gfx_set_fill_mode(int mode);
  * (leaves, fences) and blended draws (effects, water) keep their textures so their shapes stay; the interface and VanaCore's
  * own draws stay as they are. 0 (the default) leaves the game's. */
 void vanacore_gfx_set_untextured(int on);
+/* [graphics] relief (Stone Relief, experimental): 1 gives a texture pack's paving its depth (the parallax from its height maps), its
+ * kerbs where one paving meets another and its world-laid paving (d3d8_kerb.h); 0 (the default) none of them */
+void vanacore_gfx_set_relief(int on);
 
 /* The grass (VanaCore.ini [graphics] grass*): tufts on the zone's grass-textured ground near the player. enabled; textures the hex hashes of the ground textures that are grass (""
  * any mostly green one); radius how far from the player; density tufts to a square unit of ground; height how tall,

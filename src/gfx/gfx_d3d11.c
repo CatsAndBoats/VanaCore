@@ -239,8 +239,7 @@ typedef struct FxSettings
     float sun_detail; /* the near map's texels across, 512-8192 (sun_size) */
     float sun_fade;   /* seconds the zone's shadows the cache lets go of take to fade (cache_let_go); 0 at once */
     float sun_handoff; /* the share of the sharp map's half-width over which it fades into the far one (gfx_d3d12.c's) */
-    float normalmap, normalmap_strength, normalmap_view; /* texture packs' normal maps (gfx_d3d12.c's): on, how far they bend, the
-                                                         * debug view (1 the bent normal as the colour, 2 lit with Y turned over) */
+    float normalmap, normalmap_strength, normalmap_view; GFX_POM_FX_FIELDS /* texture packs' normal maps and parallax (gfx_pom.h) */
     float moghouse;   /* how much of the sun's shadows stay indoors (GfxScene.indoors), 0 none to 1 all (gfx_d3d12.c's) */
     /* the cel look: ink lines, brightness bands, smoothing */
     float outline, outline_width, outline_depth, outline_crease, outline_fade, bands, band_soft, smooth;
@@ -1913,15 +1912,8 @@ static void draw_main(const GfxDraw* d)
     /* the world's lit draws lit per pixel (gfx_hlsl.c pixel_lit) */
     if (g_fxs.fx != 0.0f && g_fxs.light != 0.0f && d->vs.lighting && !d->vs.rhw && !d->vs.prog && !d->vs.flat)
         k.vs.pixel = g_fxs.light >= 2.0f ? 2 : 1; /* 1: the sun per pixel, the game's torches per vertex */
-    /* the normal maps, as Direct3D 12 has them (gfx_d3d12.c): the lit pixel function's normal bent, or the game's own shaders lit
-     * again from the vertex shader's clip-space position (gfx_hlsl.c emit_normal_relight). No detail pass here */
-    if (g_fxs.normalmap < 0.5f || (k.fs.prog ? !k.vs.prog : !k.vs.pixel))
-        k.fs.nmap = 0;
-    else if (k.fs.nmap)
-    {
-        k.fs.nmap = (uint8_t)(1 + (g_fxs.normalmap_view >= 1.5f ? 2 : g_fxs.normalmap_view >= 0.5f ? 1 : 0));
-        k.vs.cpos = k.fs.prog != 0;
-    }
+    gfx_nmap_key(&k.vs, &k.fs, g_fxs.normalmap, g_fxs.normalmap_view); /* as Direct3D 12 has them, no detail pass (gfx_pom.h) */
+    gfx_pom_key(&k.fs, g_fxs.pom, g_fxs.pom_depth, g_fxs.pom_shadow);
     Shaders* sh = shaders_for(&k, d->vs_tokens, d->ps_tokens);
     if (!sh && k.vs.pixel)
     {
@@ -1978,7 +1970,7 @@ static void draw_main(const GfxDraw* d)
     memset(tex, 0, sizeof tex);
     for (int i = 0; i < 8; ++i)
     {
-        int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && (d->fs.rain == 2 || k.fs.nmap)) ? d->fs.st[i].tex : 0;
+        int wanted = d->fs.prog || i < d->fs.nstages || (i == 7 && (d->fs.rain == 2 || k.fs.nmap)) || (i == 6 && k.fs.pom) ? d->fs.st[i].tex : 0;
         samp[i] = g_linear;
         if (!wanted)
             continue;
@@ -2703,9 +2695,7 @@ static const struct
     { "sun_smooth", offsetof(FxSettings, sun_smooth), 1.0f },
     { "sun_soft_zone", offsetof(FxSettings, sun_soft_zone), 0.5f },
     { "sun_curved", offsetof(FxSettings, sun_curved), 1.0f },
-    { "normalmap", offsetof(FxSettings, normalmap), 0.0f },
-    { "normalmap_strength", offsetof(FxSettings, normalmap_strength), 1.0f },
-    { "normalmap_view", offsetof(FxSettings, normalmap_view), 0.0f },
+    GFX_NMAP_FX_KEYS GFX_POM_FX_KEYS
     { "sun_face", offsetof(FxSettings, sun_face), 1.0f },
     { "sun_min", offsetof(FxSettings, sun_min), 0.0f },
     { "sun_direct", offsetof(FxSettings, sun_direct), 0.5f },

@@ -3207,6 +3207,7 @@ TIPS.panels = {
     ['Water Shader'] = 'VanaCore\'s own moving water, with the bed showing through where it is shallow.',
     ['Mass Grass'] = 'Adds lots of grass and flowers on the ground. West Ronfaure so far.',
     ['Snow Trails'] = 'Footprints in the snow where characters walk. Shading only: the ground is not dug.',
+    ['Stone Relief (WIP)'] = 'Real depth in paved streets, kerbs where paving changes, and no seams between floor pieces. Needs a texture pack made for it.',
     ['Colour grade'] = 'Changes the picture\'s colours and light, like a photo filter. On DirectX 12 it is applied last, over every other effect and after DLSS or FSR.',
     ['Ink Lines'] = 'Cartoon-style outlines round things.',
     ['Brightness Bands'] = 'Flattens the light into steps, for a cartoon look.',
@@ -5023,6 +5024,15 @@ local TABS = {
                 needs_dx(free(slider('Fill-in time', 'graphics', 'snow.fade', 120, 0, 600, 10, '%d s'), 0, 86400)),
                 needs_dx(slider('Sink into snow', 'graphics', 'snow.sink', 0, 0, 0.6, 0.02, '%.2f')),
                 needs_dx(toggle('Trails in sand', 'graphics', 'snow.sand', false)),
+                -- Stone Relief (src/gfx/d3d8_kerb.h, gfx_hlsl.c emit_pom): a texture pack's paving given depth, kerbs where one paving
+                -- meets another, its paving laid by the world ([graphics] relief, off by default; the pack's own files)
+                warn(needs_dx({ kind = 'header', text = 'Stone Relief (WIP)', section = 'graphics', key = 'relief',
+                                switch = { get = function () return tonumber(vana.config.get('graphics', 'relief') or '') == 1 end,
+                                           set = function (on) vana.config.set('graphics', 'relief', on and '1' or '0') end } })),
+                callout('In development', 'Needs a texture pack made for it. Towns and some dungeons so far; expect it to change.', 'warning'),
+                needs_dx(toggle('Depth', FX, 'pom', false)),
+                needs_dx(slider('How deep', FX, 'pom_depth', 0.02, 0.005, 0.05, 0.005, '%.3f')),
+                needs_dx(toggle('Stones shade each other', FX, 'pom_shadow', true)),
                 -- (a Graphics panel since 2026-11-04: it was the Experimental page's Glow Effects Lighting)
                 needs_dx12(effect('Glow Effects', 'elight', 2.5, 2.5)),
                 needs_dx12(slider('Strength', FX, 'elight', 2.5, 0, 10, 0.05)),

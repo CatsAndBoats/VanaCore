@@ -390,6 +390,9 @@ static void emit_ff_vs(Sb* b, const GfxVsKey* k, int water, int pool)
         {
         case 1: sb_printf(b, "  float4 c%d = float4(N, 1.0);\n", i); break;
         case 2: sb_printf(b, "  float4 c%d = float4(pe, 1.0);\n", i); break;
+        /* VanaCore's own (no D3D mode): the vertex's position as the mesh has it - a pack's world-laid paving (d3d8_kerb.h uvw_*),
+         * its texture matrix the piece's world matrix and the map, nothing of the camera's in it */
+        case 8: sb_printf(b, "  float4 c%d = float4(v0.xyz, 1.0);\n", i); break;
         case 3: sb_printf(b, "  float4 c%d = float4(reflect(%s, N), 1.0);\n", i, k->localviewer ? "normalize(pe)" : "float3(0, 0, 1)"); break;
         default:
         {
@@ -507,8 +510,25 @@ static int stage_reads_texture(const GfxStage* s)
 
 /* texture slot i sampled at coord: the slot's heap indices are root constants */
 void gfx_hlsl_sample(Sb* b, const char* dst, int i, int cube, const char* coord);
+/* GfxFsKey.uvrect of the pixel function being written: stage 0's, the normal map's and the height map's samples go through
+ * uvr_w (the rectangle's wrap) with the coordinates' own gradients (g_uvr_d1, g_uvr_d2: unwrapped, so the mips stay right
+ * across the wrap) */
+static int g_hlsl_uvrect;
 void gfx_hlsl_sample(Sb* b, const char* dst, int i, int cube, const char* coord)
 {
+    if (g_hlsl_uvrect && !cube && (i == 0 || i == 6 || i == 7))
+    {
+#ifdef VANACORE
+        if (gfx_hlsl_d3d11)
+        {
+            sb_printf(b, "  %s = tx2_%d.SampleGrad(smp_%d, uvr_w(%s), g_uvr_d1, g_uvr_d2);\n", dst, i, i, coord);
+            return;
+        }
+#endif
+        char c = "xyzw"[i & 3];
+        sb_printf(b, "  %s = tx2[ti[%d].%c].SampleGrad(smp[si[%d].%c], uvr_w(%s), g_uvr_d1, g_uvr_d2);\n", dst, i >> 2, c, i >> 2, c, coord);
+        return;
+    }
 #ifdef VANACORE
     if (gfx_hlsl_d3d11)
     {
@@ -520,25 +540,103 @@ void gfx_hlsl_sample(Sb* b, const char* dst, int i, int cube, const char* coord)
     sb_printf(b, "  %s = %s[ti[%d].%c].Sample(smp[si[%d].%c], %s);\n", dst, cube ? "txc" : "tx2", i >> 2, c, i >> 2, c, coord);
 }
 
+/* stage 6's height (a DXT5's alpha, 1 the top) at coord, with the gradients the coordinates had before the parallax moved them
+ * (a sample in a loop has none of its own) */
+static void hgt_expr(char* out, size_t n, const char* coord)
+{
+#ifdef VANACORE
+    if (gfx_hlsl_d3d11)
+    {
+        snprintf(out, n, g_hlsl_uvrect ? "tx2_6.SampleGrad(smp_6, uvr_w(%s), du1, du2).a" : "tx2_6.SampleGrad(smp_6, %s, du1, du2).a", coord);
+        return;
+    }
+#endif
+    snprintf(out, n, g_hlsl_uvrect ? "tx2[ti[1].z].SampleGrad(smp[si[1].z], uvr_w(%s), du1, du2).a" : "tx2[ti[1].z].SampleGrad(smp[si[1].z], %s, du1, du2).a", coord);
+}
+
+/* VanaCore's parallax (GfxFsKey.pom): stage 0's coordinates walked into stage 6's height map along the view ray, the stones'
+ * tops at the surface and the joints carved below it (pom thousandths of the texture's width deep), so what stands nearer
+ * hides what is behind it; the coordinates the draw then reads (vin.t0) are where the ray met the stone. With pom_shadow, a
+ * few steps from there toward the sun (sun: u.tfactor for the game's own shaders, the directional light for the lit pixel
+ * function) find whether a nearer stone shades it (nm_shadow).
+ * T and B are the cotangent frame emit_normal_map builds (the coordinates' gradients times |det|) */
+static void emit_pom(Sb* b, int pom, const char* sun)
+{
+    char h0[160], h1[160], h2[160], h3[160];
+    hgt_expr(h0, sizeof h0, "pc");
+    hgt_expr(h1, sizeof h1, "pc");
+    hgt_expr(h2, sizeof h2, "pp");
+    hgt_expr(h3, sizeof h3, "ph + lO * (dh * f)");
+    sb_printf(b, "    {\n"
+                 "      float3 Tg = T / max(abs(det), 1e-24), Bg = B / max(abs(det), 1e-24);\n"
+                 "      float3 V = normalize(-pe);\n"
+                 "      float vn = dot(V, Ng);\n"
+                 "      if (vn > 0.03) {\n"
+                 "        float Dw = %.4f / max(length(Tg), 1e-12);\n"
+                 "        float2 dO = -float2(dot(Tg, V), dot(Bg, V)) / max(vn, 0.2) * Dw;\n"
+                 "        float ns = lerp(28.0, 8.0, vn);\n"
+                 "        float st = 1.0 / ns;\n"
+                 "        float2 duv = dO * st;\n"
+                 "        float2 pc = uv;\n"
+                 "        float ld = 0.0, hd = 1.0 - %s;\n"
+                 "        [loop] for (int pi = 0; pi < 32 && ld < hd; ++pi) { pc += duv; ld += st; hd = 1.0 - %s; }\n"
+                 "        float2 pp = pc - duv;\n"
+                 "        float aft = hd - ld, bef = (1.0 - %s) - (ld - st);\n"
+                 "        float w = saturate(aft / min(aft - bef, -1e-5));\n"
+                 "        float2 ph = lerp(pc, pp, w);\n"
+                 "        float dh = lerp(ld, ld - st, w);\n",
+        pom / 1000.0, h0, h1, h2);
+    if (sun)
+        sb_printf(b, "        float3 Ls = normalize(%s);\n"
+                     "        float ln = dot(Ls, Ng);\n"
+                     "        if (ln > 0.02 && dh > 0.002) {\n"
+                     "          float2 lO = float2(dot(Tg, Ls), dot(Bg, Ls)) / max(ln, 0.15) * Dw;\n"
+                     "          float occ = 0.0;\n"
+                     "          [loop] for (int sj = 1; sj <= 10; ++sj) {\n"
+                     "            float f = sj / 10.0;\n"
+                     "            occ = max(occ, ((dh * (1.0 - f)) - (1.0 - %s)) * (1.0 - 0.5 * f));\n"
+                     "          }\n"
+                     "          nm_shadow = 1.0 - 0.55 * saturate(occ * 12.0);\n"
+                     "        }\n",
+            sun, h3);
+    sb_printf(b, "        uv = ph;\n"
+                 "        vin.t0.xy = ph;\n"
+                 "      }\n"
+                 "    }\n");
+}
+
 /* VanaCore's normal maps: the surface normal N (view space, at pe) bent by the BC5 map in stage 7, read at stage 0's
  * coordinates. The game has no tangents, so the frame comes from how the position and the coordinates change from
  * pixel to pixel (Schueler's cotangent frame): it follows any mesh, and costs a few operations a pixel. Coordinates run
- * down the image (D3D's V), so a map with Y up (OpenGL's, chaiNNer's) is turned over here; nmap 3 reads a Y-down map as is. */
-static void emit_normal_map(Sb* b, int nmap)
+ * down the image (D3D's V), so a map with Y up (OpenGL's, chaiNNer's) is turned over here; nmap 3 reads a Y-down map as is.
+ * With the parallax (pom), the coordinates move first (emit_pom) and the map is read where they end */
+static void emit_normal_map(Sb* b, int nmap, int pom, const char* sun)
 {
-    sb_printf(b, "  {\n    float4 nmv;\n");
-    gfx_hlsl_sample(b, "nmv", 7, 0, "vin.t0.xy");
-    sb_printf(b, "    float2 uv = vin.t0.xy;\n"
+    sb_printf(b, "  {\n    float4 nmv;\n"
+                 "    float2 uv = vin.t0.xy;\n"
                  "    float3 dp1 = ddx(pe), dp2 = ddy(pe);\n"
-                 "    float2 du1 = ddx(uv), du2 = ddy(uv);\n"
+                 "    float2 du1 = %s, du2 = %s;\n"
                  "    float nl = length(N);\n"
                  "    float3 Ng = N / max(nl, 1e-6);\n"
                  "    float3 dp2p = cross(dp2, Ng), dp1p = cross(Ng, dp1);\n"
                  "    float det = dot(dp1, dp2p);\n"
                  "    float3 T = (dp2p * du1.x + dp1p * du2.x) * (det < 0.0 ? -1.0 : 1.0);\n"
                  "    float3 B = (dp2p * du1.y + dp1p * du2.y) * (det < 0.0 ? -1.0 : 1.0);\n"
-                 "    float im = rsqrt(max(max(dot(T, T), dot(B, B)), 1e-20));\n"
-                 "    float2 xy = (nmv.rg * 2.0 - 1.0) * u.params2.y;\n"
+                 "    float im = rsqrt(max(max(dot(T, T), dot(B, B)), 1e-20));\n",
+              g_hlsl_uvrect ? "g_uvr_d1" : "ddx(uv)", g_hlsl_uvrect ? "g_uvr_d2" : "ddy(uv)");
+    if (pom)
+    {
+        emit_pom(b, pom, sun);
+#ifdef VANACORE
+        if (gfx_hlsl_d3d11)
+            sb_printf(b, g_hlsl_uvrect ? "    nmv = tx2_7.SampleGrad(smp_7, uvr_w(uv), du1, du2);\n" : "    nmv = tx2_7.SampleGrad(smp_7, uv, du1, du2);\n");
+        else
+#endif
+            sb_printf(b, g_hlsl_uvrect ? "    nmv = tx2[ti[1].w].SampleGrad(smp[si[1].w], uvr_w(uv), du1, du2);\n" : "    nmv = tx2[ti[1].w].SampleGrad(smp[si[1].w], uv, du1, du2);\n");
+    }
+    else
+        gfx_hlsl_sample(b, "nmv", 7, 0, "uv");
+    sb_printf(b, "    float2 xy = (nmv.rg * 2.0 - 1.0) * u.params2.y;\n"
                  "    float z = sqrt(saturate(1.0 - dot(xy, xy)));\n"
                  "    N = normalize(T * (im * xy.x) + B * (im * %sxy.y) + Ng * z) * nl;\n  }\n",
         nmap == 3 || nmap == 5 ? "" : "-");
@@ -548,18 +646,19 @@ static void emit_normal_map(Sb* b, int nmap)
  * Where each pixel stands in view space is worked out from the vertex shader's clip-space position (VOut.cp) and the
  * projection's scales (u.params2.zw, d3d8.c); the surface it is on from how that changes pixel to pixel; and the map bends it
  * as emit_normal_map does. The shader's colour is then lit again by the sun (u.tfactor.xyz, toward it): scaled by how much more
- * (or less) the bent normal faces it than the flat one, so a flat map changes nothing and the game's own look stays. */
-static void emit_normal_relight(Sb* b, int nmap)
+ * (or less) the bent normal faces it than the flat one, so a flat map changes nothing and the game's own look stays. With the
+ * parallax's shadow, darker where a nearer stone stands between it and the sun */
+static void emit_normal_relight(Sb* b, int nmap, int pom, int shadow)
 {
-    sb_printf(b, "  float nm_gain = 1.0;\n  float3 nm_view = float3(0.5, 0.5, 1.0);\n  float3 nm_N = float3(0.0, 0.0, 0.0);\n"
+    sb_printf(b, "  float nm_gain = 1.0;\n  float nm_shadow = 1.0;\n  float3 nm_view = float3(0.5, 0.5, 1.0);\n  float3 nm_N = float3(0.0, 0.0, 0.0);\n"
                  "  if (u.params2.z > 0.0) {\n"
                  "    float3 pe = float3(vin.cp.xy / vin.cp.w * u.params2.zw * vin.cp.w, vin.cp.w);\n"
                  "    float3 N = normalize(cross(ddx(pe), ddy(pe)));\n"
                  "    if (dot(N, pe) > 0.0) N = -N;\n"
                  "    float3 Ng0 = N;\n");
-    emit_normal_map(b, nmap);
+    emit_normal_map(b, nmap, pom, shadow ? "u.tfactor.xyz" : NULL);
     sb_printf(b, "    float3 L = normalize(u.tfactor.xyz);\n"
-                 "    nm_gain = clamp(1.0 + 0.8 * (dot(N, L) - dot(Ng0, L)), 0.3, 1.8);\n"
+                 "    nm_gain = clamp(1.0 + 0.8 * (dot(N, L) - dot(Ng0, L)), 0.3, 1.8) * nm_shadow;\n"
                  "    nm_view = N * 0.5 + 0.5;\n"
                  "    nm_N = N;\n"
                  "  }\n");
@@ -571,22 +670,58 @@ static void emit_normal_relight(Sb* b, int nmap)
 static void emit_fs_signature(Sb* b, const GfxFsKey* k, const GfxVsKey* vk)
 {
     int pix = pixel_lit(vk);
+    const int us = k->uvrect & 0x7f, force = (k->uvrect & 0x80) != 0;
+    g_hlsl_uvrect = us && !k->prog && vk->ntex >= us + 2;
+    if (g_hlsl_uvrect) /* the rectangle's wrap (GfxFsKey.uvrect): inside it, the world's coordinates; outside, the game's as they are */
+        sb_printf(b, "static float g_uvr_in = 0.0;\nstatic float4 g_uvr_r = float4(0.0, 0.0, 1.0, 1.0);\n"
+                     "static float2 g_uvr_d1 = float2(0.0, 0.0), g_uvr_d2 = float2(0.0, 0.0);\n"
+                     "float2 uvr_w(float2 c) { return g_uvr_in > 0.5 ? g_uvr_r.xy + frac((c - g_uvr_r.xy) / g_uvr_r.zw) * g_uvr_r.zw : c; }\n");
     /* VanaCore's water takes its triangle's number too, for the triangles debug view (emit_fs_tail) */
     const int wtri = k->water && !k->prog && !vk->prog && !vk->rhw && !depth_only(vk);
     sb_printf(b, depth_only(vk) ? "void fs_main(VOut %s) {\n" : "float4 fs_main(VOut %s%s) : SV_Target {\n", pix ? "vin0" : "vin",
         wtri ? ", uint wprim : SV_PrimitiveID" : "");
+    if (g_hlsl_uvrect)
+    {
+        /* in the rectangle by the game's own coordinates (a margin for a triangle's edge lying on the rectangle's), then
+         * continuous world coordinates in its texels, wrapped at each sample; their gradients taken before any branch */
+        const char* v = pix ? "vin0" : "vin";
+        /* ... and a floor: the world's coordinates (x and z) spread both ways across it, one way only down a wall, where laid by
+         * them the texture ran straight down in streaks (Garlaige's walls, cut from the same corner of the atlas). A wall's is 0
+         * exactly; a floor's falls as it's seen more edge-on, and at 0.35 pixels of the floor near the cut flipped between the
+         * world's tiles and the game's as the camera turned - the floor at the player's feet moved */
+        sb_printf(b, "  g_uvr_r = float4(%s.t%d.zw, %s.t%d.xy);\n"
+                     "  { float2 a = ddx(%s.t%d.xy), c = ddy(%s.t%d.xy);\n"
+                     "    float flat = abs(a.x * c.y - a.y * c.x) / (length(a) * length(c) + 1e-12);\n"
+                     "    float2 g = frac(%s.t0.xy) + 1e-4; float m = 4e-3;\n"
+                     "    g_uvr_in = flat > 0.03 && (%s(all(g >= g_uvr_r.xy - m) && all(g <= g_uvr_r.xy + g_uvr_r.zw + m))) ? 1.0 : 0.0; }\n"
+                     /* the gradients of both, before either is chosen: in a 2x2 block across the join of two pieces some pixels took
+                      * the world's coordinates and some the game's, and their difference made the gradient - a line of wrong mips and
+                      * a bent normal map down every join, crawling as the camera moved */
+                     "  { float2 gd1 = ddx(%s.t0.xy), gd2 = ddy(%s.t0.xy);\n"
+                     "    float2 wd1 = ddx(%s.t%d.xy) * g_uvr_r.zw, wd2 = ddy(%s.t%d.xy) * g_uvr_r.zw;\n"
+                     "    g_uvr_d1 = g_uvr_in > 0.5 ? wd1 : gd1; g_uvr_d2 = g_uvr_in > 0.5 ? wd2 : gd2; }\n"
+                     "  if (g_uvr_in > 0.5) %s.t0.xy = g_uvr_r.xy + %s.t%d.xy * g_uvr_r.zw;\n",
+            v, us, v, us + 1, v, us, v, us, v, force ? "true || " : "", v, v, v, us, v, us, v, v, us);
+    }
     if (pix)
     {
-        sb_printf(b, "  VOut vin = vin0;\n  float3 nm_N = float3(0.0, 0.0, 0.0);\n%s  {\n  float3 N = vin.n * (rsqrt(max(dot(vin.n, vin.n), 1e-20)) * %s);\n"
+        sb_printf(b, "  VOut vin = vin0;\n  float3 nm_N = float3(0.0, 0.0, 0.0);\n  float nm_shadow = 1.0;\n%s  {\n  float3 N = vin.n * (rsqrt(max(dot(vin.n, vin.n), 1e-20)) * %s);\n"
                      "  float3 pe = vin.pe.xyz;\n  float4 cd = vin.md, ca = vin.ma, cs = vin.ms, ce = vin.me;\n",
             k->wet ? "  float3 wet_N = float3(0.0, 0.0, 1.0), wet_pe = float3(0.0, 0.0, 1.0);\n" : "", vk->normalize ? "1.0" : "vin.pe.w");
+        char sun[32] = "";
+        for (int i = 0; i < vk->nlights && !sun[0]; ++i) /* the parallax's shade: from the first directional light, the sun */
+            if (vk->light_type[i] == 3)
+                snprintf(sun, sizeof sun, "u.light[%d].dir.xyz", i);
+        const int pom = k->nmap && k->nmap <= 3 ? k->pom : 0, shade = pom && k->pom_shadow && sun[0];
         if (k->nmap && k->nmap != 6) /* (6: no map, the smooth-normal pass) */
-            emit_normal_map(b, k->nmap);
+            emit_normal_map(b, k->nmap, pom, shade ? sun : NULL);
         if (k->wet) /* the rain's wet look (gfx_hlsl_rain.h emit_wet) starts from the lit normal and the position */
             sb_printf(b, "  wet_N = N; wet_pe = pe;\n");
         if (k->nmap >= 4) /* the detail pass: the bent normal goes out (emit_fs_tail); the smooth-normal pass, the normal itself */
             sb_printf(b, "  nm_N = normalize(N);\n");
         emit_lighting(b, vk, 1, point_per_vertex(vk) ? 1 : 0);
+        if (shade) /* a nearer stone between it and the sun */
+            sb_printf(b, "  lit_d.rgb *= nm_shadow; lit_s.rgb *= nm_shadow;\n");
         sb_printf(b, "  vin.d = lit_d; vin.s = lit_s;\n");
         if (k->nmap == 2) /* the bent normal as a colour: the lighting is its own, this shows the map is read */
             sb_printf(b, "  vin.d = float4(normalize(N) * 0.5 + 0.5, 1.0); vin.s = float4(0, 0, 0, 0);\n");
@@ -902,7 +1037,7 @@ char* gfx_hlsl_generate(const GfxVsKey* vk, const GfxFsKey* fk, const uint32_t* 
         emit_fs_signature(&b, fk, vk);
         int relight = fk->nmap && fk->nmap < 6 && vk->cpos && !depth_only(vk);
         if (relight)
-            emit_normal_relight(&b, fk->nmap);
+            emit_normal_relight(&b, fk->nmap, fk->nmap <= 3 ? fk->pom : 0, fk->nmap <= 3 && fk->pom && fk->pom_shadow);
         if (!gfx_hlsl_ps1(&b, fk, ps_tokens))
             goto fail;
         if (relight)
@@ -911,8 +1046,10 @@ char* gfx_hlsl_generate(const GfxVsKey* vk, const GfxFsKey* fk, const uint32_t* 
     }
     else
         emit_ff_fs(&b, fk, vk);
+    g_hlsl_uvrect = 0;
     return b.s;
 fail:
+    g_hlsl_uvrect = 0;
     free(b.s);
     return NULL;
 }

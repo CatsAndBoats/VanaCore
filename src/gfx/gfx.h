@@ -170,7 +170,16 @@ typedef struct GfxFsKey
     uint8_t rain; /* VanaCore's rain pass (d3d8_rain.h rain_pass): a screen-space draw after the world over copies of the scene's
                    * colour and depth (stages 6 and 7, as the water pass's) and the shelter map (stage 5): the streaks, the splashes,
                    * the wet ground (gfx_hlsl_rain.h emit_rain_fs) */
-    uint8_t pad[4]; /* (the Direct3D 12 back end's LibKey, this and GfxVsKey, is read in pairs of words: gfx_sun_cache.h lib_hash) */
+    uint8_t pom;  /* VanaCore's parallax (gfx_hlsl.c emit_pom), with a normal map (nmap 1 to 3): stage 6 holds stage 0's height map
+                   * (the height in its alpha, 1 the top) and stage 0's coordinates are walked into it along the view, so stones
+                   * stand up and hide what is behind them. d3d8.c sets 1 where there is a map; the back end makes it the depth in
+                   * thousandths of the texture's width ([graphics.effects] pom, pom_depth), or 0 */
+    uint8_t pom_shadow; /* ... and the stones shade what is behind them from the sun (the game's own shaders: u.tfactor toward it) */
+    uint8_t uvrect; /* VanaCore's world-laid paving in one rectangle of an atlas (d3d8_kerb.h uvw_*): n, the first coordinate slot
+                     * the draw leaves unused - vin.t<n> the world's coordinates in repeats of the rectangle (xy) and its corner
+                     * (zw), vin.t<n+1>.xy its size. Where the game's coordinates (vin.t0) fall inside it, stage 0 reads the
+                     * world's instead, wrapped back into it at each sample (gfx_hlsl.c uvr_w); 0 none */
+    uint8_t pad[1]; /* (the Direct3D 12 back end's LibKey, this and GfxVsKey, is read in pairs of words: gfx_sun_cache.h lib_hash) */
 } GfxFsKey;
 
 /* The render pipeline beyond the functions: blending and the color write mask. */
@@ -741,3 +750,5 @@ enum
 void gfx_prof_skip(int reason);
 /* Time in a shim call (thunk_timer): counted for the thread that presents, the game's. */
 void gfx_prof_shim(uint64_t ns);
+
+#include "gfx_pom.h" /* the normal maps' and Stone Relief's keys and settings, both back ends' */
