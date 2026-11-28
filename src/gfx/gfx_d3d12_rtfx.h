@@ -61,7 +61,8 @@ static void mfx_release(void)
 static Caster* mfx_rec_new(const GfxDraw* d)
 {
     if (!mfx_wanted() || g_mfxout || g_mout || g_nout || g_mfx.serial == g_serial || !g_mfx.scene || g_rt != g_mfx.scene || g_rt_face ||
-        g_rt_level || d->vs.rhw || d->overlay || d->screen_fx || !d->pipe.blend || !d->depth.zenable || d->depth.zwrite || d->zbias)
+        g_rt_level || d->vs.rhw || d->overlay || d->screen_fx || !d->pipe.blend || !d->depth.zenable || d->depth.zwrite || d->zbias ||
+        (d->rain_fx && g_fxs.refl_no_rain != 0.0f))
         return NULL;
     if (g_mfr.serial != g_serial)
         g_mfr.n = 0, g_mfr.serial = g_serial;
@@ -262,7 +263,9 @@ static void mfx_begin(GfxTex* color, const GfxScene* s)
  * wasn't. Not the zone's own blended parts (lit, a decal's by its D3DRS_ZBIAS) nor VanaCore's water */
 static int mfx_takes(const GfxDraw* d)
 {
-    if (!d->pipe.blend || d->pipe.op != 1)
+    /* (not the rain while refl_no_rain, on by default: its drops rose up through the floor's reflection, Josh 2026-11-28 - true, and
+     * odd to look at) */
+    if (!d->pipe.blend || d->pipe.op != 1 || (d->rain_fx && g_fxs.refl_no_rain != 0.0f))
         return 0;
     return d->pipe.dst == 2 || (d->pipe.src == 5 && d->pipe.dst == 6 && !d->vs.lighting && !d->fs.water && !d->zbias && !d->depth.zwrite);
 }

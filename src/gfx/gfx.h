@@ -265,6 +265,8 @@ typedef struct GfxDraw
                          * hash; Al'Taieu's portal pools): left out of its glow (gfx_d3d12.c el_emit, fx_dlssg) */
     uint8_t el_early; /* an additive effect's own model near the camera (a zone's door glow, made once, round the camera) drawn
                        * before the world's scene ended: the light from the effects takes it too (gfx_d3d12.c el_emit) */
+    uint8_t rain_fx; /* rain: VanaCore's drops and splashes (d3d8_rain.h particles_draw), the game's own rain (its texture,
+                      * rain_game_tex): left out of the reflections' effects while [graphics.effects] refl_no_rain (gfx_d3d12_rtfx.h) */
     uint8_t is_char; /* a character's draw (players, NPCs, monsters and what they wear: d3d8.c is_character): the back end marks its
                       * pixels in the stencil while ao_chars needs them told from the world (gfx_d3d12.c cmask_usable) */
     uint8_t sought; /* a piece of the zone round the player, drawn by the game for the sun's maps alone whatever the camera sees

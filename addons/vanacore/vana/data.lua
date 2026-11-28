@@ -2250,6 +2250,7 @@ TIPS.rows = {
         .. 'Stone and metal: not dirt, grass, sand or snow.\n'
         .. 'Anything built: wood and props too.\n'
         .. 'Any: everywhere not green.',
+    ['graphics.effects.refl_no_rain'] = 'Keeps falling rain out of the ray traced reflections: drops rising up through the floor look odd, true as they are.',
     ['graphics.effects.refl_walkable'] = 'Only floors you can walk on reflect: not the tops of walls, roofs or ledges you can\'t reach.\n'
         .. 'The floors joined to where you stand count, and any you go on to stand on.',
     ['graphics.effects.refl_quality'] = 'How clean the reflections are.\n'
@@ -4715,6 +4716,8 @@ local TABS = {
                 -- only the floors one can walk on: the collision's floors joined into areas, the one under the player's feet and
                 -- any they've stood on (floors.c walk_scene); off, a wall's or a roof's top reflects too
                 toggle('Only Walkable Floors', FX, 'refl_walkable', true),
+                -- the rain's drops kept out of the reflections (gfx_d3d12_rtfx.h mfx_takes): rising up through the floor, they looked odd
+                toggle('Hide Rain in Reflections', FX, 'refl_no_rain', true),
                 effect('Bounce Lighting', 'gi', 0, 0.5),
                 note('Light picked up from lit surfaces nearby: colour on what is beside them, fill in the corners. DirectX 12.'),
                 slider('Strength', FX, 'gi', 0.5, 0, 2, 0.05),

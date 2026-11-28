@@ -561,7 +561,7 @@ typedef struct FxSettings
     float refl_lift;
     /* ... and ray-traced reflections where the screen has none (Direct3D 12): 0 off, 1 on. The ray goes on through a tree of the
      * zone's collision the shader walks (gfx_d3d12_rt.h, rtbvh.c) */
-    float refl_rt, refl_rt_res, refl_rt_blur, refl_rt_fx, refl_rt_fx_level;
+    float refl_rt, refl_rt_res, refl_rt_blur, refl_rt_fx, refl_rt_fx_level, refl_no_rain;
     /* the colour grade's zones: midtones and whites (-1..1), soft highlights (0..1: a shoulder in place of the hard clip) and a
      * tint on the lights (-1 cool .. 1 warm); and clarity (local contrast, 0 off). The grade is laid last (grade_last), after
      * every effect; clarity, sharpen and smooth go off with it (grade 0) */
@@ -8308,7 +8308,7 @@ static const struct
     { "refl_rt", offsetof(FxSettings, refl_rt), 2.0f },
     { "refl_rt_res", offsetof(FxSettings, refl_rt_res), 0.75f },
     { "refl_rt_blur", offsetof(FxSettings, refl_rt_blur), 0.0f },
-    { "refl_rt_fx", offsetof(FxSettings, refl_rt_fx), 1.0f }, { "refl_rt_fx_level", offsetof(FxSettings, refl_rt_fx_level), 0.0f },
+    { "refl_rt_fx", offsetof(FxSettings, refl_rt_fx), 1.0f }, { "refl_rt_fx_level", offsetof(FxSettings, refl_rt_fx_level), 0.0f }, { "refl_no_rain", offsetof(FxSettings, refl_no_rain), 1.0f },
     { "gi", offsetof(FxSettings, gi), 0.0f },
     { "gi_radius", offsetof(FxSettings, gi_radius), 5.0f },
     { "gi_quality", offsetof(FxSettings, gi_quality), 1.09f }, { "gi_night", offsetof(FxSettings, gi_night), 1.0f },

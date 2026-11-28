@@ -125,14 +125,19 @@ static void rain_tick(void)
 /* The game's own rain (6 dynamic draws round the camera, additive, texture 53942d980fab7902: research/true-sky.md) left out
  * while VanaCore's rain draws (rain.game 0), so two rains don't fight; the snow and the sand storms are other textures */
 #define RAIN_GAME_TEX 0x53942d980fab7902ull
-static int rain_game_skip(const GfxDraw* d, uint32_t tex0)
+/* one of the game's rain draws: additive, in the world, its texture (d3d8.c marks it rain_fx, for the reflections' effects) */
+static int rain_game_tex(const GfxDraw* d, uint32_t tex0)
 {
-    if (g_rain_set.game || !g_rain_set.rain || g_rain_fall <= 0.001f)
-        return 0;
     if (d->vs.rhw || !d->pipe.blend || d->pipe.dst != 2 || d->pipe.op != 1) /* additive, in the world */
         return 0;
     Obj* t0 = obj(tex0);
     return t0 && texture_hash(t0) == RAIN_GAME_TEX;
+}
+static int rain_game_skip(const GfxDraw* d, uint32_t tex0)
+{
+    if (g_rain_set.game || !g_rain_set.rain || g_rain_fall <= 0.001f)
+        return 0;
+    return d->rain_fx;
 }
 
 /* --- the shelter: the zone's collision cast down ---------------------------------------------------------------------- */
@@ -1075,6 +1080,7 @@ static void particles_draw(const GfxScene* s, const float* v, uint32_t n, const 
     static const float I[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
     static GfxDraw d;
     memset(&d, 0, sizeof d);
+    d.rain_fx = 1; /* (refl_no_rain: kept out of the reflections' effects) */
     d.vs.el[GFX_R_POSITION] = (GfxElem){ 1, 0, GFX_FLOAT3, 0 };
     d.vs.el[GFX_R_DIFFUSE] = (GfxElem){ 1, 0, GFX_D3DCOLOR, 0 };
     d.u.offset[GFX_R_DIFFUSE] = 12;

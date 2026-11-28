@@ -127,7 +127,7 @@ static void look_fog(GfxDraw* d);   /* d3d8_weather_look.h: a borrowed weather's
 static void look_light(GfxDraw* d); /* ... and light */
 static void rain_set_zone(int zone);
 static void water_set_zone(int zone); /* d3d8_water_level.h: a ferry's zone (g_water_ship) */
-static int rain_game_skip(const GfxDraw* d, uint32_t tex0);
+static int rain_game_skip(const GfxDraw* d, uint32_t tex0), rain_game_tex(const GfxDraw* d, uint32_t tex0);
 static void water_device_lost(void); /* the collision's water's buffer (d3d8_water.h) */
 static void rain_mask_lost(void);     /* the wet ground's mask (d3d8_rain.h) */
 
@@ -5921,6 +5921,7 @@ static void draw_packet(uint32_t prim, uint32_t count, uint32_t start, uint32_t 
     night_light(d);
     character_light(d, up_data);
     fw_draw(d);
+    d->rain_fx = (uint8_t)rain_game_tex(d, g_dev.cur.tex[0]); /* (the game's own rain: rain_fx) */
     if (rain_game_skip(d, g_dev.cur.tex[0])) /* the game's own rain left out under VanaCore's (rain.game) */
         return;
     if (water_keep(d, prim, count, water_kept)) /* VanaCore's water to keep: lit as the world is by now; drawn at the scene's end (water_pass) */
