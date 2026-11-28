@@ -78,7 +78,13 @@
     "  if ((zr == 0.0 && zl == 0.0) || (zd == 0.0 && zu == 0.0)) return false;\n" \
     "  float3 n = cross(dx, dy);\n" \
     "  float nn = dot(n, n);\n" \
-    "  return nn > 1e-12 && abs(dot(n * rsqrt(nn), N)) < 0.94;\n" \
+    /* (... or from up by more than about 25 degrees: beside a character, N is worked out partly from the character's depth and \
+     * tilts, and lined up with the ramp by chance, the treads round their outline took the sky's reflection, a pale band hugging \
+     * them on a stair, Whitegate 2026-11-28. u.up is eased over frames, a few degrees off while the camera pitches: a stair's ramp \
+     * is 35 and more) */ \
+    "  if (!(nn > 1e-12)) return false;\n" \
+    "  n *= rsqrt(nn);\n" \
+    "  return abs(dot(n, N)) < 0.94 || abs(dot(n, u.up.xyz)) < 0.9;\n" \
     "}\n" \
     "float bump_fade(float3 P, float dist) {\n" \
     "  float nr = u.rbf.w;\n" \
