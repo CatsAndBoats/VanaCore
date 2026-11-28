@@ -57,6 +57,29 @@
      * from the camera, the texture's detail smaller than a pixel there; and with refl_bump_near (u.rbf.w, Surface Depth Fade: \
      * u.rbf.xyz the player's feet in view space) none at the player's feet, all of it that far from them - a clean mirror to \
      * stand in, the stones breaking it up farther off. The far fade starts later with it, so the whole of it is reached */ \
+    /* whether the zone's collision floor at a scene pixel (the floors' depth, input 8) is tilted from the surface drawn there (N) by \
+     * more than about 20 degrees: a stair, its treads drawn level over a ramp of collision. fx_ssr's floor test took a tread \
+     * wherever it happened to lie near the ramp, and which those were changed with every step of the camera: patches of reflection \
+     * coming and going over the steps (Whitegate, 2026-11-27). A sloped floor drawn as a slope is its own collision's slope. Each \
+     * way the side nearer in depth, so a collision edge isn't read as a slope */ \
+    "float floor_depth_at(int2 q) {\n" \
+    "  return view_z(texel(8, clamp(q, int2(u.vp.xy), int2(u.vp.xy + u.vp.zw) - 1)).r);\n" \
+    "}\n" \
+    "bool floor_tilted(int2 q, float3 N) {\n" \
+    "  float z0 = floor_depth_at(q);\n" \
+    "  if (z0 == 0.0) return false;\n" \
+    "  float zr = floor_depth_at(q + int2(2, 0)), zl = floor_depth_at(q - int2(2, 0));\n" \
+    "  float zd = floor_depth_at(q + int2(0, 2)), zu = floor_depth_at(q - int2(0, 2));\n" \
+    "  bool rx = zr != 0.0 && (zl == 0.0 || abs(zr - z0) <= abs(zl - z0)), ry = zd != 0.0 && (zu == 0.0 || abs(zd - z0) <= abs(zu - z0));\n" \
+    "  float2 c = float2(q) + 0.5;\n" \
+    "  float3 p0 = view_pos(c, z0);\n" \
+    "  float3 dx = rx ? view_pos(c + float2(2.0, 0.0), zr) - p0 : p0 - view_pos(c - float2(2.0, 0.0), zl);\n" \
+    "  float3 dy = ry ? view_pos(c + float2(0.0, 2.0), zd) - p0 : p0 - view_pos(c - float2(0.0, 2.0), zu);\n" \
+    "  if ((zr == 0.0 && zl == 0.0) || (zd == 0.0 && zu == 0.0)) return false;\n" \
+    "  float3 n = cross(dx, dy);\n" \
+    "  float nn = dot(n, n);\n" \
+    "  return nn > 1e-12 && abs(dot(n * rsqrt(nn), N)) < 0.94;\n" \
+    "}\n" \
     "float bump_fade(float3 P, float dist) {\n" \
     "  float nr = u.rbf.w;\n" \
     "  float fo = 1.0 - smoothstep(max(25.0, nr + 10.0), max(70.0, nr + 55.0), dist);\n" \
@@ -75,13 +98,16 @@
      * step of pixels either side, a floor far off was higher on one side and lower on the other whenever the camera pitched (up \
      * is eased over frames) or the ground sloped, and the far half of the mask went black with every move of the camera. What \
      * stands well nearer than the place (someone in front of it) says nothing of it */ \
-    "bool strip_off(float3 Q, float3 P, float3 N) {\n" \
+    /* (0 the floor goes on there, 1 it doesn't, 2 not known: off the picture. Counted as going on, a railing's top by the picture's \
+     * edge kept its reflection whenever one side's place fell off it, and lost it when it didn't: white streaks along the top that \
+     * came and went as the camera moved, Whitegate 2026-11-27. Now the side in the picture decides) */ \
+    "int strip_off(float3 Q, float3 P, float3 N) {\n" \
     "  float3 q = to_px(Q);\n" \
-    "  if (!(q.z > 0.1) || !in_view(q.xy)) return false;\n" \
+    "  if (!(q.z > 0.1) || !in_view(q.xy)) return 2;\n" \
     "  float z = view_z(texel(0, int2(q.xy)).r);\n" \
-    "  if (z == 0.0) return true;\n" \
+    "  if (z == 0.0) return 1;\n" \
     "  float3 S = view_pos(floor(q.xy) + 0.5, z);\n" \
-    "  return abs(dot(S - P, N)) > 0.3 && z * u.hand.x > q.z - 1.5;\n" \
+    "  return abs(dot(S - P, N)) > 0.3 && z * u.hand.x > q.z - 1.5 ? 1 : 0;\n" \
     "}\n" \
     "float narrow_top(float3 P, float3 N) {\n" \
     "  float3 t1 = cross(N, P);\n" \
@@ -91,7 +117,8 @@
     "  float nt = 0.0;\n" \
     "  [unroll] for (int k = 0; k < 4; ++k) {\n" \
     "    float3 d = k == 0 ? t1 : k == 1 ? t2 : (k == 2 ? t1 + t2 : t1 - t2) * 0.7071;\n" \
-    "    if (strip_off(P + d, P, N) && strip_off(P - d, P, N)) nt = 1.0;\n" \
+    "    int sa = strip_off(P + d, P, N), sb = strip_off(P - d, P, N);\n" \
+    "    if (sa != 0 && sb != 0 && sa + sb < 4) nt = 1.0;\n" \
     "  }\n" \
     "  return nt;\n" \
     "}\n" \
@@ -311,6 +338,9 @@
     "          if (hq.z > 0.1 && in_view(hq.xy)) {\n" \
     "            float tol = 0.02 * hq.z + 0.15;\n" \
     "            float dm = 1.0 - smoothstep(tol, 2.0 * tol, abs(dist_at(hq.xy) - hq.z));\n" \
+    /* (not a character's pixel there: one standing against the wall the tree's ray met, within its depth, came out a second, \
+     * ghost reflection of them inside the wall's, Whitegate 2026-11-27) */ \
+    "            if (u.aoc.w > 0.0 && texel(10, int2(hq.xy)).r > 0.5) dm = 0.0;\n" \
     "            float fc = smoothstep(0.2, 0.45, dot(nv, -normalize(Hv)));\n" \
     "            float2 se = (hq.xy - u.vp.xy) / u.vp.zw;\n" \
     "            float sfd = smoothstep(0.0, 0.2, min(se.x, 1.0 - se.x)) * smoothstep(0.0, 0.2, min(se.y, 1.0 - se.y));\n" \

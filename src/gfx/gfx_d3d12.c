@@ -6753,7 +6753,7 @@ static const char FX_HLSL_2[] =
     "  float mw = 1.0;\n"
     "  if (!chr && (rw >> 2) != 0) {\n"
     /* (a pixel the layer hides, floor_ok's y 2, is what the floor at its own level round it is: a wider ring, its taps at that level alone) */
-    "    float2 fc = floor_ok(int2(px), rw);\n"
+    "    float2 fc = floor_ok(int2(px), rw); if (dist < 40.0 && fc.x > 0.0 && floor_tilted(int2(px), N)) fc = float2(0.0, 0.0);\n" /* (a stair: floor_tilted) */
     "    float a = fc.x; bool hid = fc.y > 1.5;\n"
     "    if (a <= 0.0 && !hid) return float4(0.0, 0.0, 0.0, 0.0);\n"
     "    float fr = (hid ? 0.08 : 0.04) * u.vp.w;\n"

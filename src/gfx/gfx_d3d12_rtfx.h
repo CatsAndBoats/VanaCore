@@ -208,9 +208,8 @@ static int mfx_targets(int k, uint32_t w, uint32_t h, uint32_t depth_fmt)
  * under the level, which cuts them off, on floors fx_zlate leaves out as not at it (Aht Urhgan Whitegate, 2026-11-27). And by one
  * level alone, the most of the view's, the walkway the player stood on won over the pool below, and the crystal was gone again: two
  * mirrors, one a level. A grid of rays from the camera across the view, each stepped through the zone's collision floors
- * (grass_floor_near) to the first it meets; the level most of them meet (within half a yalm) first, kept until another has half
- * as many again, so it doesn't flip at every edge; then the most met of the rest a yalm or more off it, if MFX_LEVEL_SECOND of
- * the rays meet it. Worked out every MFX_LEVEL_EVERY frames; the feet where no ray meets a floor or the floors aren't known */
+ * (grass_floor_near) to the first it meets; the levels most of them meet (within half a yalm), the second only if MFX_LEVEL_SECOND
+ * of the rays meet it, each kept while they still do (mfx_levels_pick). Worked out every MFX_LEVEL_EVERY frames; the feet where no ray meets a floor or the floors aren't known */
 #define MFX_LEVEL_COLS 8
 #define MFX_LEVEL_ROWS 6
 #define MFX_LEVEL_EVERY 6u
@@ -248,14 +247,17 @@ static int mfx_level_count(const float* h, int n, float v)
     return c;
 }
 
-/* the most met of the n levels in h, leaving out those within a yalm of `skip` when `has_skip`; its count into *best */
-static float mfx_level_top(const float* h, int n, int has_skip, float skip, int* best)
+/* the most met of the n levels in h, leaving out those within a yalm of any of the nskip in skip; its count into *best */
+static float mfx_level_top(const float* h, int n, const float* skip, int nskip, int* best)
 {
     float at = 0.0f;
     *best = 0;
     for (int i = 0; i < n; ++i)
     {
-        if (has_skip && fabsf(h[i] - skip) < 1.0f)
+        int near_ = 0;
+        for (int k = 0; k < nskip; ++k)
+            near_ |= fabsf(h[i] - skip[k]) < 1.0f;
+        if (near_)
             continue;
         const int c = mfx_level_count(h, n, h[i]);
         if (c > *best)
@@ -289,6 +291,35 @@ static void mfx_level_rays(const GfxScene* s, const float* inv, float* h, int* n
         }
 }
 
+/* The levels from this update's rays (h, n): each level from before that MFX_LEVEL_SECOND of them still meet is kept, at its
+ * own value; a new one (a yalm or more off those) is taken where there's room, or in place of the weaker kept one when it has half
+ * as many again. Picked afresh at every update, a player going up or down a stair had a mirror jump between the steps' heights
+ * or the second come and go, the effects' reflections flickering with it (Whitegate, 2026-11-27). No ray meeting a floor keeps
+ * what there was */
+static void mfx_levels_pick(const float* h, int n)
+{
+    float keep[2];
+    int kc[2], nk = 0, best = 0;
+    for (int i = 0; i < g_mfl.known; ++i)
+    {
+        const int c = mfx_level_count(h, n, g_mfl.level[i]);
+        if (c >= MFX_LEVEL_SECOND)
+            keep[nk] = g_mfl.level[i], kc[nk++] = c;
+    }
+    const float at = mfx_level_top(h, n, keep, nk, &best);
+    if (nk == 2)
+    {
+        const int weak = kc[1] < kc[0] ? 1 : 0;
+        if (2 * best > 3 * kc[weak])
+            keep[weak] = at, kc[weak] = best;
+    }
+    else if (best >= (nk ? MFX_LEVEL_SECOND : 1))
+        keep[nk] = at, kc[nk++] = best;
+    if (!nk)
+        return;
+    g_mfl.level[0] = keep[0], g_mfl.level[1] = nk > 1 ? keep[1] : keep[0], g_mfl.known = nk;
+}
+
 /* the levels into lv (refl_rt_fx_level taken off: it raises them, the world's y counting down); how many (1 or 2) */
 static int mfx_levels(const GfxScene* s, float lv[2])
 {
@@ -298,20 +329,11 @@ static int mfx_levels(const GfxScene* s, float lv[2])
     {
         g_mfl.serial = g_serial ? g_serial : 1;
         float inv[16], h[MFX_LEVEL_COLS * MFX_LEVEL_ROWS];
-        int n = 0, best = 0, second = 0;
+        int n = 0;
         const float* p = s->proj;
         if (mat_inverse(inv, s->view) && p[0] != 0.0f && p[5] != 0.0f && p[11] != 0.0f)
             mfx_level_rays(s, inv, h, &n);
-        const float at = mfx_level_top(h, n, 0, 0.0f, &best);
-        if (!best)
-            g_mfl.known = 0;
-        else
-        {
-            if (!g_mfl.known || 2 * best > 3 * mfx_level_count(h, n, g_mfl.level[0]))
-                g_mfl.level[0] = at;
-            g_mfl.level[1] = mfx_level_top(h, n, 1, g_mfl.level[0], &second);
-            g_mfl.known = second >= MFX_LEVEL_SECOND ? 2 : 1;
-        }
+        mfx_levels_pick(h, n);
     }
     lv[0] = (g_mfl.known ? g_mfl.level[0] : feet) - g_fxs.refl_rt_fx_level;
     lv[1] = g_mfl.level[1] - g_fxs.refl_rt_fx_level;
