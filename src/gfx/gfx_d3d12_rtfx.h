@@ -231,7 +231,18 @@ static int mfx_ray_floor(const float o[3], const float d[3], float* y)
         float dy;
         if (grass_floor_near(p, MFX_LEVEL_STEP * 1.2f, &dy) >= 0)
         {
-            *y = p[1] + dy;
+            /* (level ground only: a stair's ramp, which takes no reflection (fx_ssr floor_tilted), met at every height between its
+             * foot and its top, made levels of its own - Whitegate's stairs had both mirrors at the walkway's and the stairs' heights,
+             * and the pool below, its home point crystal's reflection with it, none. The floor half a yalm each way within 0.2) */
+            const float h = p[1] + dy;
+            for (int k = 0; k < 2; ++k)
+            {
+                const float q[3] = { p[0] + (k ? 0.0f : 0.5f), h, p[2] + (k ? 0.5f : 0.0f) };
+                float dq;
+                if (grass_floor_near(q, 0.6f, &dq) >= 0 && fabsf(dq) > 0.2f)
+                    return 0;
+            }
+            *y = h;
             return 1;
         }
     }
