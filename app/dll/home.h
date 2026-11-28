@@ -1,7 +1,7 @@
 #pragma once
 // The app's first view: VanaCore's card over the background picture, its head (the installed VanaCore's version, who made it),
-// tabs under it (FFXI, Graphics, Profiles, Pivot, Logs, About: home_pages.cpp, home_profiles.cpp; Errors, red, when something's
-// wrong), and a glass bar at the bottom: the profile and START side by side in its middle (VanaCore.exe --retail with the
+// tabs under it (FFXI, Graphics, Profiles, Pivot, Addons, Logs, About: home_pages.cpp, home_profiles.cpp, home_addons.cpp;
+// Errors, red, when something's wrong), and a glass bar at the bottom: the profile and START side by side in its middle (VanaCore.exe --retail with the
 // profile's settings file).
 
 #include <windows.h>
@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "app_api.h"
+#include "migrate.h"
 #include "ui.h"
 
 namespace vcapp {
@@ -50,6 +51,10 @@ private:
         kDrop = 5000,       // the Graphics tab's drop-downs: + the drop-down
         kDropItem = 5100,   // the open one's list: + the choice
         kLogsFolder = 5900,
+        kFromAshita = 5910, // the Addons tab's: From Ashita, From Windower, Open boot.txt, Open the addons folder
+        kFromWindower,
+        kOpenBoot,
+        kOpenAddons,
         kLogRow = 6000,     // the Logs tab's rows: + the log
     };
     enum Drop { kMode, kResolution, kUiResolution, kDrops };
@@ -58,7 +63,7 @@ private:
         std::wstring value, label;
         bool sep = false;
     };
-    enum Tab { kFfxi, kGraphics, kProfiles, kPivot, kLogs, kAbout, kErrors, kTabs };
+    enum Tab { kFfxi, kGraphics, kProfiles, kPivot, kAddons, kLogs, kAbout, kErrors, kTabs };
     // A log file (logs\, chatlogs\: .txt and .csv): its path from the app's folder, when it was last written, its size
     struct Log {
         std::wstring path;
@@ -156,6 +161,21 @@ private:
     void load_logs();
     void page_logs(const D2D1_RECT_F& r);
 
+    // home_addons.cpp: the Addons tab, Ashita's or Windower's addons, plugins and boot script brought over (migrate.h)
+    struct Migration {
+        std::mutex mutex;
+        std::atomic<bool> running{false};
+        bool done = false, fresh = false; // (fresh: just done, the tab's counts read again)
+        migrate::Kind kind = migrate::Kind::Ashita;
+        std::wstring now;      // the part being copied
+        std::atomic<float> progress{0};
+        migrate::Result result;
+    };
+    void count_addons();
+    void start_migrate(migrate::Kind kind);
+    void page_addons(const D2D1_RECT_F& r);
+    bool press_addons(int hit);
+
     const VanaCoreAppHost& host_;
     std::wstring dir_, app_ini_, ini_; // the app's folder, its vanacore.ini (the app's own [app] keys), the profile's file
     std::wstring game_;                // VanaCore.exe beside the app, "" when it isn't there
@@ -172,6 +192,8 @@ private:
     int profile_ = 0, profile_scroll_ = 0;
     std::vector<Log> logs_; // newest first, read again each time the tab opens
     int logs_scroll_ = 0;
+    std::shared_ptr<Migration> migration_ = std::make_shared<Migration>(); // (shared with its thread)
+    int have_addons_[2] = {}, have_plugins_[2] = {}, boot_loads_ = 0; // the Addons tab's counts (ashita, windower), read as it opens
     int renaming_ = -1; // the profile whose name is being typed, -1: none
     std::wstring typed_;
     std::wstring note_; // the Profiles tab's line after something was done (a shortcut made), till the tab's left

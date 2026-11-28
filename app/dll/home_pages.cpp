@@ -295,6 +295,9 @@ void Home::draw_page(const D2D1_RECT_F& r)
     case kLogs:
         page_logs(in);
         break;
+    case kAddons:
+        page_addons(in);
+        break;
     default:
         page_about(in);
         break;

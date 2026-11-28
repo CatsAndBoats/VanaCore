@@ -261,15 +261,23 @@ void Home::draw_tip()
 // The tab bar: each tab's name in a pill, the picked one lit with an accent edge; Errors (when something's wrong) in rose
 void Home::draw_tabs(float x, float y)
 {
-    static const wchar_t* const kNames[kTabs] = {L"FFXI", L"GRAPHICS", L"PROFILES", L"PIVOT", L"LOGS", L"ABOUT", L"ERRORS"};
-    constexpr float kTabH = 26, kTabPad = 14;
+    static const wchar_t* const kNames[kTabs] = {L"FFXI", L"GRAPHICS", L"PROFILES", L"PIVOT", L"ADDONS", L"LOGS", L"ABOUT", L"ERRORS"};
+    constexpr float kTabH = 26, kGap = 6;
     const std::size_t wrong = errors().size();
+    auto name_of = [&](int i) { return i == kErrors ? std::wstring(kNames[i]) + L"  " + std::to_wstring(wrong) : std::wstring(kNames[i]); };
+    // each tab's name 14 in from its edges, less when they'd run past the card's edge (Errors showing)
+    float names = 0;
+    int shown = 0;
+    for (int i = 0; i < kTabs; ++i)
+        if (i != kErrors || wrong != 0)
+            names += canvas_.text_width(name_of(i), ui::Font::Label), ++shown;
+    const float pad = std::max(6.0f, std::min(14.0f, (kW - kPad + 4 - x - names - kGap * (shown - 1)) / (2.0f * shown)));
     for (int i = 0; i < kTabs; ++i) {
         if (i == kErrors && wrong == 0)
             continue;
-        const std::wstring name = i == kErrors ? std::wstring(kNames[i]) + L"  " + std::to_wstring(wrong) : kNames[i];
+        const std::wstring name = name_of(i);
         const std::uint32_t edge = i == kErrors ? ui::pal::rose : ui::pal::accent;
-        const float w = canvas_.text_width(name, ui::Font::Label) + kTabPad * 2;
+        const float w = canvas_.text_width(name, ui::Font::Label) + pad * 2;
         const bool picked = tab_ == i, over = hover_ == kTab + i;
         if (picked) {
             canvas_.fill(x, y, w, kTabH, kTabH / 2, ui::rgb(edge, 0.22f));
@@ -282,7 +290,7 @@ void Home::draw_tabs(float x, float y)
         const std::uint32_t colour = i == kErrors ? (picked ? ui::pal::white : ui::pal::rose) : picked ? ui::pal::white : over ? ui::pal::text : ui::pal::text2;
         canvas_.text_centred(name, ui::Font::Label, x + w / 2, y + kTabH / 2, ui::rgb(colour));
         hits_.add(kTab + i, D2D1::RectF(x, y, x + w, y + kTabH));
-        x += w + 6;
+        x += w + kGap;
     }
 }
 
@@ -319,12 +327,14 @@ void Home::press(int hit)
         return;
     }
     if (hit == kClose) {
+        if (migration_->running) // (not while addons are being copied: the copy would stop half done)
+            return;
         DestroyWindow(window_);
     } else if (hit == kProfile) {
         menu_ = !menu_;
         render();
     } else if (hit == kPlay) {
-        if (!can_play() || updating())
+        if (!can_play() || updating() || migration_->running)
             return;
         error_.clear();
         if (play()) {
@@ -337,8 +347,10 @@ void Home::press(int hit)
         tab_ = static_cast<Tab>(hit - kTab);
         if (tab_ == kLogs)
             load_logs();
+        if (tab_ == kAddons)
+            count_addons();
         render();
-    } else if (press_profiles(hit) || press_page(hit)) {
+    } else if (press_addons(hit) || press_profiles(hit) || press_page(hit)) {
         render();
     } else {
         render();
@@ -465,7 +477,8 @@ LRESULT Home::handle(UINT message, WPARAM wparam, LPARAM lparam)
         render();
         return 0;
     case WM_CLOSE:
-        DestroyWindow(window_);
+        if (!migration_->running)
+            DestroyWindow(window_);
         return 0;
     case WM_DESTROY:
         PostQuitMessage(0);

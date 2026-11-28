@@ -43,14 +43,17 @@
   <ItemGroup>
     <ClCompile Include="exports.cpp" />
     <ClCompile Include="home.cpp" />
+    <ClCompile Include="home_addons.cpp" />
     <ClCompile Include="home_pages.cpp" />
     <ClCompile Include="home_profiles.cpp" />
     <ClCompile Include="home_update.cpp" />
+    <ClCompile Include="migrate.cpp" />
     <ClCompile Include="..\shared\net.cpp" />
     <ClCompile Include="..\shared\ui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="home.h" />
+    <ClInclude Include="migrate.h" />
     <ClInclude Include="..\shared\app_api.h" />
     <ClInclude Include="..\shared\net.h" />
     <ClInclude Include="..\shared\ui.h" />

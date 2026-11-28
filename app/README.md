@@ -46,11 +46,29 @@ The exe stays the same signed file while `VCAPP_EXE_VERSION` is the last publish
 exe again and only the DLL is new. Raise `VCAPP_EXE_VERSION` when the exe has to change, and always with
 `VANACOREAPP_API` (the workflow stops if the API changed and the exe's version didn't).
 
+## Addons tab
+
+**From Ashita** and **From Windower** bring a player's setup over: they pick the folder they played with (Ashita's or
+Windower's own, or the one it's in), are told what was found and asked, then it's copied in the background with a bar.
+Nothing VanaCore's folder has already is replaced, so running it again adds only what's new.
+
+- Ashita: `addons\<name>` to `addons\ashita`, `plugins\*.dll` to `plugins\ashita` (not Addons or Sequencer), `config\addons`,
+  `config\plugins` and a copied plugin's `config\<name>` to `config\`, the other scripts to `scripts\`. `scripts\default.txt`
+  (else the script a `config\boot\*.ini` names) goes into `boot.txt`: `/load <p>` as `/plugin load <p> ashita`, `/addon load
+  <a>` with `ashita` when it was copied, `/input <command>` (alone or a bind's) as the command, the rest as it is.
+- Windower: `addons\<name>` to `addons\windower` (an addon's `data\` with it), `plugins\*.dll` to `plugins\windower`, the other
+  scripts to `scripts\`. `scripts\init.txt` and the launcher's autoloaded plugins (`settings.xml`) go into `boot.txt`: `lua load
+  <a>` as `/addon load <a> windower`, `load <p>` as `/plugin load <p> windower`, `bind`, `alias`, `wait`, `exec` and `input` as
+  VanaCore's, an addon's command with one slash, Windower's own settings (`console_*`, `game_*`) as comments.
+
+Both leave out `addons\libs` (VanaCore carries the libraries). `boot.txt` gets the lines at its end under a `# From ...`
+comment, without the addons and plugins it loads already, and is first kept as `boot.txt.before-migrate` (once).
+
 ## Layout
 
 | Folder | What's in it |
 |---|---|
 | `exe/` | VanaCoreApp.exe: `main.cpp` (start, update check, loading the DLL), `splash.cpp` |
-| `dll/` | VanaCoreApp.dll: `exports.cpp` (`VanaCoreAppApi`, `VanaCoreAppRun`), `home.cpp` (the first view) |
+| `dll/` | VanaCoreApp.dll: `exports.cpp` (`VanaCoreAppApi`, `VanaCoreAppRun`), `home.cpp` (the first view), `home_addons.cpp` + `migrate.cpp` (the Addons tab) |
 | `shared/` | `app_api.h` (exe and DLL), `ui.cpp` (the .vcaddon card's look, compiled into both), `version.h` |
 | `res/` | VanaCore's icon and logo |
