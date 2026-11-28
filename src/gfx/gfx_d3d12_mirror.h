@@ -23,11 +23,11 @@ static struct
 
 /* 1 while the water asks for the mirror: every caster keeps its textures' and samplers' slots then (an alpha-tested one's are
  * kept anyway), and they're kept with the sun's shadows off too (draw_encode, caster_wanted) */
-/* ... or while the reflections mirror the game's effects against the mirrored world (gfx_d3d12_rtfx.h mfx_wanted) */
+/* (the reflections' effects needed it too till 2026-11-28, mirrored against the mirrored world; they're traced through a layer of
+ * their own now: gfx_d3d12_rtfx.h) */
 static int mirror_wanted(void)
 {
-    return (g_mir.asked && g_serial < g_mir.asked + MIRROR_KEEP) ||
-           (g_fxs.fx != 0.0f && g_fxs.refl > 0.0f && g_fxs.refl_rt >= 2.0f && g_fxs.refl_rt_fx > 0.0f);
+    return g_mir.asked && g_serial < g_mir.asked + MIRROR_KEEP;
 }
 
 /* the mirror's key's blend (build_pipeline): the colour as drawn and the alpha 0, where the mirror is cleared to alpha 1, the

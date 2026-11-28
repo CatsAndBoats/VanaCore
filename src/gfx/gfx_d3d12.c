@@ -6420,7 +6420,7 @@ static const char FX_HLSL_1[] =
     /* the zone lines laid over the finished scene, after the game's late world draws (the effects' compose runs at the
      * first of its unfogged blended draws, and what it draws after - a lit overlay on a bridge's deck - went over them):
      * the pass's colour is premultiplied (blended ONE, 1 - alpha: the fill's lerp, and the light added) */
-    "float4 fx_zlate(FO i) : SV_Target {\n"
+    RT_FX_FUNCS_HLSL "float4 fx_zlate(FO i) : SV_Target {\n" /* (the effects' trace: gfx_d3d12_rt_hlsl.h) */
     "  int2 px = int2(i.pos.xy);\n"
     "  float z = view_z(texel(2, px).r);\n"
     "  if (int(u.grade.w) == 10) {\n"
@@ -11010,7 +11010,7 @@ static void zl_run(void)
     tex_state(depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     tex_state(color, D3D12_RESOURCE_STATE_RENDER_TARGET);
     int32_t in[6] = { scene, halo, depth->srv, -1, -1, -1 };
-    mfx_late_in(in, u); /* the game's effects mirrored, laid on the reflections now they're all drawn (gfx_d3d12_rtfx.h) */
+    mfx_late_in(in, u); /* the game's effects, traced from the reflecting floors now they're all drawn (gfx_d3d12_rtfx.h) */
     const float vp[4] = { u->vp[0], u->vp[1], u->vp[2], u->vp[3] };
     fx_draw(target_view(color, 0, 0), color->w, color->h, g_fx.by_fmt[g_zl.fmt].zlate, vp, u, in, in[5] >= 0 ? 6 : 5, 0, 0);
     color->scene = 0; /* its chain is behind (scene_mips) */

@@ -2241,7 +2241,7 @@ TIPS.rows = {
         .. 'Ray Tracing: the zone\'s own buildings, sky and ground are traced, so the floor shows them wherever the camera looks. Players and monsters still come from the screen. Costs more.',
     ['graphics.effects.refl_rt_res'] = 'How sharp the ray traced reflections are: the share of the screen\'s size they are worked out at, 25, 50, 75 or 100%. Higher is sharper and costs more. Only with Ray Tracing.',
     ['graphics.effects.refl_rt_blur'] = 'Softens the ray traced reflections with a Gaussian blur, 0 to 24. It stops at edges, so a building keeps its outline. Only with Ray Tracing.',
-    ['graphics.effects.refl_rt_fx'] = 'Shows spells, glows and lamps\' flares in the ray traced reflections. They are mirrored about the ground you stand on, so a floor much higher or lower shows them less truly. Only with Ray Tracing.',
+    ['graphics.effects.refl_rt_fx'] = 'Shows spells, glows and lamps\' flares in the ray traced reflections, on every floor whatever its height. Only with Ray Tracing.',
     ['graphics.effects.refl_sun'] = 'The bright sparkle of the sun on the ground: Off, Low or High.',
     ['graphics.effects.refl_bump'] = 'How much the stone\'s own texture bends the reflections: grooves and tile edges give them depth.',
     ['graphics.effects.refl_bump_near'] = 'Fades Surface Depth in with distance from you: a clean mirror at your feet, the full effect this many yalms away. 0 is full everywhere.',

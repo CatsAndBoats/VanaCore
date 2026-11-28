@@ -460,49 +460,53 @@
     "  }\n" \
     ""
 
-/* fx_zlate (after the game's last effect, before its interface): the game's effects, mirrored about the player's level
- * (gfx_d3d12_rtfx.h: input 3, half the scene's size), laid by the reflections' weight (input 4, their layer's alpha) on the floors
- * at that level. For this pass alone u.rtx is the level's plane in view space (mfx_late_in): xyz this frame's up, its length the
- * effects' strength (0: none) and the blur's radius, w the level along it from the camera. Not u.up, which is eased over frames: while the camera pitched it
- * trailed by degrees, a floor 15 yalms off measured two yalms off the level, and the effects left the reflections until it caught
- * up. An effect that adds light is added; one blended over the world (a home point's crystal) left its cover in the mirror's
- * alpha, and takes that share of the pixel. Laid this late, the same frame's: in the next frame's reflections, they trailed the
- * camera. And blurred as the reflections are (refl_rt_blur, RT_BLUR_HLSL's Gaussian, its radius in the layer's texels): the
- * plane's length is that radius plus the strength (0 to 1, so the radius is the whole part less one) - laid sharp, a crystal's
- * reflection stood crisp in a floor whose every other reflection was a soft blur */
-#define RT_FX_HLSL \
-    /* (two mirrors, each a floor level in view: input 3 by u.rtx, input 5 by u.rbf, its length 0 with one alone, gfx_d3d12_rtfx.h \
-     * mfx_late_in) */ \
+/* fx_zlate (after the game's last effect, before its interface): the game's effects in the reflections (gfx_d3d12_rtfx.h). Each
+ * reflecting floor pixel (the reflections' layer, input 4: its alpha the pixel's weight) sends its ray, mirrored about the level
+ * floor (u.rtx: this frame's up in view space, its length the effects' strength; the reflections keep to floors that face up),
+ * across the picture as the screen-space reflections do: stepped, its steps growing with the distance, and stopped where it passes
+ * behind the world (the scene's depth, input 2). Where it passes the depth of an effect (the effects' own layer: input 5 their
+ * nearest depth, input 3 their colour, every effect's light added up, at half the scene's size), it takes the effects' colour
+ * there. An effect that adds light is added; one blended over the world (a home point's crystal) left its cover in the layer's
+ * alpha, and takes that share of the pixel. No level: till 2026-11-28 the effects were mirrored about one floor level and then two,
+ * true only for floors at them, and from Whitegate's stairs the pool below lost its home point crystal's reflection */
+#define RT_FX_FUNCS_HLSL \
     "#ifdef ZL_LATE\n" \
-    "  [unroll] for (int mi = 0; mi < 2; ++mi) {\n" \
-    "  float4 mpl = mi == 0 ? u.rtx : u.rbf;\n" \
-    "  int msl = mi == 0 ? 3 : 5;\n" \
-    "  float mln = length(mpl.xyz);\n" \
-    "  if (mln > 0.001 && z != 0.0) {\n" \
-    "    float mbl = ceil(mln) - 1.0, mst = mln - mbl;\n" \
-    "    float lvl = 1.0 - smoothstep(0.4, 1.2, abs(dot(view_pos(i.pos.xy, z), mpl.xyz / mln) - mpl.w));\n" \
-    "    float mk = saturate(tap(4, i.uv).a) * mst * lvl;\n" \
-    "    if (mk > 0.001) {\n" \
-    "      float2 mu = (u.vp.xy + i.uv * u.vp.zw) / size_of(2);\n" \
-    "      float4 mf = tap(msl, mu);\n" \
-    "      if (mbl > 0.5) {\n" \
-    "        float2 mt = u.vp.zw / (size_of(2) * size_of(4));\n" \
-    "        float stp = max(1.0, mbl * 0.25), inv = -2.0 / (mbl * mbl), bw_ = 0.0;\n" \
-    "        int nr = mbl < 4.0 ? int(ceil(mbl)) : 4;\n" \
-    "        float2 jit = mbl < 4.0 ? float2(0.0, 0.0) : (float2(frac(sin(dot(i.pos.xy, float2(12.9898, 78.233))) * 43758.5453), frac(sin(dot(i.pos.xy, float2(39.3468, 11.135))) * 24634.6345)) - 0.5) * stp;\n" \
-    "        mf = float4(0.0, 0.0, 0.0, 0.0);\n" \
-    "        [loop] for (int oy = -nr; oy <= nr; ++oy) {\n" \
-    "          [loop] for (int ox = -nr; ox <= nr; ++ox) {\n" \
-    "            float2 off = float2(ox, oy) * stp + jit;\n" \
-    "            float gw = exp(dot(off, off) * inv);\n" \
-    "            mf += tap(msl, mu + off * mt) * gw; bw_ += gw;\n" \
-    "          }\n" \
-    "        }\n" \
-    "        mf /= bw_;\n" \
-    "      }\n" \
-    "      r += mf.rgb * mk;\n" \
-    "      w = 1.0 - (1.0 - w) * (1.0 - saturate(mf.a) * mk);\n" \
+    "float3 mfx_px(float3 R) {\n" \
+    "  float rd = R.z * u.hand.x;\n" \
+    "  float2 ndc = float2(R.x * u.proj.x + R.z * u.proj.z, R.y * u.proj.y + R.z * u.proj.w) / max(rd, 1e-4);\n" \
+    "  return float3(u.vp.xy + float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * u.vp.zw, rd);\n" \
+    "}\n" \
+    "float4 mfx_trace(float2 pos, float z) {\n" \
+    "  float mst = length(u.rtx.xyz);\n" \
+    "  if (!(mst > 0.001) || z == 0.0) return float4(0.0, 0.0, 0.0, 0.0);\n" \
+    "  float3 P = view_pos(pos, z), N = u.rtx.xyz / mst;\n" \
+    "  float3 R = reflect(normalize(P), N);\n" \
+    "  if (dot(R, N) < 0.02) return float4(0.0, 0.0, 0.0, 0.0);\n" \
+    "  float dist = z * u.hand.x;\n" \
+    "  float2 ss = size_of(2), es = size_of(5);\n" \
+    "  float t0 = 0.05 + 0.01 * dist, tmax = 80.0;\n" \
+    "  [loop] for (int s = 0; s < 40; ++s) {\n" \
+    "    float a = (float(s) + 0.5) / 40.0;\n" \
+    "    float t = t0 + (tmax - t0) * a * a;\n" \
+    "    float3 q = mfx_px(P + R * t);\n" \
+    "    if (q.z <= 0.1 || any(q.xy < u.vp.xy + 1.0) || any(q.xy >= u.vp.xy + u.vp.zw - 1.0)) break;\n" \
+    "    float sz = view_z(texel(2, int2(q.xy)).r), sd = sz != 0.0 ? sz * u.hand.x : 1e5;\n" \
+    "    float ez = view_z(texel(5, min(int2(q.xy * es / ss), int2(es) - 1)).r);\n" \
+    "    if (ez != 0.0) {\n" \
+    "      float ed = ez * u.hand.x;\n" \
+    "      if (q.z >= ed - 0.15 && q.z < ed + 0.8 + 0.06 * ed && ed < sd + 0.3) return tap(3, q.xy / ss);\n" \
     "    }\n" \
+    "    if (sd < 9e4 && q.z > sd + 0.3 + 0.04 * sd) break;\n" \
     "  }\n" \
+    "  return float4(0.0, 0.0, 0.0, 0.0);\n" \
+    "}\n" \
+    "#endif\n"
+#define RT_FX_HLSL \
+    "#ifdef ZL_LATE\n" \
+    "  float mk = saturate(tap(4, i.uv).a) * min(length(u.rtx.xyz), 1.0);\n" \
+    "  if (mk > 0.001) {\n" \
+    "    float4 mf = mfx_trace(i.pos.xy, z);\n" \
+    "    r += mf.rgb * mk;\n" \
+    "    w = 1.0 - (1.0 - w) * (1.0 - saturate(mf.a) * mk);\n" \
     "  }\n" \
     "#endif\n"
