@@ -293,7 +293,11 @@
      * is one at any height: by the height alone, everyone's reflection was cut off at the knees, the 0.4 above the floor the \
      * tree's wall or floor behind them, Port Jeuno 2026-11-27) */ \
     "      bool mover = rti.x == 2u && th > 0.0 && (g_bvh.Load(rti.z + ht * 40u + 36u) & 0x20000u) != 0u;\n" \
-    "      bool hchr = rti.x == 2u && u.aoc.w > 0.0 && h.w > 0.5 && h.w < 1.5 && texel(10, int2(h.xy)).r > 0.5;\n" \
+    /* (... where the ray truly meets them: the screen's ray "hits" where it passes behind a surface by up to its thickness, a yalm \
+     * and more at ten, and a ray from the steps behind a player passing behind them took them for a hit, a pale echo of their \
+     * outline on the steps, Whitegate 2026-11-28. Their surface within a third of a yalm of the ray's point, nearer than the tree's) */ \
+    "      bool hchr = rti.x == 2u && u.aoc.w > 0.0 && h.w > 0.5 && h.w < 1.5 && texel(10, int2(h.xy)).r > 0.5 && (th <= 0.0 || tt < th) &&\n" \
+    "        length(pos_at(0, h.xy) - (P + R * tt)) < 0.35 + 0.01 * tt;\n" \
     "      bool nearer = rti.x == 2u && h.w > 0.5 && h.w < 1.5 && (hchr || ((th <= 0.0 || mover || tt < th - 0.3) && tt * dot(R, upn) > 0.4));\n" \
     /* (... and not the zone's own: the screen's ray goes by the bumped normal, tilted by the floor's grooves, and found a wall's \
      * foot or a step nearer than the tree's clean ray did - a speckle of the screen's reflection across the floor, each pixel \
