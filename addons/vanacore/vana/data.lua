@@ -5070,6 +5070,15 @@ local TABS = {
                 slider('Clarity', FX, 'clarity', 0, 0, 2, 0.05),
                 slider('Sharpening', FX, 'sharpen', 0.3, 0, 1, 0.05),
                 slider('Smoothing', FX, 'smooth', 0, 0, 1, 0.05),
+                -- Advanced Settings, as Shadows' are: hidden unless Enable Advanced Graphics Settings is on. Brightness Bands, its
+                -- own panel till 2026-11-28 ("advanced options under colour grade"), a sub-panel in the box with its own switch:
+                -- the cel pass draws it, the grade on or off
+                advanced_group('Fine-tuning for the colour grade: Brightness Bands, the light flattened into steps for a cartoon '
+                               .. 'look. Most players never need these.'),
+                advanced_warning(),
+                (function (row) row.in_group = true return row end)(effect_sub('Brightness Bands', 'bands', 0, 4)),
+                slider('Bands', FX, 'bands', 4, 0, 8, 1, '%d'),
+                slider('Band softness', FX, 'band_soft', 0.15, 0, 1, 0.05),
                 effect('Ink Lines', 'outline', 0, 1),
                 slider('Darkness', FX, 'outline', 1, 0, 1, 0.05),
                 slider('Line width', FX, 'outline_width', 1, 0.5, 4, 0.25),
@@ -5086,9 +5095,6 @@ local TABS = {
                 grass_lines(slider('Grass line width', FX, 'outline_width_grass', 0, 0, 4, 0.25), 'Same', '%.2f'),
                 grass_lines(slider('Grass edge sensitivity', FX, 'outline_depth_grass', 0, 0, 0.5, 0.01), 'Same', '%.2f'),
                 grass_lines(slider('Grass lines fade by', FX, 'outline_fade_grass', 0, 0, 200, 5, '%d'), 'Same', '%d'),
-                effect('Brightness Bands', 'bands', 0, 4),
-                slider('Bands', FX, 'bands', 4, 0, 8, 1, '%d'),
-                slider('Band softness', FX, 'band_soft', 0.15, 0, 1, 0.05),
                 effect('Depth of Field', 'dof', 0, 12),
                 slider('Blur', FX, 'dof', 12, 0, 40, 1, '%d'),
                 slider('Sharp zone', FX, 'dof_range', 0.5, 0, 3, 0.05),
@@ -7739,22 +7745,26 @@ function M.recompile_shaders()
 end
 
 -- Client > VanaCore > Reset ALL Advanced Settings: every setting in the Advanced Settings groups (the Graphics tab's DLSS,
--- Shadows and Mass Grass boxes, the headings built by advanced_group) back to its default, its switches too. The tab's rows
+-- Shadows and Mass Grass boxes, the Effects tab's Colour grade box: the headings built by advanced_group) back to its default, its switches too. The tab's rows
 -- are built again to find them, so a box hidden or never opened is reset all the same.
 function M.reset_advanced()
-    local ok, rows = pcall(function () return M.tab_named('graphics').rows() end)
-    if not ok then
-        print('VanaCore: the advanced settings could not be found: ' .. tostring(rows))
-        return
-    end
-    local list, inside = {}, false
-    for _, row in ipairs(rows) do
-        if row.kind == 'header' or row.kind == 'status' then
-            inside = false
-        elseif row.kind == 'subheader' and not row.in_group then
-            inside = row.advanced == true
-        elseif inside then
-            list[#list + 1] = row
+    -- the Graphics page's boxes and the Effects page's (the colour grade's, since 2026-11-28)
+    local list = {}
+    for _, name in ipairs({ 'graphics', 'effects' }) do
+        local ok, rows = pcall(function () return M.tab_named(name).rows() end)
+        if not ok then
+            print('VanaCore: the advanced settings could not be found: ' .. tostring(rows))
+            return
+        end
+        local inside = false
+        for _, row in ipairs(rows) do
+            if row.kind == 'header' or row.kind == 'status' then
+                inside = false
+            elseif row.kind == 'subheader' and not row.in_group then
+                inside = row.advanced == true
+            elseif inside then
+                list[#list + 1] = row
+            end
         end
     end
     M.reset_rows(list, true)
