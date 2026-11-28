@@ -1,12 +1,16 @@
-// VanaCore kept up to date where VanaCoreInstaller.exe put it (its unins000.dat beside the app; a zip or a developer's build
-// is left alone), as the app opens, nothing to press: the glass bar says "Checking for updates" in place of the profile and
-// START; a newer published release than the installed VanaCore.Core.dll has its VanaCoreInstaller.exe downloaded (a bar),
-// checked (signed, by whoever signed this app) and run silently over this folder (the player's settings, profiles and
-// boot.txt kept, as any install over an install), then the profile and START come back with the new version in the head.
+// VanaCore kept up to date where VanaCoreInstaller.exe put it (its unins000.dat beside the app; a zip's VanaCore is left
+// alone), as the app opens, nothing to press: the glass bar says "Checking for updates" in place of the profile and START; a
+// newer published release than the installed VanaCore.Core.dll has its VanaCoreInstaller.exe downloaded (a bar), checked
+// (signed, by whoever signed this app) and run silently over this folder (the player's settings, profiles and boot.txt kept,
+// as any install over an install), then the profile and START come back with the new version in the head.
+//
+// No VanaCore.exe beside the app at all (the app on its own, a developer's build): the newest release installed into the
+// app's folder the same way ("Getting VanaCore"), which is then the installer's and kept up to date as above.
 //
 // The installer replaces VanaCoreApp.exe and .dll too, which this app has open: they're moved aside first (VanaCoreApp.exe.old,
 // VanaCoreApp.dll.old: Windows lets a running file be renamed, not written), so it never has to close the app; the new ones
-// run from the next start. Nothing here stops the player: anything that fails gives the profile and START back, with a line.
+// run from the next start. An unsigned app (a developer's build) keeps its own: they go back over the installer's. Nothing
+// here stops the player: anything that fails gives the profile and START back, with a line.
 
 #include "home.h"
 
@@ -18,6 +22,7 @@
 
 #include "net.h"
 #include "version.h"
+#include "../../src/core/folders_make.h" // (a fresh install's addon and plugin folders, as home.cpp makes them)
 
 namespace vcapp {
 
@@ -127,18 +132,21 @@ long run_setup(const std::wstring& setup, const std::wstring& dir)
 
 } // namespace
 
-// The whole update, in the background, when this folder is the installer's (kNone at once otherwise: the footer as it was)
+// The whole update, in the background, when this folder is the installer's or has no VanaCore (kNone at once otherwise: the
+// footer as it was)
 void Home::check_update()
 {
     // last update's moved-aside exe (the DLL's .old stays: VanaCoreApp.exe goes back to it when a new DLL won't load)
     DeleteFileW((dir_ + L"\\VanaCoreApp.exe.old").c_str());
-    if (vanacore_.empty() || !exists(dir_ + L"\\unins000.dat"))
+    const bool fresh = game_.empty();
+    if (!fresh && (vanacore_.empty() || !exists(dir_ + L"\\unins000.dat")))
         return;
+    update_->fresh = fresh;
     update_->stage = Update::kChecking;
     auto state = update_;
     const std::wstring installed = vanacore_, dir = dir_;
     const HWND window = window_;
-    std::thread([state, installed, dir, window] {
+    std::thread([state, fresh, installed, dir, window] {
         const auto set = [&](Update::Stage stage, const std::wstring& note = {}, const std::wstring& version = {}) {
             {
                 std::lock_guard<std::mutex> lock(state->mutex);
@@ -154,8 +162,10 @@ void Home::check_update()
         if (!http.get(kLatest, L"application/vnd.github+json", kMostJson, body, nullptr))
             return set(Update::kNone); // (offline, GitHub down: nothing said)
         const std::wstring tag = net::wide(json_string(body, "tag_name", 0));
-        if (!newer(tag, installed))
-            return set(parse_ok(tag) ? Update::kCurrent : Update::kNone);
+        if (!parse_ok(tag))
+            return set(Update::kNone);
+        if (!fresh && !newer(tag, installed))
+            return set(Update::kCurrent);
         std::wstring url;
         for (std::size_t at = 0;;) {
             const std::string u = json_string(body, "browser_download_url", at, &at);
@@ -204,8 +214,8 @@ void Home::check_update()
         for (const wchar_t* f : kOwn)
             MoveFileExW((dir + f).c_str(), (dir + f + L".old").c_str(), MOVEFILE_REPLACE_EXISTING);
         const long code = run_setup(setup, dir);
-        for (const wchar_t* f : kOwn)
-            if (!exists(dir + f))
+        for (const wchar_t* f : kOwn) // (an unsigned app, a developer's build: its own back over the installer's)
+            if (mine.empty() || !exists(dir + f))
                 MoveFileExW((dir + f + L".old").c_str(), (dir + f).c_str(), MOVEFILE_REPLACE_EXISTING);
         DeleteFileW(setup.c_str());
         if (code != 0)
@@ -223,7 +233,7 @@ bool Home::draw_update(float w, float h, float mid)
     {
         std::lock_guard<std::mutex> lock(update_->mutex);
         stage = update_->stage;
-        line = stage == Update::kChecking      ? L"Checking for updates\x2026"
+        line = stage == Update::kChecking      ? (update_->fresh ? L"Getting VanaCore\x2026" : L"Checking for updates\x2026")
                : stage == Update::kDownloading ? L"Downloading VanaCore " + update_->version + L"\x2026"
                : stage == Update::kInstalling  ? L"Installing VanaCore " + update_->version + L"\x2026"
                                                : update_->note;
@@ -255,16 +265,23 @@ bool Home::updating() const
     return update_->stage == Update::kChecking || update_->stage == Update::kDownloading || update_->stage == Update::kInstalling;
 }
 
-// After an update: the head's version read again from the new VanaCore.Core.dll
+// After an update: the head's version read again from the new VanaCore.Core.dll; after a fresh install, START's VanaCore.exe
+// and the addon and plugin folders too
 void Home::updated()
 {
+    bool fresh = false;
     {
         std::lock_guard<std::mutex> lock(update_->mutex);
         if (update_->stage != Update::kDone || update_->applied)
             return;
         update_->applied = true;
+        fresh = update_->fresh;
     }
     reload_version();
+    if (fresh && exists(dir_ + L"\\VanaCore.exe")) {
+        game_ = dir_ + L"\\VanaCore.exe";
+        vanacore::folders::make(dir_, [](const std::wstring&) {});
+    }
 }
 
 } // namespace vcapp

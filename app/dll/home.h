@@ -127,13 +127,15 @@ private:
     void pick(int index);
     float t_of(int hit) const;
 
-    // home_update.cpp: VanaCore updated where the installer put it (its newest release's VanaCoreInstaller.exe, run silently)
+    // home_update.cpp: VanaCore updated where the installer put it, or installed beside the app when it isn't there (its newest
+    // release's VanaCoreInstaller.exe, run silently)
     struct Update {
         enum Stage { kNone, kChecking, kCurrent, kDownloading, kInstalling, kDone, kFailed }; // (kCurrent: nothing newer)
         std::mutex mutex;
         Stage stage = kNone;
         std::wstring version, note; // the release's version, what went wrong
         std::atomic<float> progress{0};
+        bool fresh = false;   // no VanaCore beside the app: installing it, not updating it
         bool applied = false; // (kDone: the head's version read again)
     };
     void check_update();

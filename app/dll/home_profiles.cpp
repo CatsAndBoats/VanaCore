@@ -240,11 +240,12 @@ bool Home::rename_key(UINT message, WPARAM wparam)
 std::vector<Home::Error> Home::errors() const
 {
     std::vector<Error> out;
-    if (game_.empty())
+    if (game_.empty() && !updating()) // (while it's being installed here: the glass bar says so)
         out.push_back({L"VanaCore isn't beside the App",
                        L"The App starts VanaCore from its own folder, " + dir_ +
-                           L", and VanaCore.exe isn't there. Keep VanaCoreApp.exe in VanaCore's folder (the one with VanaCore.exe, "
-                           L"VanaCore.Core.dll and addons); installing VanaCore again puts it back."});
+                           L", and VanaCore.exe isn't there. The App installs the latest VanaCore there each time it opens "
+                           L"until it can (it needs GitHub); or keep VanaCoreApp.exe in VanaCore's folder (the one with "
+                           L"VanaCore.exe, VanaCore.Core.dll and addons)."});
     if (install_.ffxi.empty())
         out.push_back({L"FINAL FANTASY XI wasn't found",
                        L"It isn't in the registry (PlayOnline's InstallFolder, US, EU or JP) and no folder's been picked. If it's "

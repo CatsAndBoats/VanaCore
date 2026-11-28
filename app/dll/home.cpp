@@ -18,7 +18,7 @@ namespace vcapp {
 namespace {
 
 // the head at the top, the tabs and their page under it, the glass bar (kBar tall) the card's width at the bottom
-constexpr float kW = 640, kH = 420, kPad = 26, kLogo = 56, kBar = 86, kPlayW = 140, kPlayH = 42;
+constexpr float kW = 640, kH = 480, kPad = 26, kLogo = 56, kBar = 86, kPlayW = 140, kPlayH = 42;
 constexpr std::uint32_t kVersionColour = 0xF3DE9C; // the head's version: a light yellow
 constexpr wchar_t kClass[] = L"VanaCoreApp.Home";
 constexpr UINT_PTR kTipTimer = 1;
@@ -517,6 +517,7 @@ int Home::run()
     }
     window_ = window;
     canvas_.attach(window, kW, kH);
+    check_update(); // (before the first frame: a VanaCore being installed here isn't shown as missing first)
     render();
     ShowWindow(window, SW_SHOW);
     // over every other window (where the splash was), as the .vcaddon card comes up, without staying on top of them after:
@@ -525,7 +526,6 @@ int Home::run()
     SetWindowPos(window, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     SetForegroundWindow(window);
     host_.splash_close(); // the app's up: the splash goes
-    check_update();
     MSG message;
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         TranslateMessage(&message);
