@@ -1,6 +1,28 @@
 # Changelog
 
-What's new in each VanaCore release. A release's notes on GitHub are its section here (`## 0.9.12
+What's new in each VanaCore release. A release's notes on GitHub are its section here (`## 0.9.13
+
+### Changed
+- /vana > Effects: Brightness Bands under the colour grade's Advanced Settings
+- Reflections: Hide Rain in Reflections (refl_no_rain, on by default)
+- Reflections' effects traced through a layer of their own: no mirror, no floor levels
+- Reflections' effects: mirror levels from level ground only, not a stair's ramp
+- Reflections only on floors one can walk on (refl_walkable, on by default)
+- Reflections: a stair caught by its collision's tilt from up too, not only from the picture's normal
+- Ray-traced reflections: a character's reflection only where the screen's ray truly meets them
+- Ray-traced reflections on stairs: no flicker over the steps, the railing's top or the effects
+- Ray-traced reflections: a sky map, so the floor shows the sky above the picture too
+- Ray-traced reflections: effects mirrored about two floor levels; the sky as the screen shows it
+- VanaCore App 0.1.2
+
+### Fixed
+- Retail's 2026-11 client: the target read right again (YunaUI's target bar), and the gamepad's XInput check found in retail
+- VanaCore App makes VanaCore's addon and plugin folders as it opens (addons\ashita, addons\windower, plugins\ashita, plugins\windower), each with its README, where they aren't there, as VanaCore does at start: the list and the writer are one header both build (src\core\folders_make.h; folders.cpp logs what it wrote)
+
+### Misc
+- tools\sigverify.py: what VanaCore reads from FFXiMain.dll checked to mean the same in other builds; tools\sigaudit.py committed
+
+## 0.9.12
 
 ### New
 - VanaCore App: VanaCore updated by itself as the app opens, where VanaCoreInstaller.exe put it (unins000.dat): the glass bar says Checking for updates in place of the profile and START, downloads a newer release's installer with a bar, checks its signature is this app's signer, runs it silently over the folder (the app's own exe and DLL moved aside to .old first, so it's never closed), then the profile and START come back with the new version. A green UP TO DATE pill beside the head's version when nothing's newer or it just updated; a failure gives START back with a red line. Only this install's own VanaCore in use holds it back. Tested on a retail install: 0.9.10 to 0.9.11
