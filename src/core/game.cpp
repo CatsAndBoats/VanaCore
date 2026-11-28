@@ -29,8 +29,12 @@ constexpr size_t kPartyOffset = 23;
 // ... call / mov eax,[player]: the player's stats (HPMax first).
 constexpr char kPlayerPattern[] = "6A 01 8D 44 24 2C 68 80 80 80 80 66 83 ?? ?? 50 66 83 ?? ?? 51 52 E8 ?? ?? ?? ?? A1";
 constexpr size_t kPlayerOffset = 28;
-// ... mov ecx,[global]: the target data (0xD4 bytes, allocated by the game) is pointed to by the
-// global 0x2F4 bytes after that one.
+// mov [esp+16h],al / mov eax,[target] / xor bl,bl / mov cl,[eax+22h]: the global pointing to the target data (0xD4 bytes,
+// allocated by the game), read from the code. One match in CatsEyeXI's client and retail's of 2026-09 and 2026-11.
+constexpr char kTargetPointerPattern[] = "13 00 88 44 24 16 A1 ?? ?? ?? ?? 32 DB 8A 48 22 8B 46 70 85 C0 88 4C 24 17";
+constexpr size_t kTargetPointerOffset = 7;
+// Without it: ... mov ecx,[global], the global kTargetPointer bytes before that one. The distance is CatsEyeXI's and
+// retail's of 2026-09; retail's of 2026-11 has it 0x2F0 (a global before it went), and its target index read garbage.
 constexpr char kTargetPattern[] = "53 56 8B F1 8B 48 04 33 DB 3B CB 75 06 5E 33 C0 5B 59 C3 8B 0D";
 constexpr size_t kTargetOffset = 45;
 constexpr size_t kTargetPointer = 0x2F4;
@@ -108,7 +112,7 @@ std::uintptr_t g_entities = 0;  // address of the entity pointer array
 unsigned g_entity_count = 0;
 std::uintptr_t g_party = 0;     // address of the first party member
 std::uintptr_t g_player = 0;    // address of the player's stats
-std::uintptr_t g_target_base = 0;  // the global 0x2F4 bytes before the one pointing to the target data
+std::uintptr_t g_target_pointer = 0; // the global pointing to the target data
 std::uintptr_t g_pet = 0;       // the game's copy of the pet's status packet
 std::uintptr_t g_missions = 0;  // the current missions
 std::uintptr_t g_job_level = 0; // the game's getters: a job's level, and its master level
@@ -164,7 +168,10 @@ void resolve()
         g_entity_count = g_entities != 0 ? 0x900 : 0;
     g_party = operand(game, kPartyPattern, kPartyOffset, L"the party");
     g_player = operand(game, kPlayerPattern, kPlayerOffset, L"the player");
-    g_target_base = operand(game, kTargetPattern, kTargetOffset, L"the target");
+    if (scan::find(game, kTargetPointerPattern) != 0)
+        g_target_pointer = operand(game, kTargetPointerPattern, kTargetPointerOffset, L"the target");
+    else if (const std::uintptr_t base = operand(game, kTargetPattern, kTargetOffset, L"the target"))
+        g_target_pointer = base + kTargetPointer;
     g_pet = operand(game, kPetPattern, kPetOffset, L"the pet");
     if (const std::uintptr_t nation = operand(game, kMissionsPattern, kMissionsOffset, L"the missions"))
         g_missions = nation - kMissionsNation;
@@ -176,7 +183,7 @@ void resolve()
         return address >= reinterpret_cast<std::uintptr_t>(game) ? address - reinterpret_cast<std::uintptr_t>(game) : 0;
     };
     log::write(L"Game data: entities at FFXiMain.dll+0x%X (%u), party +0x%X, player +0x%X, target +0x%X", at(g_entities),
-               g_entity_count, at(g_party), at(g_player), at(g_target_base));
+               g_entity_count, at(g_party), at(g_player), at(g_target_pointer));
 }
 
 // The record's fields past the first dozen (see Entity), `raw` its first kEntitySize bytes, `pointer` where it is
@@ -689,7 +696,7 @@ bool target(Target& out)
     resolve();
     std::uint32_t address = 0;
     unsigned char raw[kTargetSize];
-    if (g_target_base == 0 || !copy(&address, g_target_base + kTargetPointer, sizeof(address)) ||
+    if (g_target_pointer == 0 || !copy(&address, g_target_pointer, sizeof(address)) ||
         !copy(raw, address, sizeof(raw)))
         return false;
     using namespace target_field;
@@ -717,7 +724,7 @@ bool target(Target& out)
 Addresses addresses()
 {
     resolve();
-    return {g_entities, g_entity_count, g_party, g_player, g_target_base != 0 ? g_target_base + kTargetPointer : 0};
+    return {g_entities, g_entity_count, g_party, g_player, g_target_pointer};
 }
 
 } // namespace vanacore::game

@@ -151,8 +151,9 @@ BOOL CALLBACK record_search(LPCDIDEVICEINSTANCEA device, LPVOID context)
 // FFXiMain's "is this DirectInput controller an XInput one" (FUN_10008990 in the 2025-12-26 client: Microsoft's
 // IsXInputDevice sample, a WMI query over every PnP device), which the search callback (FUN_100057d0) runs for each
 // controller listed while the XInput switch is on. Its answer for a product is kept: it runs once per product.
-// __cdecl, the product GUID (DIDEVICEINSTANCE::guidProduct). Checked by its first bytes and both calls to it.
-constexpr DWORD kIsXInputAt = 0x8990;
+// __cdecl, the product GUID (DIDEVICEINSTANCE::guidProduct). Found from the callback's two calls to it, which must agree,
+// and checked by its first bytes: the calls are at the same place in retail's 2026-09 and 2026-11 clients, the function
+// itself 0x120 on (FUN_10008AB0).
 constexpr BYTE kIsXInputHead[] = {0x81, 0xEC, 0x84, 0x00, 0x00, 0x00, 0x53, 0x55, 0x56, 0x57, 0x33, 0xDB,
                                   0xB9, 0x13, 0x00, 0x00, 0x00};
 constexpr DWORD kIsXInputCalls[] = {0x580D, 0x587A};
@@ -179,20 +180,22 @@ BOOL __cdecl is_xinput_device(const GUID* product)
     return answer;
 }
 
-bool is_xinput_code_known(const BYTE* game)
+// The game's IsXInputDevice, or nullptr if the code isn't the one VanaCore knows.
+BYTE* find_is_xinput(BYTE* game)
 {
     __try {
-        if (std::memcmp(game + kIsXInputAt, kIsXInputHead, sizeof kIsXInputHead) != 0)
-            return false;
+        BYTE* target = nullptr;
         for (const DWORD call : kIsXInputCalls) {
             LONG offset = 0;
             std::memcpy(&offset, game + call + 1, sizeof offset);
-            if (game[call] != 0xE8 || game + call + 5 + offset != game + kIsXInputAt)
-                return false;
+            BYTE* const called = game + call + 5 + offset;
+            if (game[call] != 0xE8 || (target != nullptr && called != target))
+                return nullptr;
+            target = called;
         }
-        return true;
+        return std::memcmp(target, kIsXInputHead, sizeof kIsXInputHead) == 0 ? target : nullptr;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
+        return nullptr;
     }
 }
 
@@ -200,11 +203,12 @@ bool is_xinput_code_known(const BYTE* game)
 void hook_is_xinput()
 {
     BYTE* game = reinterpret_cast<BYTE*>(GetModuleHandleW(L"FFXiMain.dll"));
-    if (game == nullptr || !is_xinput_code_known(game)) {
+    BYTE* const check = game != nullptr ? find_is_xinput(game) : nullptr;
+    if (check == nullptr) {
         log::write(L"Input: this client's XInput check isn't the one VanaCore knows; each controller search still asks WMI");
         return;
     }
-    if (!imports::detour(reinterpret_cast<IsXInputFn>(game + kIsXInputAt), kIsXInputPrologue, &is_xinput_device,
+    if (!imports::detour(reinterpret_cast<IsXInputFn>(check), kIsXInputPrologue, &is_xinput_device,
                          g_is_xinput)) {
         log::write(L"Input: the game's XInput check couldn't be hooked; each controller search still asks WMI");
         return;

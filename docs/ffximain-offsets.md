@@ -124,8 +124,9 @@ Two limits on that:
   `kWorldVolume`), `soundslots.cpp` (`kSetup`, `kClear`, `kThread`, `kCap`) and `gamesettings.cpp`'s `kEntry`. The
   catalogue notes others whose comments are dated after the audit (`gamesave.cpp`, `vanaclock.cpp`, `equipfirst.cpp`).
   Run the audit again before saying they work in retail.
-- **`tools\sigaudit.py` isn't in the repository.** It is referenced from `sigs.hpp` and `retail-signatures.md` but was
-  never committed, so only the person who has it can run the audit. It belongs under `tools\`.
+- **A pattern that is found isn't proof the value read from it is right.** Retail's 2026-11 build kept every pattern
+  and still moved the target's pointer (below). `tools\sigverify.py` checks that: see
+  [`retail-signatures.md`](retail-signatures.md#checking-what-is-read-toolssigverifypy).
 
 ## Watch list
 
@@ -139,7 +140,7 @@ feature's section below.
 
 | Address | What | Guard |
 |---|---|---|
-| `+0x8990` | IsXInputDevice (the slow WMI query), detoured so it runs once per product | its first 17 bytes, and the calls at `+0x580D`, `+0x587A` must be `E8` to it |
+| `+0x580D`, `+0x587A` | the calls to IsXInputDevice (the slow WMI query; `+0x8990` in CatsEyeXI's client, `+0x8AB0` in retail's), detoured so it runs once per product | both `E8` to the same function, whose first 17 bytes are checked |
 | `+0x55A0` | set the pad's GUID, called directly | its first 12 bytes and `C2 14 00` at `+0x4E` |
 | `+0x5490` | pad mode setter (its `A0` operand also gives the gamepad and XInput switch bytes) | head `83 EC 20 A0`, `C2 0C 00` at `+0x106` |
 | `+0x5130`, `+0x5320` | pad button setters | head `8B 54 24 04`, `C2 08 00` at `+0x1ED` / `+0x162` |
@@ -163,9 +164,9 @@ value is wrong and nothing notices:
 
 ### Fixed distances between places
 
-- `game.cpp` `kTargetPointer = 0x2F4`: the target's pointer is 0x2F4 bytes after the global the pattern finds. No code
-  names the second global, so the audit couldn't check it. **Not verified for retail**: check in game that the target
-  reads.
+- `game.cpp` `kTargetPointer = 0x2F4`: the target's pointer was 0x2F4 bytes after the global `kTargetPattern` finds. It
+  is 0x2F0 in retail's 2026-11 build, where the target index read garbage (YunaUI's target bar didn't draw). The pointer
+  is now read from code that names it (`kTargetPointerPattern`); the distance is only the fallback if that isn't found.
 - `chat.cpp`: the cancel key check must be exactly `0x521` after the chat calc. The chat history hooks sit at -0x70,
   +0x240, +0x110 and +0x90 from one match.
 - `camera.cpp` `kSites`: 30-odd sites from -0x740 to +0xCA6 around the zoom code. All of them are checked (opcode bytes,
@@ -193,9 +194,12 @@ Fields VanaCore reads or writes at fixed offsets, not read from code:
 - The game's options (`game_config.cpp`: table at `+4`, entries `0x2C`, `0x2394` long).
 - `_canUseMacro`'s object (`macrobar.cpp`, ~15 fields).
 
-The audit found entity fields `0xD8` and `0x120` unchanged in retail. The others weren't checked, and anything in the
-shifted ranges in `retail-signatures.md` (`+0x8` from `0x4630`, `+0x70` from `0x2D60C`, `+0x78` from `0x4423C` in the
-game's big object) is suspect.
+`tools\sigverify.py` checks these against each retail build (2026-11-28: none moved). It compares every structure
+offset the game's own code uses across the two builds and flags any hex constant in the source that moved there: the
+character object moves `+0x8` from `0x4630` and `+0x70` (2026-09) or `+0x120` (2026-11) from `0x2D60C`, the item data
+`+0x800`, and nothing in the source falls in those blocks except the item data's fields, which add
+`sigs::item_data_shift`. Ashita compat's `inventory_t` sits wholly in the `+0x8` block, whose start it reads from the
+code. Not covered: offsets written in decimal, or only as a structure's layout in `abi.hpp`.
 
 ### Changes made whatever the settings
 
@@ -930,14 +934,15 @@ Not a pattern: `find_walks` scans every byte from `setup - 0x6000` to `setup + 0
 | `kEntityCountPattern` (`:24`) | `inc edi; cmp edi,900h; jl` | `47 81 FF ?? ?? ?? ?? 7C ?? 89` | operand at `+3` = number of slots (read from the code; falls back to 0x900 if 0 or over 0x4000) |
 | `kPartyPattern` (`:27`) | `lea eax,[ecx*4+members]` | `0F BE C3 8D 0C 52 56 57 8B F5 8D 04 48` | operand at `+23` (`kPartyOffset`) = the first of 18 party members (0x7C bytes each) |
 | `kPlayerPattern` (`:30`) | `call ...; mov eax,[player]` | `6A 01 8D 44 24 2C 68 80 80 80 80 66 83 ?? ?? 50 66 83 ?? ?? 51 52 E8 ?? ?? ?? ?? A1` | operand at `+28` (`kPlayerOffset`) = the player's stats (HPMax first) |
-| `kTargetPattern` (`:34`) | `mov ecx,[global]` in the target code | `53 56 8B F1 8B 48 04 33 DB 3B CB 75 06 5E 33 C0 5B 59 C3 8B 0D` | operand at `+45` (`kTargetOffset`) = a global; the pointer to the target data (0xD4 bytes, game-allocated) is read from `global + 0x2F4` (`kTargetPointer`) |
+| `kTargetPointerPattern` | `mov eax,[target]; xor bl,bl; mov cl,[eax+22h]` | `13 00 88 44 24 16 A1 ?? ?? ?? ?? 32 DB 8A 48 22 8B 46 70 85 C0 88 4C 24 17` | operand at `+7` (`kTargetPointerOffset`) = the global pointing to the target data. One match in CatsEyeXI's and retail's 2026-09 and 2026-11 clients |
+| `kTargetPattern` (`:34`), the fallback | `mov ecx,[global]` in the target code | `53 56 8B F1 8B 48 04 33 DB 3B CB 75 06 5E 33 C0 5B 59 C3 8B 0D` | operand at `+45` (`kTargetOffset`) = a global; the pointer to the target data (0xD4 bytes, game-allocated) is read from `global + 0x2F4` (`kTargetPointer`) |
 | `kPetPattern` (`:40`) | the pet status packet (0x068) handler's copy of the packet | `8B 44 24 0C 56 57 66 8B 48 04 8D 70 04 8B C1 83 E0 3F 83 E8 02` | operand at `+61` (`kPetOffset`) = the game's pet copy (24 bytes) |
 | `kJobLevelPattern` (`:44`) | the job level getter, `uint8_t __cdecl(int job)` | `8B 0D ?? ?? ?? ?? 85 C9 74 ?? 8B 44 24 04 3C 10 73 ?? 25 FF 00 00 00` | the match itself is the function; called directly for each job 0-23 |
 | `kJobMasterLevelPattern` (`:45`) | the master level getter | `8B 0D ?? ?? ?? ?? 85 C9 74 ?? 8B 44 24 04 3C 18 73 ?? 25 FF 00 00 00` | the match itself is the function; called directly |
 | `kMissionsPattern` (`:48`) | the mission log packet (0x056) handler | `8B 54 24 0C 56 57 66 8B 42 24 66 3D FF FF 0F 85 ?? ?? ?? ?? 8A 42 04 A2` | operand at `+24` (`kMissionsOffset`) = the nation byte; the missions block starts 6 bytes before it (`kMissionsNation`), 0x28 bytes read |
 
 **CatsEyeXI address:** not recorded (logged at run time only).
-**Retail:** every address comes from `operand()`, but four offsets reach well past the end of their pattern, so the operand lies in code the pattern does not check: `kPartyOffset` 23 (pattern is 13 bytes), `kTargetOffset` 45 (pattern is 21), `kPetOffset` 61 (pattern is 21), `kPlayerOffset` 28 (the byte right after the pattern's `A1`, fine). If the instruction stream between differs (as with `kKeyTable`'s register change) the wrong dword is read silently; a missing pattern logs `Game data: <what> not found in FFXiMain.dll`. `docs/retail-signatures.md` says `kTargetPointer = 0x2F4` (the distance between two globals) was **not verified for retail**: check the target reads in game. Hard-coded structure offsets, all assumed identical in retail (the docs say the entity fields `0xD8` and `0x120` were checked, the rest are not recorded):
+**Retail:** every address comes from `operand()`, but four offsets reach well past the end of their pattern, so the operand lies in code the pattern does not check: `kPartyOffset` 23 (pattern is 13 bytes), `kTargetOffset` 45 (pattern is 21), `kPetOffset` 61 (pattern is 21), `kPlayerOffset` 28 (the byte right after the pattern's `A1`, fine). If the instruction stream between differs (as with `kKeyTable`'s register change) the wrong dword is read silently; a missing pattern logs `Game data: <what> not found in FFXiMain.dll`. `kTargetPointer = 0x2F4` (the distance between two globals) is 0x2F0 in retail's 2026-11 build: the target is read through `kTargetPointerPattern` now, the distance only if that isn't found. Hard-coded structure offsets, all assumed identical in retail (the docs say the entity fields `0xD8` and `0x120` were checked, the rest are not recorded):
 - Entity: record read `kEntitySize = 0x20C`, the whole record `0x2AC`, tail at `0x2A0` (`kTail`); index `0x74`, server id `0x78`, name `0x7C` (24), x/z/y `0x04/0x08/0x0C`, speed `0x98`, anim speed `0x9C`, distance `0xD8`, heading `0xE4`, hpp `0xEC`, type `0xEE`, race `0xEF`, models `0xFC`, render flags `0x120`, name flags `0x124`/`0x128`, status server `0x16C`, status `0x170`, claim `0x188`, zone `0x18C`, spawn flags `0x1D0`, targeted index `0x1F8`, pet index `0x1FA`, model size `0x204`, hitbox `0x208`, plus the minor fields at `game.cpp:71-74`. Entity slot logic assumes 0x900 slots with player characters from 0x400 (`entity_places`, `gm_places`).
 - Party member: 0x7C bytes x 18, with name `0x06`, id `0x18`, target index `0x1C`, hp/mp/tp `0x24/0x28/0x2C`, hpp/mpp `0x30/0x31`, zone `0x32`, flags `0x38`, jobs `0x6D-0x70`, active `0x7A`; alliance record pointer at member `+0` (0x18 bytes, party counts at `0x13`).
 - Player: `kPlayerSize = 0x438`, fields listed at `game.cpp:90-97` (e.g. job `0x08`, `kStatusIcons 0x2CC`, `kBuffs 0x3F8`). "read live against the game's on 2026-10-25."
@@ -2373,11 +2378,11 @@ Also `table[kCharacterSlots]` (entry 0xD3): reads the 32-bit address at +31 of t
 #### Gamepad: fixed addresses in FFXiMain (`src/core/input.cpp`, with `input_background.hpp`)
 
 **Setting:** `[input] gamepad.*` (search interval, mode, buttons, GUID selection, `gamepad.disable`, `gamepad.disableenumeration`), and always for the XInput check hook.
-**What it does:** Uses **fixed RVAs** in the unpacked CatsEyeXI client, each guarded by a head-byte check (and a RET check) and skipped when the check fails. It detours the XInput-device check (0x8990, 6 bytes) so the slow WMI query runs once per product; it calls the game's pad setters directly (live gamepad settings and pad choice); and it reads two switch bytes to know the game's "works while inactive" setting. The detour is installed from the first controller search and not removed.
+**What it does:** Uses **fixed RVAs** in the unpacked CatsEyeXI client, each guarded by a head-byte check (and a RET check) and skipped when the check fails. It detours the XInput-device check (found from its two callers at 0x580D and 0x587A: 0x8990 in CatsEyeXI's client, 0x8AB0 in retail's; 6 bytes) so the slow WMI query runs once per product; it calls the game's pad setters directly (live gamepad settings and pad choice); and it reads two switch bytes to know the game's "works while inactive" setting. The detour is installed from the first controller search and not removed.
 
 | Signature | Finds | Pattern | Then |
 |---|---|---|---|
-| none: `kIsXInputAt` 0x8990 (`input.cpp:155`) | FUN_10008990 (IsXInputDevice, `__cdecl` GUID) | head bytes `81 EC 84 00 00 00 53 55 56 57 33 DB B9 13 00 00 00`; callers at 0x580D and 0x587A must be `E8` to it | detour of 6 bytes (`sub esp,0x84`), answers cached per GUID |
+| none: `kIsXInputCalls` 0x580D, 0x587A (`input.cpp`) | IsXInputDevice (`__cdecl` GUID): FUN_10008990 in CatsEyeXI's client, FUN_10008AB0 in retail's | both callers must be `E8` to the same function, its head bytes `81 EC 84 00 00 00 53 55 56 57 33 DB B9 13 00 00 00` | detour of 6 bytes (`sub esp,0x84`), answers cached per GUID |
 | none: `0x55A0` (`input.cpp:1676`) | FUN_100055A0 (set pad GUID, `__stdcall` ret 0x14) | `56 57 B9 04 00 00 00 8D 7C 24 0C BE`, and `code[0x4E..0x50] = C2 14 00` | called directly |
 | none: `kModeSetter` 0x5490 (`input.cpp:1602`) | pad mode setter | head `83 EC 20 A0`, RET at +0x106 (`C2 0C 00`) | called directly; its `A0 <addr>` at +4 gives the gamepad switch byte (+4 the XInput one), read as `at` and `at+4` (FUN_10005490's 0x10453AC4/8) |
 | none: `kButtonsSetter` 0x5130 | pad buttons setter | head `8B 54 24 04`, RET at +0x1ED (`C2 08 00`) | called directly |

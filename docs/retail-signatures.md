@@ -63,12 +63,41 @@ pattern that still matches: check every offset the source adds to that match).
 
 - An offset the source adds to a match (`site + 0x1D`, `k...At`) is only checked by the function comparison: if that
   function is listed as changed, look at the instruction the offset lands on.
-- A distance between two globals (`game.cpp` `kTargetPointer = 0x2F4`): nothing in the code names the second global, so
-  this was **not verified for retail**. Check in game that the target reads.
+- A distance between two globals (`game.cpp` `kTargetPointer = 0x2F4`): nothing in the code names the second global.
+  It moved to 0x2F0 in retail's 2026-11 build, which the audit couldn't see; `tools\sigverify.py` (below) does.
 - A hard-coded offset into a structure (`kEntitySize`, `entity_field`, party member `0x7C`): the entity fields checked
   (`0xD8`, `0x120`) are used by hundreds of unchanged instructions, so they didn't move; the item data did. Anything in
   the shifted ranges above is suspect. `kLegacyStride`/`kRetailStride` in `resources.cpp` (item records `0xC00`/`0x1400`) already know both.
 - Code the game gets from a retail update later. Every retail patch can move these again; the audit is the check.
+
+## Checking what is read (`tools\sigverify.py`)
+
+The audit says a pattern is still found. `sigverify.py` says what VanaCore then reads from it is still the same thing,
+in every build given, against CatsEyeXI's:
+
+```
+<xi-tools>\.venv\Scripts\python.exe tools\sigverify.py --xi-tools <xi-tools> "<CatsEyeXI>\FFXiMain.dll" "<retail>\FFXiMain.dll" [more builds]
+<xi-tools>\.venv\Scripts\python.exe tools\sigverify.py --xi-tools <xi-tools> "<CatsEyeXI>\FFXiMain.dll" --self-test
+```
+
+About 75 seconds for three builds; exit code 1 on any FAIL. It works each value out as VanaCore does (`game.cpp`'s
+pattern and offset pairs, Ashita compat's `places()` and pointer table, the gamepad's fixed addresses), then knows it by
+how the game's code uses it, never by its number: a global by every instruction that names it, code by its first
+instructions, initialised data by its bytes. Every pattern in the source is also followed from its match while the code
+keeps the same shape in both builds, and every address operand there is checked the same way. `--self-test` checks the
+check: each global against itself (the same) and the address 4 bytes on (not the same, as the 2026-11 target was).
+
+2026-11-28, CatsEyeXI's 2025-12 client against retail's 2026-09 (`6A995428`) and 2026-11 (`6AE818B4`, built 2026-11-02):
+389 patterns found in all three, about 4,330 operands near them the same. Two things weren't, both fixed: the target's
+pointer (`kTargetPointer`, 0x2F4 to 0x2F0 in 2026-11) and the gamepad's IsXInputDevice (`+0x8990` to `+0x8AB0` in both
+retail builds; `input.cpp` now finds it from its two callers, which didn't move).
+
+It also checks the structure offsets written into the C++: the functions both builds share are aligned and every
+displacement in them compared, so it knows how each offset the game uses moved. The character object moves as two
+blocks, `+0x8` from `0x4630` and `+0x70` (2026-09) or `+0x120` (2026-11) from `0x2D60C`; the item data `+0x800`; the item
+records' DAT fields `+2`/`+4` (`resources.cpp` reads both layouts). No hex constant in the source falls in a moved block
+except the item data's eight, which add `sigs::item_data_shift`. Not covered: offsets written in decimal or only as a
+structure's layout (Ashita's `abi.hpp`).
 
 ## Starting retail (`[client] retail=1`)
 
