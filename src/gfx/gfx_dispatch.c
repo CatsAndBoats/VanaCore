@@ -307,6 +307,7 @@ void gfx_draw(const GfxDraw* d)
     g_backend->draw(d);
 }
 int g_gfx_batch = 1; /* on by default ([graphics.effects] batch) */
+int g_gfx_refl_walkable = 1; /* on by default ([graphics.effects] refl_walkable, floors.c) */
 GfxOccl g_gfx_occl = { 0 };
 void gfx_occl_boxes(const float* boxes, uint32_t count)
 {
@@ -508,6 +509,8 @@ void gfx_fx_set(const char* key, float v)
         g_quads_on = v == v ? v != 0.0f : 0;
     else if (!strcmp(key, "batch")) /* the zone's draws of one mesh sent together (gfx_d3d12_batch.h): the next zone draw on */
         g_gfx_batch = v == v ? v != 0.0f : 1;
+    else if (!strcmp(key, "refl_walkable")) /* only the floors one can walk on reflect (floors.c) */
+        g_gfx_refl_walkable = v == v ? v != 0.0f : 1;
     else if (!strcmp(key, "sun_zone_mesh")) /* the sun's shadows from the zone's own meshes (zonemesh.c) */
         g_gfx_zone_mesh = v == v ? v : 1.0f;
     else

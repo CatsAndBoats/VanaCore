@@ -139,10 +139,214 @@ static void targets_free(void)
     g.id = g.depth = NULL, g.w = g.h = 0;
 }
 
+/* Only the floors one can walk on reflect ([graphics.effects] refl_walkable, on by default): a wall's or a roof's top is floor in
+ * the collision too, and took the wet floor's mirror where no one ever stands (Aht Urhgan Whitegate, 2026-11-28). The floors are
+ * joined into areas once a zone: a grid of WALK_CELL squares, each with the heights the floors over its middle lie at, and two of
+ * them, in one square or two side by side, are one area when they're within WALK_STEP of each other: a stair's ramp, a kerb, a
+ * doorway's sill join; a wall's top stands a wall's height over the ground and doesn't. The area under the player's feet is
+ * walkable (layer_scene, each frame), and stays so: the rest is drawn into the layer as no floor (red 0), which doesn't reflect */
+#define WALK_CELL 0.5f
+#define WALK_STEP 0.6f
+#define WALK_MOST (12u << 20) /* the most squares' heights a zone's floors take (past it every floor reflects) */
+
+typedef struct WEntry
+{
+    uint32_t key; /* the square: x and z (WALK_CELL, offset 32768) in 16 bits each */
+    float y;      /* the floor's height there (the world's y, down) */
+    uint32_t tri;
+} WEntry;
+
+static struct
+{
+    FVert* v;          /* the layer's vertices as uploaded */
+    uint32_t* kind;    /* each triangle's own colour (its kind of ground) */
+    uint32_t* area;    /* each triangle's area (a triangle's number) */
+    uint8_t* walk;     /* by area: walkable */
+    WEntry* e;         /* the grid, by square then height */
+    uint32_t ne, ntri; /* (0 entries: the rule isn't available for the zone, every floor reflects) */
+    int shown;         /* the colours in the buffer now: 1 the walkable rule's, 0 every floor's */
+    uint32_t nwalk;    /* areas found walkable */
+} wk;
+
+static void walk_free(void)
+{
+    free(wk.v), free(wk.kind), free(wk.area), free(wk.walk), free(wk.e);
+    memset(&wk, 0, sizeof wk);
+}
+
 static void floors_free(void)
 {
     gfx_buf_destroy(g.vb);
     g.vb = NULL, g.ntris = g.bytes = 0, g.none = 0;
+    walk_free();
+}
+
+static uint32_t walk_root(uint32_t* p, uint32_t a)
+{
+    while (p[a] != a)
+        p[a] = p[p[a]], a = p[a];
+    return a;
+}
+
+static void walk_join(uint32_t* p, uint32_t a, uint32_t b)
+{
+    a = walk_root(p, a), b = walk_root(p, b);
+    if (a != b)
+        p[a < b ? b : a] = a < b ? a : b;
+}
+
+static int walk_cmp(const void* a, const void* b)
+{
+    const WEntry *x = (const WEntry*)a, *y = (const WEntry*)b;
+    return x->key != y->key ? (x->key < y->key ? -1 : 1) : x->y < y->y ? -1 : x->y > y->y ? 1 : 0;
+}
+
+static uint32_t walk_key(float x, float z)
+{
+    const int32_t ix = (int32_t)floorf(x / WALK_CELL) + 32768, iz = (int32_t)floorf(z / WALK_CELL) + 32768;
+    return (uint32_t)(ix & 0xFFFF) << 16 | (uint32_t)(iz & 0xFFFF);
+}
+
+/* the first entry of square key (or where it would be) */
+static uint32_t walk_find(uint32_t key)
+{
+    uint32_t lo = 0, hi = wk.ne;
+    while (lo < hi)
+    {
+        const uint32_t mid = (lo + hi) / 2;
+        if (wk.e[mid].key < key)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+/* triangle t's heights over the middles of the squares it covers (seen from above), or over its centre where it covers none;
+ * how many entries it took (written while e is given and there's room) */
+static uint32_t walk_tri(const FVert* v, uint32_t t, WEntry* e, uint32_t room)
+{
+    const FVert *a = &v[t * 3], *b = a + 1, *c = a + 2;
+    const float e1x = b->x - a->x, e1z = b->z - a->z, e2x = c->x - a->x, e2z = c->z - a->z;
+    const float det = e1x * e2z - e2x * e1z;
+    uint32_t n = 0;
+    if (fabsf(det) > 1e-8f)
+    {
+        const float x0 = fminf(a->x, fminf(b->x, c->x)), x1 = fmaxf(a->x, fmaxf(b->x, c->x));
+        const float z0 = fminf(a->z, fminf(b->z, c->z)), z1 = fmaxf(a->z, fmaxf(b->z, c->z));
+        for (float cz = (floorf(z0 / WALK_CELL) + 0.5f) * WALK_CELL; cz <= z1; cz += WALK_CELL)
+            for (float cx = (floorf(x0 / WALK_CELL) + 0.5f) * WALK_CELL; cx <= x1; cx += WALK_CELL)
+            {
+                const float qx = cx - a->x, qz = cz - a->z;
+                const float u = (qx * e2z - e2x * qz) / det, w = (e1x * qz - qx * e1z) / det;
+                if (u < -1e-4f || w < -1e-4f || u + w > 1.0001f)
+                    continue;
+                if (e && n < room)
+                    e[n] = (WEntry){ walk_key(cx, cz), a->y + u * (b->y - a->y) + w * (c->y - a->y), t };
+                n++;
+            }
+    }
+    if (!n)
+    {
+        if (e && room)
+            e[0] = (WEntry){ walk_key((a->x + b->x + c->x) / 3.0f, (a->z + b->z + c->z) / 3.0f), (a->y + b->y + c->y) / 3.0f, t };
+        n = 1;
+    }
+    return n;
+}
+
+/* the entries of squares at i (one square's) and at j (the square beside it): those within WALK_STEP of each other joined */
+static void walk_join_squares(uint32_t* p, uint32_t i, uint32_t i1, uint32_t j, uint32_t j1)
+{
+    uint32_t lo = j;
+    for (; i < i1; ++i)
+    {
+        while (lo < j1 && wk.e[lo].y < wk.e[i].y - WALK_STEP)
+            lo++;
+        for (uint32_t k = lo; k < j1 && wk.e[k].y <= wk.e[i].y + WALK_STEP; ++k)
+            walk_join(p, wk.e[i].tri, wk.e[k].tri);
+    }
+}
+
+/* The floors' areas (wk), from the n vertices laid in v (which wk keeps): 0 left without them (too many, no memory) */
+static int walk_areas(FVert* v, uint32_t n)
+{
+    const uint32_t nt = n / 3;
+    uint64_t total = 0;
+    for (uint32_t t = 0; t < nt && total <= WALK_MOST; ++t)
+        total += walk_tri(v, t, NULL, 0);
+    wk.v = v, wk.ntri = nt;
+    if (total > WALK_MOST)
+        return 0;
+    wk.e = (WEntry*)malloc((size_t)total * sizeof(WEntry));
+    wk.area = (uint32_t*)malloc((size_t)nt * sizeof(uint32_t));
+    wk.kind = (uint32_t*)malloc((size_t)nt * sizeof(uint32_t));
+    wk.walk = (uint8_t*)calloc(nt ? nt : 1, 1);
+    if (!wk.e || !wk.area || !wk.kind || !wk.walk)
+        return 0;
+    for (uint32_t t = 0; t < nt; ++t)
+    {
+        wk.area[t] = t, wk.kind[t] = v[t * 3].col;
+        wk.ne += walk_tri(v, t, wk.e + wk.ne, (uint32_t)total - wk.ne);
+    }
+    qsort(wk.e, wk.ne, sizeof(WEntry), walk_cmp);
+    for (uint32_t i = 0; i < wk.ne;)
+    {
+        uint32_t i1 = i;
+        while (i1 < wk.ne && wk.e[i1].key == wk.e[i].key)
+            ++i1;
+        walk_join_squares(wk.area, i, i1, i, i1); /* (in the square itself) */
+        const uint32_t key = wk.e[i].key, side[2] = { key + 0x10000u, key + 1u }; /* (x + 1, z + 1) */
+        for (int s = 0; s < 2; ++s)
+        {
+            const uint32_t j = walk_find(side[s]);
+            uint32_t j1 = j;
+            while (j1 < wk.ne && wk.e[j1].key == side[s])
+                ++j1;
+            walk_join_squares(wk.area, i, i1, j, j1);
+        }
+        i = i1;
+    }
+    uint32_t areas = 0;
+    for (uint32_t t = 0; t < nt; ++t)
+        areas += (wk.area[t] = walk_root(wk.area, t)) == t;
+    rt_log("[recomp] floors: %u triangles of floor joined into %u areas one can walk between (%u squares' heights)\n", nt, areas, wk.ne);
+    return 1;
+}
+
+/* the layer's colours as the rule says (on: the walkable areas' floors their kind, the rest none; off: every floor its kind) */
+static void walk_upload(int on)
+{
+    for (uint32_t t = 0; t < wk.ntri; ++t)
+    {
+        const uint32_t col = !on || wk.walk[wk.area[t]] ? wk.kind[t] : 0xFF000000u;
+        wk.v[t * 3].col = wk.v[t * 3 + 1].col = wk.v[t * 3 + 2].col = col;
+    }
+    gfx_buf_upload(g.vb, wk.v, g.bytes);
+    wk.shown = on;
+}
+
+/* Each frame before the layer is drawn: the area under the player's feet (s->focus, within 1.5 of their height) made walkable,
+ * and the layer's colours brought up to the rule */
+static void walk_scene(const GfxScene* s)
+{
+    if (!wk.ne || !g.vb)
+        return;
+    const int on = g_gfx_refl_walkable != 0;
+    int changed = on != wk.shown;
+    if (on && s->focus[3] != 0.0f)
+    {
+        const uint32_t key = walk_key(s->focus[0], s->focus[2]);
+        uint32_t best = UINT32_MAX;
+        float bd = 1.5f;
+        for (uint32_t i = walk_find(key); i < wk.ne && wk.e[i].key == key; ++i)
+            if (fabsf(wk.e[i].y - s->focus[1]) < bd)
+                bd = fabsf(wk.e[i].y - s->focus[1]), best = wk.area[wk.e[i].tri];
+        if (best != UINT32_MAX && !wk.walk[best])
+            wk.walk[best] = 1, wk.nwalk++, changed = 1;
+    }
+    if (changed)
+        walk_upload(on);
 }
 
 void floors_set_zone(int zone)
@@ -239,9 +443,12 @@ void floors_set(const GrassFloors* f)
             g.bytes >> 10,
             snowy ? ", its stone as snow (the land is largely snow)"
                   : rough ? ", its stone as path (under half of it lies level: rock, not paving)" : "");
+        /* ... and joined into the areas one can walk between (refl_walkable: walk_scene); kept, v with them */
+        if (!walk_areas(v, n))
+            walk_free(); /* (v with it: every floor reflects) */
+        return;
     }
-    else
-        g.bytes = 0;
+    g.bytes = 0;
     free(v);
 }
 
@@ -412,6 +619,7 @@ static void layer_scene(GfxTex* color, GfxTex* depth, const GfxScene* s)
             return;
         }
     }
+    walk_scene(s); /* (the walkable areas' colours: refl_walkable) */
     const uint32_t whole[6] = { 0, 0, w, h, 0, 0x3F800000u /* 1.0f */ };
     gfx_set_targets(g.id, 0, 0, g.depth);
     gfx_clear(0, NULL, 3 /* D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER */, 0, 1.0f, 0, whole);

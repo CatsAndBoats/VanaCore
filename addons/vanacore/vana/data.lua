@@ -2250,6 +2250,8 @@ TIPS.rows = {
         .. 'Stone and metal: not dirt, grass, sand or snow.\n'
         .. 'Anything built: wood and props too.\n'
         .. 'Any: everywhere not green.',
+    ['graphics.effects.refl_walkable'] = 'Only floors you can walk on reflect: not the tops of walls, roofs or ledges you can\'t reach.\n'
+        .. 'The floors joined to where you stand count, and any you go on to stand on.',
     ['graphics.effects.refl_quality'] = 'How clean the reflections are.\n'
         .. 'Low to Max: each step is smoother and slower. For one step more, set refl_quality=4 in vanacore.ini.',
     -- Glow effects (the light fire, glows and spells give what's near them)
@@ -4710,6 +4712,9 @@ local TABS = {
                 -- fx_ssr); Any is the colour rule alone
                 choice('Ground', FX, 'refl_floors', '1', { { '0', 'Any' }, { '1', 'Stone and metal' }, { '2', 'Stone, metal, wood' },
                                                            { '3', 'Anything built' } }),
+                -- only the floors one can walk on: the collision's floors joined into areas, the one under the player's feet and
+                -- any they've stood on (floors.c walk_scene); off, a wall's or a roof's top reflects too
+                toggle('Only Walkable Floors', FX, 'refl_walkable', true),
                 effect('Bounce Lighting', 'gi', 0, 0.5),
                 note('Light picked up from lit surfaces nearby: colour on what is beside them, fill in the corners. DirectX 12.'),
                 slider('Strength', FX, 'gi', 0.5, 0, 2, 0.05),

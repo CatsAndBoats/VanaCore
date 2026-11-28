@@ -693,6 +693,8 @@ extern float g_gfx_day_bright;
 void gfx_quads_counts(uint32_t* quads, uint32_t* draws);
 /* [graphics.effects] batch: the zone's draws of one mesh sent together (gfx_batch), 0 or 1; off until it's proven in play */
 extern int g_gfx_batch;
+/* [graphics.effects] refl_walkable: only the floors one can walk on reflect (floors.c walk_scene), 0 or 1; on by default */
+extern int g_gfx_refl_walkable;
 /* The occlusion test ([graphics] occl; core/occlusion.cpp, gfx_d3d12_occl.h): each piece of the zone's first slot as a box in
  * the world, tested once a frame against the depth of the scene just drawn (Direct3D 12); what comes back, frames later, says which
  * were hidden behind what was drawn, and the core leaves those undrawn. The boxes are the core's (gfx_occl_boxes, a new set for a
